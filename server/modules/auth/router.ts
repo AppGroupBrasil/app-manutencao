@@ -113,6 +113,90 @@ export const authRouter = router({
         };
       }),
     
+    // Login unificado: tenta como síndico/admin (users) e, se falhar, como funcionário (funcionarios).
+    // Retorna o tipo encontrado para o frontend rotear apropriadamente.
+    loginUnificado: publicProcedure
+      .input(z.object({
+        email: z.string().min(1),
+        senha: z.string().min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const ip = getClientIp(ctx.req);
+        rateLimiter.check(`login-unif:${ip}:${input.email}`, RATE_LIMIT_CONFIGS.login);
+
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const bcrypt = await import('bcryptjs');
+        const emailLower = input.email.trim().toLowerCase();
+
+        // 1) Tenta tabela users (síndico/admin/master)
+        const [user] = await db.select().from(users).where(eq(users.email, emailLower)).limit(1);
+        if (user && user.senha) {
+          const ok = await bcrypt.compare(input.senha, user.senha);
+          if (ok) {
+            if (user.bloqueado) {
+              throw new TRPCError({ code: "FORBIDDEN", message: user.motivoBloqueio || "Conta bloqueada." });
+            }
+            await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, user.id));
+            const { sdk } = await import('../../_core/sdk');
+            const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || '' });
+            const cookieOptions = getSessionCookieOptions(ctx.req);
+            ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+            rateLimiter.reset(`login-unif:${ip}:${input.email}`);
+            return {
+              success: true as const,
+              tipo: "sindico" as const,
+              redirect: "/admin",
+              token: sessionToken,
+              user: { id: user.id, nome: user.name, email: user.email, role: user.role, tipoConta: user.tipoConta },
+            };
+          }
+        }
+
+        // 2) Tenta tabela funcionarios
+        const idNorm = emailLower.includes("@")
+          ? emailLower
+          : emailLower.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]/g, "");
+        const { findFuncionarioForLogin } = await import('../../_core/funcionarioCompat');
+        const funcionario = await findFuncionarioForLogin(idNorm);
+        if (funcionario && funcionario.senha && funcionario.loginAtivo) {
+          const ok = await bcrypt.compare(input.senha, funcionario.senha);
+          if (ok) {
+            const jwtModule = await import("jsonwebtoken");
+            const jwt = jwtModule.default || jwtModule;
+            const token = jwt.sign(
+              {
+                funcionarioId: funcionario.id,
+                condominioId: funcionario.condominioId,
+                nome: funcionario.nome,
+                cargo: funcionario.cargo,
+                hierarquia: funcionario.hierarquia || "funcionario",
+                tipo: "funcionario",
+              },
+              ENV.cookieSecret,
+              { expiresIn: "7d" }
+            );
+            ctx.res.cookie("funcionario_token", token, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === "production",
+              sameSite: "lax",
+              maxAge: 7 * 24 * 60 * 60 * 1000,
+            });
+            rateLimiter.reset(`login-unif:${ip}:${input.email}`);
+            return {
+              success: true as const,
+              tipo: "funcionario" as const,
+              redirect: "/dashboard",
+              token,
+              user: { id: funcionario.id, nome: funcionario.nome, email: funcionario.email, cargo: funcionario.cargo },
+            };
+          }
+        }
+
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha incorretos" });
+      }),
+
     // Login com email/senha
     loginLocal: publicProcedure
       .input(z.object({

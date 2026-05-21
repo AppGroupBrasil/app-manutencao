@@ -12,6 +12,8 @@ import Home from "./pages/Home";
 
 // Portal pages (promoted from /funcionario/*)
 const FuncionarioLogin = lazy(() => import("./pages/FuncionarioLogin"));
+const SindicoLogin = lazy(() => import("./pages/SindicoLogin"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
 const FuncionarioRecuperarSenha = lazy(() => import("./pages/FuncionarioRecuperarSenha"));
 const FuncionarioRedefinirSenha = lazy(() => import("./pages/FuncionarioRedefinirSenha"));
@@ -62,6 +64,10 @@ function Router() {
       {/* ===== SISTEMA PRINCIPAL (Portal) ===== */}
       <Route path="/" component={Home} />
       <Route path="/login" component={FuncionarioLogin} />
+      <Route path="/admin/login" component={SindicoLogin} />
+      <Route path="/sindico/login" component={SindicoLogin} />
+      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/recuperar-senha" component={FuncionarioRecuperarSenha} />
       <Route path="/redefinir-senha/:token" component={FuncionarioRedefinirSenha} />
       <Route path="/dashboard" component={FuncionarioDashboard} />

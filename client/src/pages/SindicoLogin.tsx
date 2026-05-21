@@ -6,71 +6,63 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
-import { Building2, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import { Building2, Lock, Mail, Loader2, Eye, EyeOff } from "lucide-react";
 
-export default function FuncionarioLogin() {
+const SESSION_TOKEN_KEY = "app_session_token";
+
+export default function SindicoLogin() {
   const [, setLocation] = useLocation();
-  const [identificador, setIdentificador] = useState("");
+  const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [showSenha, setShowSenha] = useState(false);
-
   const utils = trpc.useContext();
-  const loginMutation = trpc.auth.loginUnificado.useMutation({
+
+  const loginMutation = trpc.auth.loginLocal.useMutation({
     onSuccess: async (data) => {
-      if (data.token) {
-        localStorage.setItem("app_session_token", data.token);
-      }
-      await Promise.allSettled([utils.auth.me.invalidate(), utils.funcionario.me.invalidate()]);
+      if (data.token) localStorage.setItem(SESSION_TOKEN_KEY, data.token);
+      await utils.auth.me.invalidate();
       toast.success(`Bem-vindo, ${data.user.nome || data.user.email}!`);
-      setLocation(data.redirect || "/dashboard");
+      setLocation("/dashboard");
     },
     onError: (error) => toast.error(error.message),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identificador || !senha) {
-      toast.error("Preencha o usuário e a senha");
-      return;
-    }
-    loginMutation.mutate({ email: identificador, senha });
+    if (!email || !senha) return toast.error("Preencha e-mail e senha");
+    loginMutation.mutate({ email, senha });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo e Título */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-4 shadow-lg">
             <Building2 className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">Entrar no Sistema</h1>
-          <p className="text-slate-500 mt-1">Síndico, administrador ou funcionário</p>
+          <h1 className="text-2xl font-bold text-slate-800">Acesso Síndico / Administrador</h1>
+          <p className="text-slate-500 mt-1">Entre com seu e-mail e senha</p>
         </div>
 
-        {/* Card de Login */}
         <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl text-center">Entrar</CardTitle>
-            <CardDescription className="text-center">
-              Use seu e-mail (ou usuário) e senha
-            </CardDescription>
+            <CardDescription className="text-center">Painel de gestão</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="identificador" className="text-slate-700">Usuário ou E-mail</Label>
+                <Label htmlFor="email" className="text-slate-700">E-mail</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
-                    id="identificador"
-                    type="text"
-                    placeholder="nomecompleto ou email@exemplo.com"
-                    value={identificador}
-                    onChange={(e) => setIdentificador(e.target.value)}
-                    className="pl-10"
-                    autoComplete="username"
-                    disabled={loginMutation.isPending}
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="voce@email.com"
+                    autoComplete="email"
+                    className="pl-9"
                   />
                 </div>
               </div>
@@ -82,16 +74,15 @@ export default function FuncionarioLogin() {
                   <Input
                     id="senha"
                     type={showSenha ? "text" : "password"}
-                    placeholder="••••••"
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
-                    className="pl-10 pr-10"
+                    placeholder="••••••"
                     autoComplete="current-password"
-                    disabled={loginMutation.isPending}
+                    className="pl-9 pr-9"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowSenha(!showSenha)}
+                    onClick={() => setShowSenha((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                     tabIndex={-1}
                   >
@@ -100,39 +91,31 @@ export default function FuncionarioLogin() {
                 </div>
               </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
-                disabled={loginMutation.isPending}
-              >
+              <Button type="submit" disabled={loginMutation.isPending} className="w-full">
                 {loginMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Entrando...
-                  </>
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Entrando...</>
                 ) : (
                   "Entrar"
                 )}
               </Button>
+
+              <div className="text-center">
+                <a href="/recuperar-senha" className="text-sm text-blue-600 hover:text-blue-700">
+                  Esqueceu a senha?
+                </a>
+              </div>
             </form>
-
-            <div className="mt-4 text-center">
-              <a 
-                href="/recuperar-senha" 
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Esqueceu a senha?
-              </a>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-100">
-              <p className="text-xs text-center text-slate-500">
-                Problemas para acessar? Entre em contacto com o síndico ou administrador da organização.
-              </p>
-            </div>
           </CardContent>
         </Card>
 
+        <div className="mt-6 text-center">
+          <p className="text-sm text-slate-500">
+            É funcionário?{" "}
+            <a href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+              Acesse aqui
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );
