@@ -24,13 +24,13 @@ export const segurancaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(dicasSeguranca).values({
+      const [result] = await db.insert(dicasSeguranca).values({
         titulo: input.titulo,
         conteudo: input.conteudo,
         categoria: (input.categoria as any) || "geral",
         icone: input.icone || "shield",
-      });
-      return { id: result[0].insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   update: protectedProcedure
@@ -84,13 +84,13 @@ export const regrasRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(regrasNormas).values({
+      const [result] = await db.insert(regrasNormas).values({
         titulo: input.titulo,
         conteudo: input.conteudo,
         categoria: (input.categoria as any) || "geral",
         ordem: input.ordem || 0,
-      });
-      return { id: result[0].insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   update: protectedProcedure

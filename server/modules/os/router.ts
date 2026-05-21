@@ -42,10 +42,10 @@ export const osRouter = router({
             habilitarGestaoFinanceira: true,
             habilitarRelatoriosGastos: true,
             habilitarVinculoManutencao: true,
-          });
+          }).returning();
           
           return {
-            id: result.insertId,
+            id: result.id,
             condominioId: input.condominioId,
             habilitarOrcamentos: true,
             habilitarAprovacaoOrcamento: true,
@@ -146,9 +146,9 @@ export const osRouter = router({
           icone: input.icone || "Tag",
           cor: input.cor || "#6B7280",
           isPadrao: false,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     updateCategoria: protectedProcedure
@@ -254,9 +254,9 @@ export const osRouter = router({
           cor: input.cor || "#6B7280",
           icone: input.icone || "Flag",
           isPadrao: false,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     updatePrioridade: protectedProcedure
@@ -369,9 +369,9 @@ export const osRouter = router({
           icone: input.icone || "Circle",
           isFinal: input.isFinal || false,
           isPadrao: false,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     updateOsStatus: protectedProcedure
@@ -443,9 +443,9 @@ export const osRouter = router({
           condominioId: input.condominioId,
           nome: input.nome,
           descricao: input.descricao,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     updateSetor: protectedProcedure
@@ -660,18 +660,18 @@ export const osRouter = router({
           solicitanteId: ctx.user?.id,
           solicitanteNome: input.solicitanteNome || ctx.user?.name,
           solicitanteTipo: input.solicitanteTipo || "sindico",
-        });
+        }).returning();
         
         // Adicionar evento na timeline
         await db.insert(osTimeline).values({
-          ordemServicoId: result.insertId,
+          ordemServicoId: result.id,
           tipo: "criacao",
           descricao: "Ordem de serviço criada",
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
         });
         
-        return { id: result.insertId, protocolo, success: true };
+        return { id: result.id, protocolo, success: true };
       }),
     
     update: protectedProcedure
@@ -723,7 +723,7 @@ export const osRouter = router({
             usuarioNome: ctx.user?.name,
             dadosAnteriores: { statusId: osAtual.statusId },
             dadosNovos: { statusId: input.statusId },
-          });
+          }).returning();
           
           // Enviar notificação de mudança de status
           try {
@@ -820,7 +820,7 @@ export const osRouter = router({
           descricao: `Serviço finalizado. Tempo total: ${Math.floor(tempoDecorridoMinutos / 60)}h ${tempoDecorridoMinutos % 60}min`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
         return { success: true, tempoDecorridoMinutos };
       }),
@@ -840,7 +840,7 @@ export const osRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        const [result] = await db.insert(osResponsaveis).values(input);
+        const [result] = await db.insert(osResponsaveis).values(input).returning();
         
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
@@ -848,9 +848,9 @@ export const osRouter = router({
           descricao: `Responsável adicionado: ${input.nome}`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     removeResponsavel: protectedProcedure
@@ -870,7 +870,7 @@ export const osRouter = router({
           descricao: `Responsável removido: ${resp?.nome || "Desconhecido"}`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -899,7 +899,7 @@ export const osRouter = router({
         const [result] = await db.insert(osMateriais).values({
           ...input,
           valorTotal,
-        });
+        }).returning();
         
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
@@ -907,9 +907,9 @@ export const osRouter = router({
           descricao: `Material adicionado: ${input.nome} (${input.quantidade || 1} ${input.unidade || "un"})`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     removeMaterial: protectedProcedure
@@ -929,7 +929,7 @@ export const osRouter = router({
           descricao: `Material removido: ${mat?.nome || "Desconhecido"}`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -955,7 +955,7 @@ export const osRouter = router({
           valor: input.valor,
           dataValidade: input.dataValidade ? new Date(input.dataValidade) : undefined,
           anexoUrl: input.anexoUrl,
-        });
+        }).returning();
         
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
@@ -965,7 +965,7 @@ export const osRouter = router({
           usuarioNome: ctx.user?.name,
         });
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     aprovarOrcamento: protectedProcedure
@@ -991,7 +991,7 @@ export const osRouter = router({
           descricao: `Orçamento aprovado: R$ ${orc?.valor} - ${orc?.fornecedor || "Sem fornecedor"}`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -1034,7 +1034,7 @@ export const osRouter = router({
           descricao: "Orçamento removido",
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -1077,7 +1077,7 @@ export const osRouter = router({
           tipo: input.tipo || "outro",
           descricao: input.descricao,
           ordem: (maxOrdem?.max || 0) + 1,
-        });
+        }).returning();
         
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
@@ -1085,9 +1085,9 @@ export const osRouter = router({
           descricao: `Foto adicionada: ${input.tipo || "outro"}`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     removeImagem: protectedProcedure
@@ -1110,7 +1110,7 @@ export const osRouter = router({
           descricao: `Foto removida`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name || "Usuário",
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -1156,9 +1156,9 @@ export const osRouter = router({
           anexoNome: input.anexoNome || null,
           anexoTipo: input.anexoTipo || null,
           anexoTamanho: input.anexoTamanho || null,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
     
     // Chat público via token
@@ -1215,9 +1215,9 @@ export const osRouter = router({
           anexoNome: input.anexoNome || null,
           anexoTipo: input.anexoTipo || null,
           anexoTamanho: input.anexoTamanho || null,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
 
     // ========== TIMELINE ==========
@@ -1236,9 +1236,9 @@ export const osRouter = router({
           descricao: input.descricao,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
-        });
+        }).returning();
         
-        return { id: result.insertId, success: true };
+        return { id: result.id, success: true };
       }),
 
     // ========== ESTATÍSTICAS ==========
@@ -1434,7 +1434,7 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           url,
           descricao: input.descricao,
-        });
+        }).returning();
         
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
@@ -1442,9 +1442,9 @@ export const osRouter = router({
           descricao: `Imagem adicionada: ${input.fileName}`,
           usuarioId: ctx.user.id,
           usuarioNome: ctx.user.name || "Usuario",
-        });
+        }).returning();
         
-        return { success: true, id: result.insertId, url };
+        return { success: true, id: result.id, url };
       }),
 
     listarImagens: protectedProcedure
@@ -1676,7 +1676,7 @@ export const osRouter = router({
           descricao: input.descricao,
           uploadPor: ctx.user.id,
           uploadPorNome: ctx.user.name || "Usuário",
-        });
+        }).returning();
         
         // Registrar na timeline
         await db.insert(osTimeline).values({
@@ -1687,7 +1687,7 @@ export const osRouter = router({
           usuarioNome: ctx.user.name || "Usuário",
         });
         
-        return { success: true, id: result.insertId, url };
+        return { success: true, id: result.id, url };
       }),
 
     listarAnexos: protectedProcedure

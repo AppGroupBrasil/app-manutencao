@@ -65,9 +65,9 @@ export const funcoesRapidasRouter = router({
           icone: input.icone,
           cor: input.cor,
           ordem: total[0].count,
-        });
+        }).returning();
         
-        return { success: true, id: result.insertId };
+        return { success: true, id: result.id };
       }),
     
     // Remover funÃ§Ã£o rÃ¡pida

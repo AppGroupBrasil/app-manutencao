@@ -193,7 +193,7 @@ export const financeiroRouter = router({
         
         const { alertas, ...vencimentoData } = input;
         
-        const result = await db.insert(vencimentos).values({
+        const [result] = await db.insert(vencimentos).values({
           condominioId: vencimentoData.condominioId,
           tipo: vencimentoData.tipo,
           titulo: vencimentoData.titulo,
@@ -213,9 +213,9 @@ export const financeiroRouter = router({
           imagemUrl: vencimentoData.imagemUrl || null,
           emailsNotificacao: vencimentoData.emailsNotificacao || null,
           status: 'ativo',
-        });
+        }).returning();
         
-        const vencimentoId = Number(result[0].insertId);
+        const vencimentoId = Number(result.id);
         
         // Criar alertas se especificados
         if (alertas && alertas.length > 0) {
@@ -226,7 +226,7 @@ export const financeiroRouter = router({
               ativo: true,
               enviado: false,
             }))
-          );
+          ).returning();
         }
         
         return { id: vencimentoId };
@@ -298,7 +298,7 @@ export const financeiroRouter = router({
                 ativo: true,
                 enviado: false,
               }))
-            );
+            ).returning();
           }
         }
         
@@ -411,14 +411,14 @@ export const financeiroRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        const result = await db.insert(vencimentoEmails).values({
+        const [result] = await db.insert(vencimentoEmails).values({
           condominioId: input.condominioId,
           email: input.email,
           nome: input.nome || null,
           ativo: true,
-        });
+        }).returning();
         
-        return { id: Number(result[0].insertId) };
+        return { id: Number(result.id) };
       }),
 
     // Atualizar e-mail
@@ -536,7 +536,7 @@ Sistema de Gestão do Condomínio
           status: 'enviado' as const,
         }));
         
-        await db.insert(vencimentoNotificacoes).values(notificacoes);
+        await db.insert(vencimentoNotificacoes).values(notificacoes).returning();
         
         return { success: true, enviados: emails.length };
       }),

@@ -206,6 +206,8 @@ const bgColorMap: Record<string, string> = {
   "bg-cyan-600": "bg-cyan-600",
 };
 
+const DISABLED_MODULE_KEYS = new Set(["avisos", "comunicados", "eventos"]);
+
 export default function AppViewer() {
   const params = useParams();
   const shareLink = params.shareLink as string;
@@ -237,6 +239,7 @@ export default function AppViewer() {
   const appUrl = typeof window !== 'undefined' ? window.location.href : '';
   const appName = appData?.nome || 'App';
   const condominioName = appData?.condominio?.nome || 'Condomínio';
+  const visibleModules = appData?.modulos?.filter((modulo) => !DISABLED_MODULE_KEYS.has(modulo.moduloKey)) || [];
 
   const handleCopyLink = async () => {
     try {
@@ -466,9 +469,9 @@ export default function AppViewer() {
 
                 {/* Grid de módulos */}
                 <div className="p-4">
-                  {appData.modulos && appData.modulos.length > 0 ? (
+                  {visibleModules.length > 0 ? (
                     <div className="grid grid-cols-3 gap-3">
-                      {appData.modulos.map((modulo) => {
+                      {visibleModules.map((modulo) => {
                         const iconKey = modulo.icone || modulo.moduloKey;
                         const Icon = iconKey?.startsWith("custom_") ? Sparkles : (iconMap[iconKey] || Smartphone);
                         const bgColor = modulo.moduloKey?.startsWith("custom_") 
@@ -512,7 +515,7 @@ export default function AppViewer() {
           {/* Informações adicionais */}
           <div className="mt-8 text-center">
             <p className="text-sm text-muted-foreground">
-              {appData.modulos?.length || 0} módulos ativos
+              {visibleModules.length} módulos ativos
             </p>
             {appData.descricao && (
               <p className="text-sm text-muted-foreground mt-2">{appData.descricao}</p>

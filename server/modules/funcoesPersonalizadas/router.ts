@@ -165,9 +165,9 @@ export const funcoesPersonalizadasRouter = router({
         camposObrigatorios: input.camposObrigatorios,
         ordem: existentes.length,
         shareToken: token,
-      });
+      }).returning();
       
-      return { id: Number(result.insertId), nome: input.nome, shareToken: token };
+      return { id: Number(result.id), nome: input.nome, shareToken: token };
     }),
 
   // Atualizar função existente
@@ -241,9 +241,9 @@ export const funcoesPersonalizadasRouter = router({
         camposAtivos: original.camposAtivos,
         camposObrigatorios: original.camposObrigatorios,
         ordem: (original.ordem || 0) + 1,
-      });
+      }).returning();
       
-      return { id: Number(result.insertId) };
+      return { id: Number(result.id) };
     }),
 
   // ==================== ENDPOINTS PÚBLICOS ====================
@@ -331,8 +331,8 @@ export const funcoesPersonalizadasRouter = router({
         checklistItems: input.checklistItems || null,
         assinaturas: input.assinaturas || null,
         status: input.status,
-      });
+      }).returning();
       
-      return { id: Number(result.insertId), funcaoNome: funcao.nome };
+      return { id: Number(result.id), funcaoNome: funcao.nome };
     }),
 });

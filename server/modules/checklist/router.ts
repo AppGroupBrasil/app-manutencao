@@ -135,16 +135,16 @@ export const checklistRouter = router({
         totalItens: itens?.length || 0,
         assinaturaTecnico: input.assinaturaTecnico || null,
         assinaturaSolicitante: input.assinaturaSolicitante || null,
-      });
+      }).returning();
       
       // Inserir itens do checklist
       if (itens && itens.length > 0) {
         for (let i = 0; i < itens.length; i++) {
           await db.insert(checklistItens).values({
-            checklistId: result.insertId,
+            checklistId: result.id,
             descricao: itens[i],
             ordem: i,
-          });
+          }).returning();
         }
       }
 
@@ -152,22 +152,22 @@ export const checklistRouter = router({
       if (imagens && imagens.length > 0) {
         await db.insert(checklistImagens).values(
           imagens.map((url, index) => ({
-            checklistId: result.insertId,
+            checklistId: result.id,
             url,
             ordem: index,
           }))
-        );
+        ).returning();
       }
       
       await db.insert(checklistTimeline).values({
-        checklistId: result.insertId,
+        checklistId: result.id,
         tipo: "abertura",
         descricao: `Checklist criado: ${input.titulo}`,
         statusNovo: "pendente",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId, protocolo };
+      }).returning();
+      return { id: result.id, protocolo };
     }),
 
   update: protectedProcedure
@@ -213,7 +213,7 @@ export const checklistRouter = router({
           statusNovo: data.status,
           userId: ctx.user?.id,
           userNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(checklistTimeline).values({
           checklistId: id,
@@ -259,11 +259,11 @@ export const checklistRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const [result] = await db.insert(checklistItens).values(input);
+      const [result] = await db.insert(checklistItens).values(input).returning();
       // Atualizar total de itens
       const itens = await db.select().from(checklistItens).where(eq(checklistItens.checklistId, input.checklistId));
       await db.update(checklists).set({ totalItens: itens.length }).where(eq(checklists.id, input.checklistId));
-      return { id: result.insertId };
+      return { id: result.id };
     }),
 
   updateItem: protectedProcedure
@@ -293,7 +293,7 @@ export const checklistRouter = router({
             descricao: data.completo ? `Item concluÃ­do: ${itemAtual?.descricao}` : `Item reaberto: ${itemAtual?.descricao}`,
             userId: ctx.user?.id,
             userNome: ctx.user?.name || "Sistema",
-          });
+          }).returning();
           
           // Atualizar contagem de itens completos
           const itens = await db.select().from(checklistItens).where(eq(checklistItens.checklistId, checklistId));
@@ -346,8 +346,8 @@ export const checklistRouter = router({
         ...input,
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   getImagens: protectedProcedure
@@ -369,15 +369,15 @@ export const checklistRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const [result] = await db.insert(checklistImagens).values(input);
+      const [result] = await db.insert(checklistImagens).values(input).returning();
       await db.insert(checklistTimeline).values({
         checklistId: input.checklistId,
         tipo: "imagem_adicionada",
         descricao: "Nova imagem adicionada",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeImagem: protectedProcedure
@@ -417,8 +417,8 @@ export const checklistRouter = router({
         url: input.url,
         tipo: input.tipo,
         tamanho: input.tamanho || 0,
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeAnexo: protectedProcedure
@@ -620,8 +620,8 @@ export const checklistRouter = router({
       if (!db) throw new Error("Database not available");
       
       const { itens, ...templateData } = input;
-      const [result] = await db.insert(checklistTemplates).values(templateData);
-      const templateId = result.insertId;
+      const [result] = await db.insert(checklistTemplates).values(templateData).returning();
+      const templateId = result.id;
       
       // Inserir itens
       if (itens.length > 0) {
@@ -631,7 +631,7 @@ export const checklistRouter = router({
             descricao,
             ordem: index,
           }))
-        );
+        ).returning();
       }
       
       return { id: templateId };

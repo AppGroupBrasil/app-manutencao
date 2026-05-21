@@ -30,11 +30,11 @@ export const achadoPerdidoRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(achadosPerdidos).values({
+      const [result] = await db.insert(achadosPerdidos).values({
         ...input,
         usuarioId: ctx.user.id,
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   resolver: protectedProcedure
@@ -67,8 +67,8 @@ export const achadoPerdidoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(imagensAchadosPerdidos).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(imagensAchadosPerdidos).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   listImagens: protectedProcedure
@@ -103,8 +103,8 @@ export const imagemAchadoPerdidoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(imagensAchadosPerdidos).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(imagensAchadosPerdidos).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   createMultiple: protectedProcedure
@@ -124,7 +124,7 @@ export const imagemAchadoPerdidoRouter = router({
         legenda: img.legenda,
         ordem: index,
       }));
-      await db.insert(imagensAchadosPerdidos).values(imagensToInsert);
+      await db.insert(imagensAchadosPerdidos).values(imagensToInsert).returning();
       return { success: true, count: imagensToInsert.length };
     }),
 

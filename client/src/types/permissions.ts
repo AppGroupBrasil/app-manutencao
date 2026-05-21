@@ -1,5 +1,17 @@
 // Sistema de permissões por módulo
-export type UserRole = 'master' | 'admin' | 'supervisor' | 'funcionario';
+export type UserRole = 'admin_master' | 'admin' | 'responsavel' | 'funcionario';
+
+// Hierarquia: admin_master > admin > responsavel > funcionario
+export const ROLE_HIERARCHY: Record<UserRole, number> = {
+  admin_master: 4,
+  admin: 3,
+  responsavel: 2,
+  funcionario: 1,
+};
+
+export function hasRoleAtLeast(userRole: UserRole, minRole: UserRole): boolean {
+  return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[minRole];
+}
 
 export type ModuleId =
   | 'funcionarios'
@@ -25,7 +37,7 @@ export interface UserPermissions {
 
 // Módulos padrão: quais cada papel vê por default (antes do admin customizar)
 export const DEFAULT_PERMISSIONS: Record<UserRole, Record<ModuleId, boolean>> = {
-  master: {
+  admin_master: {
     funcionarios: true,
     equipe: true,
     manutencao: true,
@@ -47,7 +59,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Record<ModuleId, boolean>> = 
     vistoria: true,
     timeline: true,
   },
-  supervisor: {
+  responsavel: {
     funcionarios: true,
     equipe: true,
     manutencao: true,

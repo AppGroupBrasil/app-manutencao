@@ -45,13 +45,13 @@ export const votacaoRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       const { opcoes, ...votacaoData } = input;
-      const result = await db.insert(votacoes).values(votacaoData);
-      const votacaoId = Number(result[0].insertId);
+      const [result] = await db.insert(votacoes).values(votacaoData).returning();
+      const votacaoId = Number(result.id);
       
       if (opcoes.length > 0) {
         await db.insert(opcoesVotacao).values(
           opcoes.map(o => ({ ...o, votacaoId }))
-        );
+        ).returning();
       }
       
       // Enviar notificação para todos os moradores
@@ -71,7 +71,7 @@ export const votacaoRouter = router({
               titulo: `Nova ${tipoLabel}: ${input.titulo}`,
               mensagem: `Participe da votação "${input.titulo}". Aceda ao link para votar.`,
               link: `/votar/${votacaoId}`,
-            });
+            }).returning();
           }
         }
       }

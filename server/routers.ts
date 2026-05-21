@@ -1,6 +1,5 @@
 ﻿import { checklistTemplateRouter } from "./modules/checklist/templateRouter";
 import { fieldSettingsRouter } from "./modules/configuracao/fieldSettingsRouter";
-import { preferenciasLayoutRouter, historicoTemasRouter, temasPersonalizadosRouter } from "./modules/tema/router";
 import { historicoAtividadesRouter } from "./modules/administrativo/historicoRouter";
 import { adminUsuariosRouter } from "./modules/administrativo/adminUsuariosRouter";
 import { financeiroRouter as adminFinanceiroRouter } from "./modules/administrativo/financeiroRouter";
@@ -20,145 +19,8 @@ import { tiposInfracaoRouter, notificacoesInfracaoRouter, respostasInfracaoRoute
 import { leituraMedidoresRouter } from "./modules/leituraMedidores/router";
 import { controlePragasRouter } from "./modules/controlePragas/router";
 import { jardinagemRouter } from "./modules/jardinagem/router";
-import { COOKIE_NAME } from "@shared/const";
-import { generateRevistaPDF } from "./pdfGenerator";
-import { generateFuncaoRapidaPDF } from "./pdfFuncoesRapidas";
-import { sendEmail, sendBulkEmail, isEmailConfigured, emailTemplates } from "./_core/email";
-import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { z } from "zod";
-import { getDb } from "./db";
-import { 
-  condominios, 
-  revistas, 
-  secoes, 
-  mensagensSindico,
-  avisos,
-  funcionarios,
-  eventos,
-  antesDepois,
-  achadosPerdidos,
-  caronas,
-  classificados,
-  votacoes,
-  opcoesVotacao,
-  votos,
-  vagasEstacionamento,
-  linksUteis,
-  telefonesUteis,
-  publicidades,
-  moradores,
-  notificacoes,
-  preferenciasNotificacao,
-  realizacoes,
-  melhorias,
-  anunciantes,
-  anuncios,
-  aquisicoes,
-  users,
-  comunicados,
-  albuns,
-  fotos,
-  dicasSeguranca,
-  regrasNormas,
-  imagensRealizacoes,
-  imagensMelhorias,
-  imagensAquisicoes,
-  imagensAchadosPerdidos,
-  imagensVagas,
-  favoritos,
-  apps,
-  appModulos,
-  vistorias,
-  vistoriaImagens,
-  vistoriaTimeline,
-  manutencoes,
-  manutencaoImagens,
-  manutencaoTimeline,
-  ocorrencias,
-  ocorrenciaImagens,
-  ocorrenciaTimeline,
-  checklists,
-  checklistItens,
-  checklistImagens,
-  checklistTimeline,
-  membrosEquipe,
-  linksCompartilhaveis,
-  historicoCompartilhamentos,
-  comentariosItem,
-  anexosComentario,
-  respostasComentario,
-  destaques,
-  imagensDestaques,
-  paginasCustom,
-  imagensCustom,
-  vencimentos,
-  vencimentoAlertas,
-  vencimentoEmails,
-  vencimentoNotificacoes,
-  pushSubscriptions,
-  lembretes,
-  historicoNotificacoes,
-  configuracoesEmail,
-  configuracoesPush,
-  templatesNotificacao,
-  tiposInfracao,
-  notificacoesInfracao,
-  respostasInfracao,
-  condominioFuncoes,
-  funcionarioFuncoes,
-  funcionarioAcessos,
-  funcionarioCondominios,
-  funcionarioApps,
-  FUNCOES_DISPONIVEIS,
-  checklistTemplates,
-  checklistTemplateItens,
-  valoresSalvos,
-  // Ordens de Serviço
-  osCategorias,
-  osPrioridades,
-  osStatus,
-  osSetores,
-  osConfiguracoes,
-  ordensServico,
-  osResponsaveis,
-  osMateriais,
-  osOrcamentos,
-  osTimeline,
-  osChat,
-  osImagens,
-  funcoesRapidas,
-  inscricoesRevista,
-  tarefasSimples,
-  statusPersonalizados,
-  camposRapidosTemplates,
-  adminLogs,
-  historicoAtividades,
-  membroAcessos,
-  compartilhamentosEquipe,
-  compartilhamentoVisualizacoes,
-  notificacoesVisualizacao,
-  // Timeline
-  timelineResponsaveis,
-  timelineLocais,
-  timelineStatus,
-  timelinePrioridades,
-  timelineTitulos,
-  timelines,
-  timelineImagens,
-  timelineEventos,
-  timelineCompartilhamentos,
-  timelineNotificacoesConfig,
-  timelineNotificacoesHistorico,
-  osAnexos,
-  preferenciasLayout,
-  historicoTemas,
-  temasPersonalizados,
-  funcoesPersonalizadas
-} from "../drizzle/schema";
-import { eq, and, desc, like, or, sql, gte, lte, lt, inArray, asc, not } from "drizzle-orm";
-import { storagePut } from "./storage";
+import { router } from "./_core/trpc";
 import { appAcessoRouter } from "./appAcesso";
 import { recuperacaoSenhaRouter } from "./recuperacaoSenha";
 
@@ -213,6 +75,7 @@ import { funcoesPersonalizadasRouter } from "./modules/funcoesPersonalizadas/rou
 import { registrosPersonalizadosRouter } from "./modules/funcoesPersonalizadas/registrosRouter";
 import { permissoesRouter } from "./modules/funcionario/permissoesRouter";
 import { templatesCategoriasRouter } from "./modules/configuracao/templatesRouter";
+import { hierarquiaRouter } from "./modules/hierarquia/router";
 
 
 
@@ -463,15 +326,6 @@ export const appRouter = router({
 
   // ==================== TEMPLATES DE CHECKLIST ====================
   checklistTemplate: checklistTemplateRouter,
-  // ==================== PREFERÊNCIAS DE LAYOUT ====================
-  preferenciasLayout: preferenciasLayoutRouter,
-
-  // ==================== HISTÓRICO DE TEMAS ====================
-  historicoTemas: historicoTemasRouter,
-
-  // ==================== TEMAS PERSONALIZADOS ====================
-  temasPersonalizados: temasPersonalizadosRouter,
-
   // ==================== MÓDULO FINANCEIRO (VENCIMENTOS) ====================
   financeiro: financeiroRouter,
 
@@ -503,6 +357,9 @@ export const appRouter = router({
 
   // ==================== TEMPLATES POR SEGMENTO ====================
   templatesCategorias: templatesCategoriasRouter,
+
+  // ==================== HIERARQUIA DE USUÁRIOS ====================
+  hierarquia: hierarquiaRouter,
 });
 
 export type AppRouter = typeof appRouter;

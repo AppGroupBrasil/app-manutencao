@@ -65,9 +65,9 @@ export const registrosPersonalizadosRouter = router({
         checklistItems: input.checklistItems || null,
         assinaturas: input.assinaturas || null,
         status: input.status,
-      });
+      }).returning();
 
-      return { id: Number(result.insertId) };
+      return { id: Number(result.id) };
     }),
 
   // Listar registros de uma função (colunas leves para evitar sort memory overflow)

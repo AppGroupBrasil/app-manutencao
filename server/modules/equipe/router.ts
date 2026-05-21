@@ -62,7 +62,7 @@ export const equipeRouter = router({
         senhaHash = await bcrypt.hash(input.senha, 10);
       }
       
-      const result = await db.insert(membrosEquipe).values({
+      const [result] = await db.insert(membrosEquipe).values({
         condominioId: input.condominioId,
         nome: input.nome,
         whatsapp: input.whatsapp,
@@ -73,8 +73,8 @@ export const equipeRouter = router({
         senha: senhaHash,
         acessoTotal: input.acessoTotal || false,
         permissoes: input.permissoes || [],
-      });
-      return { id: result[0].insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   update: protectedProcedure
@@ -199,7 +199,7 @@ export const equipeRouter = router({
           tipoAcesso: "login",
           sucesso: false,
           motivoFalha: "Membro sem senha cadastrada",
-        });
+        }).returning();
         throw new Error("Este membro nÃ£o possui acesso ao sistema");
       }
       
@@ -220,7 +220,7 @@ export const equipeRouter = router({
           tipoAcesso: "login",
           sucesso: false,
           motivoFalha: "Senha invÃ¡lida",
-        });
+        }).returning();
         throw new Error("Email ou senha invÃ¡lidos");
       }
       
@@ -644,10 +644,10 @@ export const equipeRouter = router({
         canalEnvio: input.canalEnvio,
         mensagem: input.mensagem,
         expiraEm,
-      });
+      }).returning();
       
       return {
-        id: result.insertId,
+        id: result.id,
         token,
         linkVisualizacao: `/compartilhado/${token}`,
       };
@@ -837,13 +837,13 @@ export const equipeRouter = router({
         dispositivo,
         navegador,
         sistemaOperacional,
-      });
+      }).returning();
       
       // Criar notificaÃ§Ã£o para o remetente
       if (compartilhamento.remetenteId) {
         await db.insert(notificacoesVisualizacao).values({
           compartilhamentoId: compartilhamento.id,
-          visualizacaoId: visualizacao.insertId,
+          visualizacaoId: visualizacao.id,
           usuarioId: compartilhamento.remetenteId,
         });
         
@@ -937,7 +937,7 @@ export const equipeRouter = router({
           // Atualizar notificaÃ§Ã£o como email enviado
           await db.update(notificacoesVisualizacao)
             .set({ emailEnviado: true, emailEnviadoEm: new Date() })
-            .where(eq(notificacoesVisualizacao.visualizacaoId, visualizacao.insertId));
+            .where(eq(notificacoesVisualizacao.visualizacaoId, visualizacao.id));
         }
       }
       

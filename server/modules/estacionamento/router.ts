@@ -47,7 +47,7 @@ export const vagaEstacionamentoRouter = router({
         await db.insert(vagasEstacionamento).values({
           ...rest,
           observacoes: observacoes || observacao
-        });
+        }).returning();
         
         return { success: true };
     }),
@@ -109,8 +109,8 @@ export const imagemVagaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(imagensVagas).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(imagensVagas).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   createMultiple: protectedProcedure
@@ -134,7 +134,7 @@ export const imagemVagaRouter = router({
         mimeType: arq.mimeType,
         ordem: index,
       }));
-      await db.insert(imagensVagas).values(arquivosToInsert);
+      await db.insert(imagensVagas).values(arquivosToInsert).returning();
       return { success: true, count: arquivosToInsert.length };
     }),
 

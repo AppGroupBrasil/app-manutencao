@@ -128,16 +128,16 @@ export const manutencaoRouter = router({
         fornecedor: input.fornecedor || null,
         assinaturaTecnico: input.assinaturaTecnico || null,
         assinaturaSolicitante: input.assinaturaSolicitante || null,
-      });
+      }).returning();
       await db.insert(manutencaoTimeline).values({
-        manutencaoId: result.insertId,
+        manutencaoId: result.id,
         tipo: "abertura",
         descricao: `ManutenÃ§Ã£o criada: ${input.titulo}`,
         statusNovo: "pendente",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
       });
-      return { id: result.insertId, protocolo };
+      return { id: result.id, protocolo };
     }),
 
   update: protectedProcedure
@@ -187,7 +187,7 @@ export const manutencaoRouter = router({
           statusNovo: data.status,
           userId: ctx.user?.id,
           userNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(manutencaoTimeline).values({
           manutencaoId: id,
@@ -236,8 +236,8 @@ export const manutencaoRouter = router({
         ...input,
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   getImagens: protectedProcedure
@@ -259,15 +259,15 @@ export const manutencaoRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const [result] = await db.insert(manutencaoImagens).values(input);
+      const [result] = await db.insert(manutencaoImagens).values(input).returning();
       await db.insert(manutencaoTimeline).values({
         manutencaoId: input.manutencaoId,
         tipo: "imagem_adicionada",
         descricao: "Nova imagem adicionada",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeImagem: protectedProcedure
@@ -307,8 +307,8 @@ export const manutencaoRouter = router({
         url: input.url,
         tipo: input.tipo,
         tamanho: input.tamanho || 0,
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeAnexo: protectedProcedure

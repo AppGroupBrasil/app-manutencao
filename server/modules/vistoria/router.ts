@@ -129,17 +129,17 @@ export const vistoriaRouter = router({
         tipo: input.tipo || null,
         assinaturaTecnico: input.assinaturaTecnico || null,
         assinaturaSolicitante: input.assinaturaSolicitante || null,
-      });
+      }).returning();
       // Adicionar evento de abertura na timeline
       await db.insert(vistoriaTimeline).values({
-        vistoriaId: result.insertId,
+        vistoriaId: result.id,
         tipo: "abertura",
         descricao: `Vistoria criada: ${input.titulo}`,
         statusNovo: "pendente",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
       });
-      return { id: result.insertId, protocolo };
+      return { id: result.id, protocolo };
     }),
 
   update: protectedProcedure
@@ -188,7 +188,7 @@ export const vistoriaRouter = router({
           statusNovo: data.status,
           userId: ctx.user?.id,
           userNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(vistoriaTimeline).values({
           vistoriaId: id,
@@ -238,8 +238,8 @@ export const vistoriaRouter = router({
         ...input,
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   // Imagens
@@ -262,7 +262,7 @@ export const vistoriaRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const [result] = await db.insert(vistoriaImagens).values(input);
+      const [result] = await db.insert(vistoriaImagens).values(input).returning();
       // Adicionar evento na timeline
       await db.insert(vistoriaTimeline).values({
         vistoriaId: input.vistoriaId,
@@ -270,8 +270,8 @@ export const vistoriaRouter = router({
         descricao: "Nova imagem adicionada",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeImagem: protectedProcedure
@@ -310,8 +310,8 @@ export const vistoriaRouter = router({
         url: input.url,
         tipo: input.tipo,
         tamanho: input.tamanho || 0,
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeAnexo: protectedProcedure

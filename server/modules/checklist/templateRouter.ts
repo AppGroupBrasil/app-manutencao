@@ -58,9 +58,9 @@ export const checklistTemplateRouter = router({
           cor: input.cor || "#f97316",
           isPadrao: false,
           ativo: true,
-        });
+        }).returning();
         
-        const templateId = result.insertId;
+        const templateId = result.id;
         
         // Adicionar itens
         if (input.itens && input.itens.length > 0) {
@@ -69,7 +69,7 @@ export const checklistTemplateRouter = router({
               templateId,
               descricao: input.itens[i],
               ordem: i,
-            });
+            }).returning();
           }
         }
         
@@ -110,9 +110,9 @@ export const checklistTemplateRouter = router({
           cor: original.cor,
           isPadrao: false,
           ativo: true,
-        });
+        }).returning();
         
-        const newTemplateId = result.insertId;
+        const newTemplateId = result.id;
         
         // Copiar itens
         const itens = await db.select().from(checklistTemplateItens)
@@ -123,7 +123,7 @@ export const checklistTemplateRouter = router({
             templateId: newTemplateId,
             descricao: item.descricao,
             ordem: item.ordem,
-          });
+          }).returning();
         }
         
         return { success: true, id: newTemplateId };

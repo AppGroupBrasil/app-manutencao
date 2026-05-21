@@ -66,7 +66,7 @@ export const appsRouter = router({
         corPrimaria: input.corPrimaria,
         corSecundaria: input.corSecundaria,
         shareLink,
-      }).$returningId();
+      }).returning();
       
       // Inserir mÃ³dulos
       if (input.modulos.length > 0) {

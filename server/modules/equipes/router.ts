@@ -42,8 +42,8 @@ export const equipesRouter = router({
         nome: input.nome,
         descricao: input.descricao || null,
         cor: input.cor || "#3b82f6",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   /** Atualiza nome/descrição/cor de uma equipe */
@@ -113,7 +113,7 @@ export const equipesRouter = router({
       if (toInsert.length > 0) {
         await db.insert(equipeFuncionarios).values(
           toInsert.map(fId => ({ equipeId: input.equipeId, funcionarioId: fId }))
-        );
+        ).returning();
       }
       return { added: toInsert.length };
     }),

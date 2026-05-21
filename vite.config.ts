@@ -43,6 +43,7 @@ export default defineConfig({
           ],
           'vendor-charts': ['recharts', 'chart.js', 'react-chartjs-2'],
           'vendor-pdf': ['jspdf', 'jspdf-autotable'],
+          'vendor-html2pdf': ['html2pdf.js'],
           'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
           'vendor-trpc': ['@trpc/client', '@trpc/react-query', '@tanstack/react-query', 'superjson'],
           'vendor-date': ['date-fns'],

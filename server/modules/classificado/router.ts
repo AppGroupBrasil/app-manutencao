@@ -28,11 +28,11 @@ export const classificadoRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(classificados).values({
+      const [result] = await db.insert(classificados).values({
         ...input,
         usuarioId: ctx.user.id,
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   moderar: protectedProcedure
@@ -99,15 +99,15 @@ export const classificadoRouter = router({
       }
       
       const { token, preco, ...data } = input;
-      const result = await db.insert(classificados).values({
+      const [result] = await db.insert(classificados).values({
         ...data,
         preco: preco ? String(preco) : undefined,
         tipo: "produto",
         condominioId: morador.condominioId,
         moradorId: morador.id,
         status: "pendente",
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   // Excluir classificado pelo morador
@@ -173,11 +173,11 @@ export const classificadoCrudRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(classificados).values({
+      const [result] = await db.insert(classificados).values({
         ...input,
         usuarioId: ctx.user.id,
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   updateStatus: protectedProcedure

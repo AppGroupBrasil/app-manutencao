@@ -33,11 +33,11 @@ export const eventoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(eventos).values({
+      const [result] = await db.insert(eventos).values({
         ...input,
         lembreteEnviado: false,
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   update: protectedProcedure
@@ -137,7 +137,7 @@ export const eventoRouter = router({
             titulo: `Lembrete: ${evento.titulo}`,
             mensagem: `O evento "${evento.titulo}" acontecerá em ${dataFormatada}${evento.local ? ` no ${evento.local}` : ''}.`,
             link: `/dashboard/eventos`,
-          });
+          }).returning();
         }
       }
       
@@ -196,7 +196,7 @@ export const eventoRouter = router({
                 titulo: `Lembrete: ${evento.titulo}`,
                 mensagem: `O evento "${evento.titulo}" acontecerá em ${dataFormatada}${evento.local ? ` no ${evento.local}` : ''}.`,
                 link: `/dashboard/eventos`,
-              });
+              }).returning();
             }
           }
           

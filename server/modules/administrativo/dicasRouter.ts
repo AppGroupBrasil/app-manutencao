@@ -29,13 +29,13 @@ export const dicasSegurancaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(dicasSeguranca).values({
+      const [result] = await db.insert(dicasSeguranca).values({
         condominioId: input.condominioId,
         titulo: input.titulo,
         conteudo: input.descricao,
         categoria: input.categoria || "geral",
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   delete: protectedProcedure

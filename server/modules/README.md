@@ -1,5 +1,10 @@
 # Módulos do Servidor (Arquitetura Proposta)
 
+> **Nota — `equipe/` vs `equipes/`:** apesar do nome parecido, são domínios distintos:
+> - `equipe/router.ts` (exportado como `membroEquipe`) — CRUD/autenticação dos *membros* de equipes (pessoas).
+> - `equipes/router.ts` (exportado como `equipes`) — gestão das *entidades* equipe (grupos).
+
+
 Para resolver o problema do arquivo `routers.ts` monolítico (+19k linhas), a nova arquitetura deve seguir este padrão:
 
 Cada domínio funcional deve ter seu próprio arquivo ou pasta aqui.

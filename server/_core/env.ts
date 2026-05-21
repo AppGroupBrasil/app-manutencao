@@ -45,8 +45,8 @@ export const ENV = {
   appId: env.VITE_APP_ID ?? "",
   cookieSecret: (() => {
     const secret = env.JWT_SECRET ?? 'secret-dev-key-change-in-prod';
-    if (env.NODE_ENV === 'production' && (secret === 'secret-dev-key-change-in-prod' || secret.length < 16)) {
-      throw new Error('JWT_SECRET must be a strong secret (>=16 chars) in production!');
+    if (env.NODE_ENV === 'production' && (secret === 'secret-dev-key-change-in-prod' || secret.length < 32)) {
+      throw new Error('JWT_SECRET must be a strong secret (>=32 chars) in production!');
     }
     return secret;
   })(),

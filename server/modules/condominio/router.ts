@@ -37,11 +37,11 @@ export const condominioRouter = router({
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        const result = await db.insert(condominios).values({
+        const [result] = await db.insert(condominios).values({
           ...input,
           sindicoId: ctx.user.id,
-        });
-        return { id: Number(result[0].insertId) };
+        }).returning();
+        return { id: Number(result.id) };
       }),
 
     update: protectedProcedure

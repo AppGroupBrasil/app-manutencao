@@ -55,7 +55,7 @@ export default function FuncionarioRecuperarSenha() {
                 </p>
                 <div className="pt-4">
                   <Button
-                    onClick={() => setLocation("/funcionario/login")}
+                    onClick={() => setLocation("/login")}
                     variant="outline"
                     className="w-full"
                   >
@@ -137,7 +137,7 @@ export default function FuncionarioRecuperarSenha() {
         <div className="mt-6 text-center">
           <Button
             variant="ghost"
-            onClick={() => setLocation("/funcionario/login")}
+            onClick={() => setLocation("/login")}
             className="text-slate-600 hover:text-slate-800"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

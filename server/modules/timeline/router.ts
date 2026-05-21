@@ -485,8 +485,8 @@ export const timelineRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        const result = await db.insert(timelineResponsaveis).values(input);
-        return { id: result[0].insertId };
+        const [result] = await db.insert(timelineResponsaveis).values(input).returning();
+        return { id: result.id };
       }),
 
     atualizarResponsavel: protectedProcedure
@@ -537,8 +537,8 @@ export const timelineRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        const result = await db.insert(timelineLocais).values(input);
-        return { id: result[0].insertId };
+        const [result] = await db.insert(timelineLocais).values(input).returning();
+        return { id: result.id };
       }),
 
     excluirLocal: protectedProcedure
@@ -575,8 +575,8 @@ export const timelineRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        const result = await db.insert(timelineStatus).values(input);
-        return { id: result[0].insertId };
+        const [result] = await db.insert(timelineStatus).values(input).returning();
+        return { id: result.id };
       }),
 
     excluirStatus: protectedProcedure
@@ -613,8 +613,8 @@ export const timelineRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        const result = await db.insert(timelinePrioridades).values(input);
-        return { id: result[0].insertId };
+        const [result] = await db.insert(timelinePrioridades).values(input).returning();
+        return { id: result.id };
       }),
 
     excluirPrioridade: protectedProcedure
@@ -649,8 +649,8 @@ export const timelineRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        const result = await db.insert(timelineTitulos).values(input);
-        return { id: result[0].insertId };
+        const [result] = await db.insert(timelineTitulos).values(input).returning();
+        return { id: result.id };
       }),
 
     excluirTitulo: protectedProcedure
@@ -784,16 +784,16 @@ export const timelineRouter = router({
         
         const { imagens, ...timelineData } = input;
         
-        const result = await db.insert(timelines).values({
+        const [result] = await db.insert(timelines).values({
           ...timelineData,
           protocolo,
           tokenPublico,
           horaRegistro: `${hora}:${min}:${seg}`,
           criadoPor: ctx.user?.id,
           criadoPorNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
         
-        const timelineId = Number(result[0].insertId);
+        const timelineId = Number(result.id);
         
         // Inserir imagens (upload base64 to S3 if needed)
         if (imagens && imagens.length > 0) {
@@ -822,7 +822,7 @@ export const timelineRouter = router({
               legenda: img.legenda,
               ordem: idx,
             }))
-          );
+          ).returning();
         }
         
         // Registar evento de criação
@@ -832,7 +832,7 @@ export const timelineRouter = router({
           descricao: "Timeline criada",
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
         
         return { id: timelineId, protocolo, tokenPublico };
       }),
@@ -868,7 +868,7 @@ export const timelineRouter = router({
           usuarioNome: ctx.user?.name || "Sistema",
           dadosAnteriores: JSON.stringify(anterior),
           dadosNovos: JSON.stringify(data),
-        });
+        }).returning();
         
         // Verificar se houve mudança de status para enviar notificação
         if (input.statusId && anterior && input.statusId !== anterior.statusId) {
@@ -1022,12 +1022,12 @@ export const timelineRouter = router({
           .from(timelineImagens)
           .where(eq(timelineImagens.timelineId, input.timelineId));
         
-        const result = await db.insert(timelineImagens).values({
+        const [result] = await db.insert(timelineImagens).values({
           timelineId: input.timelineId,
           url,
           legenda: input.legenda,
           ordem: (maxOrdem?.max || 0) + 1,
-        });
+        }).returning();
         
         // Registar evento
         await db.insert(timelineEventos).values({
@@ -1036,9 +1036,9 @@ export const timelineRouter = router({
           descricao: "Imagem adicionada",
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
         
-        return { id: result[0].insertId };
+        return { id: result.id };
       }),
 
     removerImagem: protectedProcedure
@@ -1065,7 +1065,7 @@ export const timelineRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        const result = await db.insert(timelineCompartilhamentos).values(input);
+        const [result] = await db.insert(timelineCompartilhamentos).values(input).returning();
         
         // Atualizar permissão pública para a MAIOR permissão entre todos os compartilhamentos
         const shares = await db.select({ permissao: timelineCompartilhamentos.permissao })
@@ -1093,7 +1093,7 @@ export const timelineRouter = router({
           descricao: `Compartilhado com ${input.membroNome} via ${input.canalEnvio} (permissão: ${permissaoLabel})`,
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
         
         // Buscar timeline para enviar email
         const [timeline] = await db.select().from(timelines).where(eq(timelines.id, input.timelineId));
@@ -1114,7 +1114,7 @@ export const timelineRouter = router({
           });
         }
         
-        return { id: result[0].insertId };
+        return { id: result.id };
       }),
 
     listarCompartilhamentos: protectedProcedure
@@ -1241,7 +1241,7 @@ export const timelineRouter = router({
             ? `Timeline visualizada por ${input.nomeVisualizador}` 
             : "Timeline visualizada",
           usuarioNome: input.nomeVisualizador || undefined,
-        });
+        }).returning();
         
         // Atualizar compartilhamento se fornecido
         if (input.compartilhamentoId) {
@@ -1304,7 +1304,7 @@ export const timelineRouter = router({
             ? `Membro "${membro?.nome || "Desconhecido"}" associado à timeline`
             : `Membro "${membro?.nome || "Desconhecido"}" removido da timeline`,
           usuarioNome: membro?.nome,
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -1333,14 +1333,14 @@ export const timelineRouter = router({
           throw new Error("Sem permissão para adicionar conteúdo");
         }
         
-        const result = await db.insert(timelineEventos).values({
+        const [result] = await db.insert(timelineEventos).values({
           timelineId: timeline.id,
           tipo: input.tipo,
           descricao: input.descricao,
           usuarioNome: input.autorNome,
-        });
+        }).returning();
         
-        return { id: result[0].insertId, success: true };
+        return { id: result.id, success: true };
       }),
 
     // Adicionar imagem via link público
@@ -1384,21 +1384,21 @@ export const timelineRouter = router({
           .from(timelineImagens)
           .where(eq(timelineImagens.timelineId, timeline.id));
         
-        const result = await db.insert(timelineImagens).values({
+        const [result] = await db.insert(timelineImagens).values({
           timelineId: timeline.id,
           url,
           legenda: input.legenda,
           ordem: (maxOrdem?.max || 0) + 1,
-        });
+        }).returning();
         
         // Registar evento
         await db.insert(timelineEventos).values({
           timelineId: timeline.id,
           tipo: "imagem",
           descricao: "Imagem adicionada via link público",
-        });
+        }).returning();
         
-        return { id: result[0].insertId, success: true };
+        return { id: result.id, success: true };
       }),
 
     // Atualizar timeline via link público (permissão editar)
@@ -1459,7 +1459,7 @@ export const timelineRouter = router({
               descricao: `${autorNome || "Alguém"} adicionou uma descrição: "${input.descricao.trim().substring(0, 100)}${input.descricao.trim().length > 100 ? "..." : ""}"`,
               usuarioNome: autorNome,
               dadosNovos: JSON.stringify({ descricao: input.descricao.trim() }),
-            });
+            }).returning();
           } else {
             await db.insert(timelineEventos).values({
               timelineId: timeline.id,
@@ -1512,7 +1512,7 @@ export const timelineRouter = router({
           usuarioNome: input.autorNome,
           dadosAnteriores: JSON.stringify({ categorizacao: categorizacaoAnterior }),
           dadosNovos: JSON.stringify({ categorizacao: input.categorizacao }),
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -1537,12 +1537,12 @@ export const timelineRouter = router({
           throw new Error("Sem permissão para enviar mensagens");
         }
         
-        const result = await db.insert(timelineChat).values({
+        const [result] = await db.insert(timelineChat).values({
           timelineId: timeline.id,
           autorNome: input.autorNome,
           mensagem: input.mensagem,
           categorizacaoNoMomento: timeline.categorizacao || "recebido",
-        });
+        }).returning();
         
         // Registar evento no histórico
         await db.insert(timelineEventos).values({
@@ -1552,7 +1552,7 @@ export const timelineRouter = router({
           usuarioNome: input.autorNome,
         });
         
-        return { id: result[0].insertId, success: true };
+        return { id: result.id, success: true };
       }),
 
     // ==================== TIMELINE - PDF ====================
@@ -1574,7 +1574,7 @@ export const timelineRouter = router({
           descricao: "PDF gerado",
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
         
         return result;
       }),
@@ -1596,7 +1596,7 @@ export const timelineRouter = router({
           tipo: "pdf",
           descricao: "PDF gerado (link público)",
           usuarioNome: "Visitante",
-        });
+        }).returning();
         
         return result;
       }),
@@ -1619,7 +1619,7 @@ export const timelineRouter = router({
           descricao: "Timeline registada/finalizada",
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
         
         return { success: true };
       }),
@@ -1704,8 +1704,8 @@ export const timelineRouter = router({
             notificarComentario: input.notificarComentario,
             notificarCompartilhamento: input.notificarCompartilhamento,
             ativo: input.ativo,
-          });
-          return { id: result.insertId };
+          }).returning();
+          return { id: result.id };
         }
       }),
 

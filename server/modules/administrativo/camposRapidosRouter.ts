@@ -84,9 +84,9 @@ export const camposRapidosTemplatesRouter = router({
         nome: input.nome || input.valor.substring(0, 50),
         vezesUsado: 1,
         ultimoUso: new Date(),
-      });
+      }).returning();
       
-      return { id: result.insertId, ...input, jaExistia: false };
+      return { id: result.id, ...input, jaExistia: false };
     }),
 
   // Usar template (incrementar contador)

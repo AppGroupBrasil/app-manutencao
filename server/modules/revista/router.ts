@@ -378,11 +378,11 @@ export const revistaRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         const shareLink = nanoid(10);
-        const result = await db.insert(revistas).values({
+        const [result] = await db.insert(revistas).values({
           ...input,
           shareLink,
-        });
-        return { id: Number(result[0].insertId), shareLink };
+        }).returning();
+        return { id: Number(result.id), shareLink };
       }),
 
     update: protectedProcedure

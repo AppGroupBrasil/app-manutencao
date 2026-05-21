@@ -54,8 +54,8 @@ export const moradorRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       await verifyCondominioOwnership(db, ctx.user.id, input.condominioId);
-      const result = await db.insert(moradores).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(moradores).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   update: protectedProcedure
@@ -360,12 +360,12 @@ export const moradorRouter = router({
       const senhaHash = await bcrypt.hash(input.senha, 10);
       
       const { token, senha, ...moradorData } = input;
-      const result = await db.insert(moradores).values({
+      const [result] = await db.insert(moradores).values({
         ...moradorData,
         condominioId: condominio[0].id,
         senha: senhaHash,
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   // Cadastro em lote via Excel
@@ -398,7 +398,7 @@ export const moradorRouter = router({
         return { count: 0 };
       }
       
-      await db.insert(moradores).values(moradoresData);
+      await db.insert(moradores).values(moradoresData).returning();
       return { count: moradoresData.length };
     }),
 

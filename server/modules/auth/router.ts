@@ -11,7 +11,11 @@ import { ENV } from "../../_core/env";
 import { sendEmail, isEmailConfigured } from "../../_core/email";
 
 export const authRouter = router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      if (!opts.ctx.user) return null;
+      const { senha, resetToken, resetTokenExpira, ...safeUser } = opts.ctx.user;
+      return safeUser;
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -63,7 +67,7 @@ export const authRouter = router({
           role: 'sindico',
           tipoConta: input.tipoConta,
           lastSignedIn: new Date(),
-        });
+        }).returning();
         
         // Criar sessão (cookie + token)
         const { sdk } = await import('../../_core/sdk');
@@ -102,7 +106,7 @@ export const authRouter = router({
           // Token retornado no body para WebViews que não persistem cookies
           token: sessionToken,
           user: {
-            id: result.insertId,
+            id: result.id,
             nome: input.nome,
             email: input.email,
           },

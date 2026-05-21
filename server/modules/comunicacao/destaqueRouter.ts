@@ -103,7 +103,7 @@ export const destaqueRouter = router({
       
       const { imagens, ...destaqueData } = input;
       
-      const result = await db.insert(destaques).values({
+      const [result] = await db.insert(destaques).values({
         condominioId: destaqueData.condominioId,
         titulo: destaqueData.titulo,
         subtitulo: destaqueData.subtitulo || null,
@@ -114,9 +114,9 @@ export const destaqueRouter = router({
         videoUrl: destaqueData.videoUrl || null,
         ordem: destaqueData.ordem || 0,
         ativo: destaqueData.ativo !== undefined ? destaqueData.ativo : true,
-      });
+      }).returning();
       
-      const destaqueId = Number(result[0].insertId);
+      const destaqueId = Number(result.id);
       
       // Inserir imagens se houver
       if (imagens && imagens.length > 0) {
@@ -127,7 +127,7 @@ export const destaqueRouter = router({
             legenda: img.legenda || null,
             ordem: img.ordem !== undefined ? img.ordem : index,
           }))
-        );
+        ).returning();
       }
       
       return { id: destaqueId };
@@ -187,7 +187,7 @@ export const destaqueRouter = router({
               legenda: img.legenda || null,
               ordem: img.ordem !== undefined ? img.ordem : index,
             }))
-          );
+          ).returning();
         }
       }
       
@@ -297,7 +297,7 @@ export const paginaCustomRouter = router({
       
       const slug = `custom-${nanoid(8)}`;
       // @ts-ignore
-      const result = await db.insert(paginasCustom).values({
+      const [result] = await db.insert(paginasCustom).values({
         condominioId: input.condominioId,
         titulo: input.titulo,
         slug,
@@ -314,9 +314,9 @@ export const paginaCustomRouter = router({
         ativo: input.ativo,
         ordem: input.ordem,
         criadoPor: ctx.user.id,
-      });
+      }).returning();
       
-      return { id: result[0].insertId };
+      return { id: result.id };
     }),
 
   update: protectedProcedure

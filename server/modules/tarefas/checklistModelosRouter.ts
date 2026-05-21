@@ -68,9 +68,9 @@ export const checklistModelosRouter = router({
         nome: input.nome,
         descricao: input.descricao || null,
         itens: input.itens,
-      });
+      }).returning();
       
-      return { id: Number(result.insertId), nome: input.nome };
+      return { id: Number(result.id), nome: input.nome };
     }),
 
   // Atualizar modelo existente

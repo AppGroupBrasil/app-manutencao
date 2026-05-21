@@ -2,11 +2,13 @@ import "dotenv/config";
 import express from "express";
 import compression from "compression";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerCronRoutes } from "./cron";
+import { rateLimiter, getClientIp } from "./rateLimit";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { getDb } from "../db";
@@ -90,7 +92,12 @@ async function startServer() {
       // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin) return callback(null, true);
       
-      // Strict production check (example)
+      // Produção: whitelist estrita
+      // Regras:
+      //   1. URLs listadas em allowedOrigins
+      //   2. Previews Vercel (deploys de PRs/branches): subdomínio contendo "appmanutencao" em .vercel.app
+      //   3. Qualquer subdomínio de appmanutencao.com.br
+      //   4. Cloud Run (.run.app) com "appmanutencao" no nome
       if (process.env.NODE_ENV === 'production') {
         if (allowedOrigins.includes(origin)) return callback(null, true);
         if (origin.includes("appmanutencao") && origin.endsWith(".vercel.app")) return callback(null, true);
@@ -111,6 +118,7 @@ async function startServer() {
   
   // Configure body parser with appropriate size limits
   // TRPC routes need higher limit for base64 image uploads (screenshots, signatures, documents)
+  app.use(cookieParser());
   app.use("/api/trpc", express.json({ limit: "10mb" }));
   app.use("/api/trpc", express.urlencoded({ limit: "10mb", extended: true }));
   
@@ -140,19 +148,48 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Cron job routes for automated tasks
   registerCronRoutes(app);
-  // Proxy para geocoding reverso (evita CORS do Nominatim)
+  // Proxy para geocoding reverso (evita CORS do Nominatim) — com rate-limit e cache
+  const geocodeCache = new Map<string, { data: any; expiresAt: number }>();
+  const GEOCODE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
   app.get("/api/geocode/reverse", async (req, res) => {
     try {
+      const ip = getClientIp(req);
+      try {
+        rateLimiter.check(`geocode:${ip}`, { maxAttempts: 30, windowMs: 60 * 1000, blockDurationMs: 5 * 60 * 1000 });
+      } catch (e: any) {
+        return res.status(429).json({ error: e.message });
+      }
+
       const { lat, lon } = req.query;
       if (!lat || !lon) return res.status(400).json({ error: "lat and lon required" });
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`;
+
+      const latNum = Number(lat);
+      const lonNum = Number(lon);
+      if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || Math.abs(latNum) > 90 || Math.abs(lonNum) > 180) {
+        return res.status(400).json({ error: "lat/lon inválidos" });
+      }
+      const latR = latNum.toFixed(4);
+      const lonR = lonNum.toFixed(4);
+      const cacheKey = `${latR},${lonR}`;
+      const cached = geocodeCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.data);
+      }
+
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${latR}&lon=${lonR}&format=json&addressdetails=1`;
       const resp = await fetch(url, {
         headers: {
-          "User-Agent": "AppManutencao/1.0",
+          "User-Agent": "AppManutencao/1.0 (contato@appmanutencao.com.br)",
           "Accept-Language": "pt-BR",
         },
       });
       const data = await resp.json();
+      geocodeCache.set(cacheKey, { data, expiresAt: Date.now() + GEOCODE_TTL_MS });
+      // limitar tamanho do cache
+      if (geocodeCache.size > 5000) {
+        const firstKey = geocodeCache.keys().next().value;
+        if (firstKey) geocodeCache.delete(firstKey);
+      }
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -190,8 +227,10 @@ async function startServer() {
     }
   });
 
-  // Rota para exportar backup em JSON (PROTEGIDA - requer autenticação)
-  app.get("/api/backup/export", async (req, res) => {
+  // Rota para exportar condomínios em JSON (PROTEGIDA - requer autenticação)
+  // NOTA: nome legado /api/backup/export mantido para compatibilidade; conteúdo
+  // hoje cobre apenas condomínios. Para backup completo, usar pg_dump no servidor.
+  app.get(["/api/backup/export", "/api/export/condominios.json"], async (req, res) => {
     try {
       const context = await createContext({ req, res, info: { remoteAddress: req.ip || "" } } as any);
       
@@ -225,8 +264,8 @@ async function startServer() {
     }
   });
 
-  // Rota para exportar backup em CSV (PROTEGIDA - requer autenticação)
-  app.get("/api/backup/export-csv", async (req, res) => {
+  // Rota para exportar condomínios em CSV (PROTEGIDA - requer autenticação)
+  app.get(["/api/backup/export-csv", "/api/export/condominios.csv"], async (req, res) => {
     try {
       const context = await createContext({ req, res, info: { remoteAddress: req.ip || "" } } as any);
       
@@ -283,10 +322,18 @@ async function startServer() {
   }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  let port: number;
+  if (process.env.NODE_ENV === "production") {
+    if (!(await isPortAvailable(preferredPort))) {
+      console.error(`❌ [FATAL] Port ${preferredPort} is busy in production. Exiting.`);
+      process.exit(1);
+    }
+    port = preferredPort;
+  } else {
+    port = await findAvailablePort(preferredPort);
+    if (port !== preferredPort) {
+      console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+    }
   }
 
   server.listen(port, () => {

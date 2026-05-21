@@ -124,21 +124,21 @@ export const controlePragasRouter = router({
         observacoes: input.observacoes || null,
         status: input.status || "agendada",
         prioridade: input.prioridade || "media",
-      });
+      }).returning();
 
       // Adicionar imagens se houver
       if (input.imagens && input.imagens.length > 0) {
         for (let i = 0; i < input.imagens.length; i++) {
           await db.insert(controlePragaImagens).values({
-            controlePragaId: result.insertId,
+            controlePragaId: result.id,
             url: input.imagens[i].url,
             legenda: input.imagens[i].legenda || null,
             ordem: i,
-          });
+          }).returning();
         }
       }
 
-      return { id: result.insertId, protocolo };
+      return { id: result.id, protocolo };
     }),
 
   update: protectedProcedure
@@ -213,9 +213,9 @@ export const controlePragasRouter = router({
         url: input.url,
         legenda: input.legenda || null,
         ordem: existingImages.length,
-      });
+      }).returning();
 
-      return { id: result.insertId };
+      return { id: result.id };
     }),
 
   removeImagem: protectedProcedure

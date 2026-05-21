@@ -111,6 +111,10 @@ gcs-credentials.json
 *-credentials.json
 *.pem
 *.key
+cookies.txt
+*.jks
+*.keystore
+auto-push.exp
 
 # Test/seed scripts (contain connection strings)
 test-*.mjs

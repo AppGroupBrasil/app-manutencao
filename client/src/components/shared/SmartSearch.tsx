@@ -12,7 +12,7 @@ export default function SmartSearch({ placeholder = 'Buscar...', onSearch, showD
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showDates, setShowDates] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

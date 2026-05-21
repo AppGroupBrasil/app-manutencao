@@ -116,9 +116,6 @@ export const menuSections: MenuSection[] = [
     label: "menu.communication",
     icon: Megaphone,
     items: [
-      { id: "avisos", label: "menu.notices", icon: Megaphone, funcaoId: "avisos" },
-      { id: "comunicados", label: "menu.announcements", icon: MessageSquare, funcaoId: "comunicados" },
-      { id: "eventos", label: "menu.events", icon: Calendar, funcaoId: "eventos" },
       { id: "votacoes", label: "menu.votes", icon: Vote, funcaoId: "votacoes" },
     ],
   },

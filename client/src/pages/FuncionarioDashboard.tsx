@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { CoreModulesPanel } from "@/components/funcionario/CoreModulesPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
@@ -11,12 +12,6 @@ import {
   Wrench, 
   AlertTriangle, 
   Search,
-  Camera,
-  Users,
-  Home,
-  Bell,
-  MessageSquare,
-  Calendar,
   Loader2,
   User,
   Smartphone,
@@ -36,71 +31,29 @@ const FUNCOES_CONFIG: Record<string, {
     icon: ClipboardCheck,
     label: "Checklists",
     description: "Verificações e tarefas diárias",
-    route: "/funcionario/checklists",
+    route: "/dashboard/checklists",
     color: "from-emerald-500 to-green-600",
   },
   manutencoes: {
     icon: Wrench,
     label: "Manutenções",
     description: "Registrar e acompanhar manutenções",
-    route: "/funcionario/manutencoes",
+    route: "/dashboard/manutencoes",
     color: "from-blue-500 to-indigo-600",
   },
   ocorrencias: {
     icon: AlertTriangle,
     label: "Ocorrências",
     description: "Reportar problemas e incidentes",
-    route: "/funcionario/ocorrencias",
+    route: "/dashboard/ocorrencias",
     color: "from-orange-500 to-red-600",
   },
   vistorias: {
     icon: Search,
     label: "Vistorias",
     description: "Inspeções e verificações",
-    route: "/funcionario/vistorias",
+    route: "/dashboard/vistorias",
     color: "from-purple-500 to-violet-600",
-  },
-  antes_depois: {
-    icon: Camera,
-    label: "Antes e Depois",
-    description: "Documentar transformações",
-    route: "/funcionario/antes-depois",
-    color: "from-pink-500 to-rose-600",
-  },
-  funcionarios: {
-    icon: Users,
-    label: "Funcionários",
-    description: "Gestão da equipe",
-    route: "/funcionario/equipe",
-    color: "from-cyan-500 to-teal-600",
-  },
-  moradores: {
-    icon: Home,
-    label: "Usuários",
-    description: "Informações dos usuários",
-    route: "/funcionario/moradores",
-    color: "from-amber-500 to-yellow-600",
-  },
-  avisos: {
-    icon: Bell,
-    label: "Avisos",
-    description: "Comunicados importantes",
-    route: "/funcionario/avisos",
-    color: "from-red-500 to-pink-600",
-  },
-  comunicados: {
-    icon: MessageSquare,
-    label: "Comunicados",
-    description: "Mensagens e informações",
-    route: "/funcionario/comunicados",
-    color: "from-indigo-500 to-blue-600",
-  },
-  eventos: {
-    icon: Calendar,
-    label: "Eventos",
-    description: "Agenda de eventos",
-    route: "/funcionario/eventos",
-    color: "from-teal-500 to-emerald-600",
   },
 };
 
@@ -114,8 +67,40 @@ const TIPOS_FUNCIONARIO: Record<string, string> = {
   sindico_externo: "Supervisor Externo",
 };
 
+// Hierarquias que desbloqueiam TODAS as funções automaticamente
+const HIERARQUIAS_ADMIN = new Set(["admin_master", "gestor"]);
+
+const LABEL_HIERARQUIA: Record<string, string> = {
+  admin_master: "Administrador Master",
+  gestor: "Gestor",
+};
+
+function getTipoLabel(funcionario: {
+  hierarquia?: string | null;
+  tipoFuncionario?: string | null;
+  cargo?: string | null;
+}) {
+  if (funcionario.hierarquia && LABEL_HIERARQUIA[funcionario.hierarquia]) {
+    return LABEL_HIERARQUIA[funcionario.hierarquia];
+  }
+
+  if (funcionario.tipoFuncionario) {
+    return TIPOS_FUNCIONARIO[funcionario.tipoFuncionario] || funcionario.tipoFuncionario;
+  }
+
+  return funcionario.cargo || "Funcionário";
+}
+
+function getIntroText(viewMode: "condominios" | "apps" | "funcoes", activeDescription?: string) {
+  if (activeDescription) return activeDescription;
+  if (viewMode === "condominios") return "Selecione a organização que deseja acessar";
+  if (viewMode === "apps") return "Selecione o app que deseja utilizar";
+  return "Selecione uma das funções abaixo para começar";
+}
+
 export default function FuncionarioDashboard() {
   const [, setLocation] = useLocation();
+  const [isSectionRoute, routeParams] = useRoute<{ section: string }>("/dashboard/:section");
   const [funcoesHabilitadas, setFuncoesHabilitadas] = useState<string[]>([]);
   const [selectedCondominio, setSelectedCondominio] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"condominios" | "apps" | "funcoes">("condominios");
@@ -128,28 +113,28 @@ export default function FuncionarioDashboard() {
   const logoutMutation = trpc.funcionario.logout.useMutation({
     onSuccess: () => {
       toast.success("Sessão encerrada. Até logo!");
-      setLocation("/funcionario/login");
+      setLocation("/login");
     },
   });
 
   // Redirecionar se não estiver logado
   useEffect(() => {
     if (!isLoading && !funcionario) {
-      setLocation("/funcionario/login");
+      setLocation("/login");
     }
   }, [isLoading, funcionario, setLocation]);
 
   // Determinar modo de visualização inicial
   useEffect(() => {
     if (funcionario) {
-      const temMultiplosCondominios = funcionario.condominiosVinculados && funcionario.condominiosVinculados.length > 1;
-      const temApps = funcionario.appsVinculados && funcionario.appsVinculados.length > 0;
+      const temMultiplosCondominios = (funcionario.condominiosVinculados?.length || 0) > 1;
+      const temApps = (funcionario.appsVinculados?.length || 0) > 0;
       
       if (temMultiplosCondominios) {
         setViewMode("condominios");
       } else if (temApps) {
         setViewMode("apps");
-        if (funcionario.condominiosVinculados && funcionario.condominiosVinculados.length === 1) {
+        if (funcionario.condominiosVinculados?.length === 1) {
           setSelectedCondominio(funcionario.condominiosVinculados[0].id);
         }
       } else {
@@ -161,13 +146,18 @@ export default function FuncionarioDashboard() {
     }
   }, [funcionario]);
 
-  // Atualizar funções habilitadas
+  // Atualizar funções habilitadas (admin_master/gestor tem TODAS)
   useEffect(() => {
-    if (funcionario?.funcoes) {
-      const habilitadas = funcionario.funcoes
-        .filter(f => f.habilitada)
-        .map(f => f.funcaoKey);
-      setFuncoesHabilitadas(habilitadas);
+    if (funcionario) {
+      if (funcionario.hierarquia && HIERARQUIAS_ADMIN.has(funcionario.hierarquia)) {
+        // Admin/gestor: libera todas as funções
+        setFuncoesHabilitadas(Object.keys(FUNCOES_CONFIG));
+      } else if (funcionario.funcoes) {
+        const habilitadas = funcionario.funcoes
+          .filter(f => f.habilitada)
+          .map(f => f.funcaoKey);
+        setFuncoesHabilitadas(habilitadas);
+      }
     }
   }, [funcionario]);
 
@@ -197,7 +187,7 @@ export default function FuncionarioDashboard() {
   const handleSelectCondominio = (condominioId: number) => {
     setSelectedCondominio(condominioId);
     // Se tem apps vinculados, mostrar apps, senão mostrar funções
-    if (funcionario.appsVinculados && funcionario.appsVinculados.length > 0) {
+    if (funcionario.appsVinculados?.length) {
       setViewMode("apps");
     } else {
       setViewMode("funcoes");
@@ -210,6 +200,11 @@ export default function FuncionarioDashboard() {
   };
 
   const handleBack = () => {
+    if (activeSection) {
+      setLocation("/dashboard");
+      return;
+    }
+
     if (viewMode === "funcoes" || viewMode === "apps") {
       if (funcionario.condominiosVinculados && funcionario.condominiosVinculados.length > 1) {
         setViewMode("condominios");
@@ -230,8 +225,65 @@ export default function FuncionarioDashboard() {
 
   // Obter nome da organização selecionado
   const condominioSelecionado = funcionario.condominiosVinculados?.find(c => c.id === selectedCondominio);
+  const activeSection = isSectionRoute ? routeParams.section : null;
+  const activeSectionConfig = activeSection ? FUNCOES_CONFIG[activeSection] : null;
+  const activeCondominioId = selectedCondominio || funcionario.condominioId || funcionario.condominiosVinculados?.[0]?.id || null;
+  const tipoLabel = getTipoLabel(funcionario);
+  const profileFirstName = funcionario.nome.split(" ")[0];
+  const showBackButton = Boolean(activeSection) || ((viewMode === "apps" || viewMode === "funcoes") && (funcionario.condominiosVinculados?.length || 0) > 1);
+  const introText = getIntroText(viewMode, activeSectionConfig?.description);
+  let profileAvatar = (
+    <div className="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center">
+      <User className="w-4 h-4 text-slate-600" />
+    </div>
+  );
 
-  const tipoLabel = funcionario.tipoFuncionario ? TIPOS_FUNCIONARIO[funcionario.tipoFuncionario] || funcionario.tipoFuncionario : funcionario.cargo;
+  if (funcionario.fotoUrl) {
+    profileAvatar = (
+      <img 
+        src={funcionario.fotoUrl} 
+        alt={funcionario.nome}
+        className="w-8 h-8 rounded-full object-cover"
+      />
+    );
+  }
+
+  let sectionContent = null;
+
+  if (activeSection) {
+    if (activeSectionConfig && activeCondominioId) {
+      sectionContent = (
+        <CoreModulesPanel
+          section={activeSection as "checklists" | "manutencoes" | "ocorrencias" | "vistorias"}
+          condominioId={activeCondominioId}
+        />
+      );
+    } else if (activeSectionConfig) {
+      sectionContent = (
+        <Card className="bg-white/80 backdrop-blur-sm border-0">
+          <CardContent className="py-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <Building2 className="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-2">Selecione uma organização</h3>
+            <p className="text-slate-500 max-w-md mx-auto">Este módulo precisa de um condomínio ativo para carregar os registros.</p>
+          </CardContent>
+        </Card>
+      );
+    } else {
+      sectionContent = (
+        <Card className="bg-white/80 backdrop-blur-sm border-0">
+          <CardContent className="py-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-2">Função removida do portal</h3>
+            <p className="text-slate-500 max-w-md mx-auto">Os cards sem implementação real foram descartados desta nova versão do dashboard.</p>
+          </CardContent>
+        </Card>
+      );
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -240,7 +292,7 @@ export default function FuncionarioDashboard() {
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {(viewMode === "apps" || viewMode === "funcoes") && funcionario.condominiosVinculados && funcionario.condominiosVinculados.length > 1 && (
+              {showBackButton && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -264,17 +316,7 @@ export default function FuncionarioDashboard() {
             <div className="flex items-center gap-4">
               {/* Perfil do funcionário */}
               <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
-                {funcionario.fotoUrl ? (
-                  <img 
-                    src={funcionario.fotoUrl} 
-                    alt={funcionario.nome}
-                    className="w-8 h-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center">
-                    <User className="w-4 h-4 text-slate-600" />
-                  </div>
-                )}
+                {profileAvatar}
                 <div className="hidden sm:block">
                   <p className="text-sm font-medium text-slate-700">{funcionario.nome}</p>
                   <p className="text-xs text-slate-500">{tipoLabel}</p>
@@ -301,14 +343,13 @@ export default function FuncionarioDashboard() {
         {/* Saudação */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-slate-800">
-            Olá, {funcionario.nome.split(" ")[0]}!
+            Olá, {profileFirstName}!
           </h2>
-          <p className="text-slate-600 mt-1">
-            {viewMode === "condominios" && "Selecione a organização que deseja acessar"}
-            {viewMode === "apps" && "Selecione o app que deseja utilizar"}
-            {viewMode === "funcoes" && "Selecione uma das funções abaixo para começar"}
-          </p>
+          <p className="text-slate-600 mt-1">{introText}</p>
         </div>
+
+        {activeSection ? sectionContent : (
+          <>
 
         {/* Seleção de Condomínios */}
         {viewMode === "condominios" && funcionario.condominiosVinculados && funcionario.condominiosVinculados.length > 0 && (
@@ -324,7 +365,7 @@ export default function FuncionarioDashboard() {
                     {cond.logoUrl ? (
                       <img 
                         src={cond.logoUrl} 
-                        alt={cond.nome}
+                        alt={cond.nome || "Condomínio"}
                         className="w-16 h-16 rounded-xl object-cover"
                       />
                     ) : (
@@ -360,7 +401,7 @@ export default function FuncionarioDashboard() {
                     {app.logoUrl ? (
                       <img 
                         src={app.logoUrl} 
-                        alt={app.nome}
+                        alt={app.nome || "App"}
                         className="w-16 h-16 rounded-xl object-cover"
                       />
                     ) : (
@@ -460,8 +501,11 @@ export default function FuncionarioDashboard() {
           </>
         )}
 
+          </>
+        )}
+
         {/* Mensagem quando não há condomínios nem apps */}
-        {viewMode === "condominios" && (!funcionario.condominiosVinculados || funcionario.condominiosVinculados.length === 0) && (
+        {!activeSection && viewMode === "condominios" && (!funcionario.condominiosVinculados || funcionario.condominiosVinculados.length === 0) && (
           <Card className="bg-white/80 backdrop-blur-sm border-0">
             <CardContent className="py-12 text-center">
               <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">

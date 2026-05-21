@@ -27,8 +27,8 @@ export const telefoneRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(telefonesUteis).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(telefonesUteis).values(input).returning();
+      return { id: Number(result.id) };
     }),
 });
 
@@ -55,7 +55,7 @@ export const linkRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(linksUteis).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(linksUteis).values(input).returning();
+      return { id: Number(result.id) };
     }),
 });

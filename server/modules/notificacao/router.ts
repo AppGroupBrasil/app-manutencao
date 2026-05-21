@@ -62,8 +62,8 @@ export const notificacaoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(notificacoes).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(notificacoes).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   // Criar notificação para todos os moradores de um condomínio
@@ -335,7 +335,7 @@ export const pushNotificationsRouter = router({
         }
         
         // Criar nova subscription
-        const result = await db.insert(pushSubscriptions).values({
+        const [result] = await db.insert(pushSubscriptions).values({
           condominioId: input.condominioId,
           userId: ctx.user.id,
           endpoint: input.endpoint,
@@ -343,9 +343,9 @@ export const pushNotificationsRouter = router({
           auth: input.auth,
           userAgent: input.userAgent || null,
           ativo: true,
-        });
+        }).returning();
         
-        return { success: true, id: Number(result[0].insertId) };
+        return { success: true, id: Number(result.id) };
       }),
     
     // Cancelar subscription
@@ -622,7 +622,7 @@ export const pushNotificationsRouter = router({
           sucessos: enviados,
           falhas: falhas,
           enviadoPor: ctx.user.id,
-        });
+        }).returning();
         
         return { 
           success: true, 
@@ -675,7 +675,7 @@ export const historicoNotificacoesRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        const result = await db.insert(historicoNotificacoes).values({
+        const [result] = await db.insert(historicoNotificacoes).values({
           condominioId: input.condominioId,
           tipo: input.tipo,
           titulo: input.titulo,
@@ -685,9 +685,9 @@ export const historicoNotificacoesRouter = router({
           falhas: input.falhas || 0,
           lembreteId: input.lembreteId || null,
           enviadoPor: ctx.user.id,
-        });
+        }).returning();
         
-        return { success: true, id: Number(result[0].insertId) };
+        return { success: true, id: Number(result.id) };
       }),
     
     // Estatísticas de notificações

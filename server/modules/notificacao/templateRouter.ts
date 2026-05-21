@@ -59,7 +59,7 @@ export const templatesNotificacaoRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       
-      const result = await db.insert(templatesNotificacao).values({
+      const [result] = await db.insert(templatesNotificacao).values({
         condominioId: input.condominioId,
         nome: input.nome,
         titulo: input.titulo,
@@ -68,9 +68,9 @@ export const templatesNotificacaoRouter = router({
         icone: input.icone || null,
         cor: input.cor || null,
         urlDestino: input.urlDestino || null,
-      });
+      }).returning();
       
-      return { success: true, id: Number(result[0].insertId) };
+      return { success: true, id: Number(result.id) };
     }),
   
   // Atualizar template

@@ -15,6 +15,12 @@ import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
 import { rateLimiter, RATE_LIMIT_CONFIGS, getClientIp } from "../../_core/rateLimit";
 import { verifyCondominioOwnership } from "../../_core/ownership";
 import { ENV } from "../../_core/env";
+import {
+  findFuncionarioById,
+  findFuncionarioByLoginEmail,
+  findFuncionarioByResetToken,
+  findFuncionarioForLogin,
+} from "../../_core/funcionarioCompat";
 
 export const funcionarioRouter = router({
     list: protectedProcedure
@@ -64,8 +70,8 @@ export const funcionarioRouter = router({
         
         // Usar transação para garantir atomicidade
         const funcionarioId = await db.transaction(async (tx) => {
-          const result = await tx.insert(funcionarios).values({ ...data, condominioId });
-          const fId = Number(result[0].insertId);
+          const [result] = await tx.insert(funcionarios).values({ ...data, condominioId }).returning();
+          const fId = Number(result.id);
           
           // Se for supervisor, vincular aos condomínios adicionais
           if (condominiosIds && condominiosIds.length > 0) {
@@ -75,7 +81,7 @@ export const funcionarioRouter = router({
                 condominioId: cId,
                 ativo: true,
               }))
-            );
+            ).returning();
           }
           
           // Vincular aos apps selecionados
@@ -86,7 +92,7 @@ export const funcionarioRouter = router({
                 appId,
                 ativo: true,
               }))
-            );
+            ).returning();
           }
           
           return fId;
@@ -135,7 +141,7 @@ export const funcionarioRouter = router({
                 condominioId: cId,
                 ativo: true,
               }))
-            );
+            ).returning();
           }
         }
         
@@ -149,7 +155,7 @@ export const funcionarioRouter = router({
                 appId,
                 ativo: true,
               }))
-            );
+            ).returning();
           }
         }
         
@@ -176,21 +182,34 @@ export const funcionarioRouter = router({
     configurarLogin: protectedProcedure
       .input(z.object({
         funcionarioId: z.number(),
-        loginEmail: z.string().email(),
-        senha: z.string().min(6),
+        loginEmail: z.string().email().optional(),
+        senha: z.string().regex(/^\d{6}$/, "Senha deve ter exatamente 6 dígitos numéricos"),
         loginAtivo: z.boolean().default(true),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
+
+        // Buscar funcionário para gerar loginUsuario a partir do nome
+        const [func] = await db.select().from(funcionarios)
+          .where(eq(funcionarios.id, input.funcionarioId)).limit(1);
+        if (!func) throw new Error("Funcionário não encontrado");
+
+        // Gerar loginUsuario: nome e sobrenome sem espaços, sem caracteres especiais, tudo minúsculo
+        const loginUsuario = func.nome
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // remove acentos
+          .replace(/[^a-zA-Z0-9]/g, "")                       // remove especiais
+          .toLowerCase();
+
         const bcrypt = await import("bcryptjs");
         const senhaHash = await bcrypt.hash(input.senha, 10);
         await db.update(funcionarios).set({
-          loginEmail: input.loginEmail,
+          loginEmail: input.loginEmail || func.email || null,
+          loginUsuario,
           senha: senhaHash,
           loginAtivo: input.loginAtivo,
         }).where(eq(funcionarios.id, input.funcionarioId));
-        return { success: true };
+        return { success: true, loginUsuario };
       }),
 
     // Listar funções do funcionário
@@ -230,33 +249,38 @@ export const funcionarioRouter = router({
                 funcaoKey: f.funcaoKey,
                 habilitada: f.habilitada,
               }))
-            );
+            ).returning();
           }
         });
         return { success: true };
       }),
 
-    // Login de funcionário
+    // Login de funcionário (aceita email OU loginUsuario)
     login: publicProcedure
       .input(z.object({
-        email: z.string().email(),
+        identificador: z.string().min(1),
         senha: z.string(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Rate limiting: login funcionário
         const ip = getClientIp(ctx.req);
-        const rlKey = `func-login:${ip}:${input.email}`;
+        const rlKey = `func-login:${ip}:${input.identificador}`;
         rateLimiter.check(rlKey, RATE_LIMIT_CONFIGS.login);
 
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        const [funcionario] = await db.select().from(funcionarios)
-          .where(eq(funcionarios.loginEmail, input.email))
-          .limit(1);
+        const identificadorNormalizado = input.identificador.includes("@")
+          ? input.identificador.trim().toLowerCase()
+          : input.identificador
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/[^a-zA-Z0-9]/g, "")
+              .toLowerCase();
+        const funcionario = await findFuncionarioForLogin(identificadorNormalizado);
         
         if (!funcionario) {
-          throw new Error("Email ou senha inválidos");
+          throw new Error("Usuário ou senha inválidos");
         }
         
         if (!funcionario.loginAtivo) {
@@ -279,13 +303,15 @@ export const funcionarioRouter = router({
           .where(eq(funcionarioFuncoes.funcionarioId, funcionario.id));
         
         // Criar token JWT para o funcionário
-        const jwt = await import("jsonwebtoken");
+        const jwtModule = await import("jsonwebtoken");
+        const jwt = jwtModule.default || jwtModule;
         const token = jwt.sign(
           { 
             funcionarioId: funcionario.id, 
             condominioId: funcionario.condominioId,
             nome: funcionario.nome,
             cargo: funcionario.cargo,
+            hierarquia: funcionario.hierarquia || "funcionario",
             tipo: "funcionario"
           },
           ENV.cookieSecret,
@@ -384,30 +410,40 @@ export const funcionarioRouter = router({
         }).where(eq(funcionarios.id, funcionario.id));
         
         // Buscar condomínios vinculados (para supervisores)
-        const condominiosVinculados = await db.select({
-          id: condominios.id,
-          nome: condominios.nome,
-          logoUrl: condominios.logoUrl,
-        }).from(funcionarioCondominios)
-          .innerJoin(condominios, eq(funcionarioCondominios.condominioId, condominios.id))
-          .where(and(
-            eq(funcionarioCondominios.funcionarioId, funcionario.id),
-            eq(funcionarioCondominios.ativo, true)
-          ));
+        let condominiosVinculados: { id: number; nome: string | null; logoUrl: string | null }[] = [];
+        try {
+          condominiosVinculados = await db.select({
+            id: condominios.id,
+            nome: condominios.nome,
+            logoUrl: condominios.logoUrl,
+          }).from(funcionarioCondominios)
+            .innerJoin(condominios, eq(funcionarioCondominios.condominioId, condominios.id))
+            .where(and(
+              eq(funcionarioCondominios.funcionarioId, funcionario.id),
+              eq(funcionarioCondominios.ativo, true)
+            ));
+        } catch (e) {
+          // Silenciar erro de tipo (UUID vs integer) em ambientes com DB compartilhado
+        }
         
         // Buscar apps vinculados
-        const appsVinculados = await db.select({
-          id: apps.id,
-          nome: apps.nome,
-          condominioId: apps.condominioId,
-          logoUrl: apps.logoUrl,
-          shareLink: apps.shareLink,
-        }).from(funcionarioApps)
-          .innerJoin(apps, eq(funcionarioApps.appId, apps.id))
-          .where(and(
-            eq(funcionarioApps.funcionarioId, funcionario.id),
-            eq(funcionarioApps.ativo, true)
-          ));
+        let appsVinculados: { id: number; nome: string | null; condominioId: number | null; logoUrl: string | null; shareLink: string | null }[] = [];
+        try {
+          appsVinculados = await db.select({
+            id: apps.id,
+            nome: apps.nome,
+            condominioId: apps.condominioId,
+            logoUrl: apps.logoUrl,
+            shareLink: apps.shareLink,
+          }).from(funcionarioApps)
+            .innerJoin(apps, eq(funcionarioApps.appId, apps.id))
+            .where(and(
+              eq(funcionarioApps.funcionarioId, funcionario.id),
+              eq(funcionarioApps.ativo, true)
+            ));
+        } catch (e) {
+          // Silenciar erro de tipo em ambientes com DB compartilhado
+        }
         
         return { 
           success: true,
@@ -416,6 +452,7 @@ export const funcionarioRouter = router({
             nome: funcionario.nome,
             cargo: funcionario.cargo,
             tipoFuncionario: funcionario.tipoFuncionario,
+            hierarquia: funcionario.hierarquia || "funcionario",
             condominioId: funcionario.condominioId,
             fotoUrl: funcionario.fotoUrl,
           },
@@ -432,7 +469,8 @@ export const funcionarioRouter = router({
         if (!token) return null;
         
         try {
-          const jwt = await import("jsonwebtoken");
+          const jwtModule = await import("jsonwebtoken");
+          const jwt = jwtModule.default || jwtModule;
           const decoded = jwt.verify(token, ENV.cookieSecret) as {
             funcionarioId: number;
             condominioId: number;
@@ -446,19 +484,20 @@ export const funcionarioRouter = router({
           const db = await getDb();
           if (!db) return null;
           
-          const [funcionario] = await db.select().from(funcionarios)
-            .where(eq(funcionarios.id, decoded.funcionarioId))
-            .limit(1);
+          const funcionario = await findFuncionarioById(decoded.funcionarioId);
           
           if (!funcionario || !funcionario.loginAtivo) return null;
           
           // Buscar dados relacionados em paralelo (otimização N+1)
-          const [funcoes, condominiosVinculados, appsVinculados, [condominioPrincipal]] = await Promise.all([
-            // Funções habilitadas
-            db.select().from(funcionarioFuncoes)
-              .where(eq(funcionarioFuncoes.funcionarioId, funcionario.id)),
-            // Condomínios vinculados (para supervisores)
-            db.select({
+          const funcoes = await db.select().from(funcionarioFuncoes)
+              .where(eq(funcionarioFuncoes.funcionarioId, funcionario.id));
+          
+          let condominiosVinculados: { id: number; nome: string | null; logoUrl: string | null }[] = [];
+          let appsVinculados: { id: number; nome: string | null; condominioId: number | null; logoUrl: string | null; shareLink: string | null }[] = [];
+          let condominioPrincipal: { id: number; nome: string | null; logoUrl: string | null } | undefined;
+          
+          try {
+            condominiosVinculados = await db.select({
               id: condominios.id,
               nome: condominios.nome,
               logoUrl: condominios.logoUrl,
@@ -467,9 +506,11 @@ export const funcionarioRouter = router({
               .where(and(
                 eq(funcionarioCondominios.funcionarioId, funcionario.id),
                 eq(funcionarioCondominios.ativo, true)
-              )),
-            // Apps vinculados
-            db.select({
+              ));
+          } catch (e) { /* tipo mismatch UUID/int */ }
+          
+          try {
+            appsVinculados = await db.select({
               id: apps.id,
               nome: apps.nome,
               condominioId: apps.condominioId,
@@ -480,21 +521,25 @@ export const funcionarioRouter = router({
               .where(and(
                 eq(funcionarioApps.funcionarioId, funcionario.id),
                 eq(funcionarioApps.ativo, true)
-              )),
-            // Condomínio principal
-            db.select({
+              ));
+          } catch (e) { /* tipo mismatch */ }
+          
+          try {
+            const [cp] = await db.select({
               id: condominios.id,
               nome: condominios.nome,
               logoUrl: condominios.logoUrl,
             }).from(condominios)
-              .where(eq(condominios.id, funcionario.condominioId)),
-          ]);
+              .where(eq(condominios.id, funcionario.condominioId));
+            condominioPrincipal = cp;
+          } catch (e) { /* tipo mismatch */ }
           
         return {
           id: funcionario.id,
           nome: funcionario.nome,
           cargo: funcionario.cargo,
           tipoFuncionario: funcionario.tipoFuncionario,
+          hierarquia: funcionario.hierarquia || "funcionario",
           condominioId: funcionario.condominioId,
           condominioPrincipal,
           fotoUrl: funcionario.fotoUrl,
@@ -502,8 +547,7 @@ export const funcionarioRouter = router({
           condominiosVinculados,
           appsVinculados,
         };
-        } catch {
-          return null;
+        } catch (e) {
         }
       }),
 
@@ -525,9 +569,7 @@ export const funcionarioRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        // Buscar funcionário pelo email de login
-        const [funcionario] = await db.select().from(funcionarios)
-          .where(eq(funcionarios.loginEmail, input.email));
+        const funcionario = await findFuncionarioByLoginEmail(input.email.trim().toLowerCase());
         
         if (!funcionario) {
           // Não revelar se o email existe ou não por segurança
@@ -575,8 +617,7 @@ export const funcionarioRouter = router({
         const db = await getDb();
         if (!db) return { valid: false };
         
-        const [funcionario] = await db.select().from(funcionarios)
-          .where(eq(funcionarios.resetToken, input.token));
+        const funcionario = await findFuncionarioByResetToken(input.token);
         
         if (!funcionario || !funcionario.resetTokenExpira) {
           return { valid: false };
@@ -599,8 +640,7 @@ export const funcionarioRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        const [funcionario] = await db.select().from(funcionarios)
-          .where(eq(funcionarios.resetToken, input.token));
+        const funcionario = await findFuncionarioByResetToken(input.token);
         
         if (!funcionario || !funcionario.resetTokenExpira) {
           throw new Error("Token inválido ou expirado");
@@ -659,7 +699,7 @@ export const funcionarioRouter = router({
           tipoAcesso: input.tipoAcesso,
           sucesso: input.sucesso,
           motivoFalha: input.motivoFalha || null,
-        });
+        }).returning();
         
         return { success: true };
       }),

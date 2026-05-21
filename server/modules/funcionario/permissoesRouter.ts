@@ -9,7 +9,8 @@ export const permissoesRouter = router({
   list: protectedProcedure
     .input(z.object({ funcionarioId: z.number() }))
     .query(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       return db
         .select()
         .from(funcionarioPermissoes)
@@ -26,7 +27,8 @@ export const permissoesRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       const existing = await db
         .select()
         .from(funcionarioPermissoes)
@@ -49,8 +51,8 @@ export const permissoesRouter = router({
         funcionarioId: input.funcionarioId,
         modulo: input.modulo,
         habilitado: input.habilitado,
-      });
-      return { id: inserted.insertId, ...input };
+      }).returning();
+      return { id: inserted.id, ...input };
     }),
 
   // Bulk set permissions for a funcionario
@@ -67,7 +69,8 @@ export const permissoesRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       // Delete existing and re-insert
       await db
         .delete(funcionarioPermissoes)
@@ -80,7 +83,7 @@ export const permissoesRouter = router({
             modulo: p.modulo,
             habilitado: p.habilitado,
           })),
-        );
+        ).returning();
       }
       return { success: true };
     }),

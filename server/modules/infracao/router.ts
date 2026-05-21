@@ -40,13 +40,13 @@ export const tiposInfracaoRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        const result = await db.insert(tiposInfracao).values({
+        const [result] = await db.insert(tiposInfracao).values({
           condominioId: input.condominioId,
           titulo: input.titulo,
           descricaoPadrao: input.descricaoPadrao || null,
-        });
+        }).returning();
         
-        return { success: true, id: Number(result[0].insertId) };
+        return { success: true, id: Number(result.id) };
       }),
     
     // Atualizar tipo de infraÃ§Ã£o
@@ -241,7 +241,7 @@ export const notificacoesInfracaoRouter = router({
           }
         }
         
-        const result = await db.insert(notificacoesInfracao).values({
+        const [result] = await db.insert(notificacoesInfracao).values({
           condominioId: input.condominioId,
           moradorId: input.moradorId,
           tipoInfracaoId: input.tipoInfracaoId || null,
@@ -251,9 +251,9 @@ export const notificacoesInfracaoRouter = router({
           dataOcorrencia: input.dataOcorrencia ? new Date(input.dataOcorrencia) : null,
           linkPublico,
           criadoPor: ctx.user.id,
-        });
+        }).returning();
         
-        const notificacaoId = Number(result[0].insertId);
+        const notificacaoId = Number(result.id);
         
         return { 
           success: true, 
@@ -394,16 +394,16 @@ export const respostasInfracaoRouter = router({
           }
         }
         
-        const result = await db.insert(respostasInfracao).values({
+        const [result] = await db.insert(respostasInfracao).values({
           notificacaoId: input.notificacaoId,
           autorTipo: 'sindico',
           autorId: ctx.user.id,
           autorNome: ctx.user.name || 'SÃ­ndico',
           mensagem: input.mensagem,
           imagens: uploadedUrls,
-        });
+        }).returning();
         
-        return { success: true, id: Number(result[0].insertId) };
+        return { success: true, id: Number(result.id) };
       }),
     
     // Adicionar resposta (morador - pÃºblico via token)
@@ -452,21 +452,21 @@ export const respostasInfracaoRouter = router({
           }
         }
         
-        const result = await db.insert(respostasInfracao).values({
+        const [result] = await db.insert(respostasInfracao).values({
           notificacaoId: notificacao[0].id,
           autorTipo: 'morador',
           autorId: notificacao[0].moradorId,
           autorNome: morador[0]?.nome || 'Morador',
           mensagem: input.mensagem,
           imagens: uploadedUrls,
-        });
+        }).returning();
         
         // Atualizar status da notificaÃ§Ã£o para "respondida"
         await db.update(notificacoesInfracao)
           .set({ status: 'respondida' })
           .where(eq(notificacoesInfracao.id, notificacao[0].id));
         
-        return { success: true, id: Number(result[0].insertId) };
+        return { success: true, id: Number(result.id) };
       }),
     
     // Contar respostas nÃ£o lidas (para badge)

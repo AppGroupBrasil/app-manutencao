@@ -28,8 +28,8 @@ export const publicidadeRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(publicidades).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(publicidades).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   delete: protectedProcedure
@@ -64,8 +64,8 @@ export const realizacaoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(realizacoes).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(realizacoes).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   delete: protectedProcedure
@@ -102,8 +102,8 @@ export const melhoriaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(melhorias).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(melhorias).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   delete: protectedProcedure
@@ -140,8 +140,8 @@ export const aquisicaoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(aquisicoes).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(aquisicoes).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   delete: protectedProcedure
@@ -180,8 +180,8 @@ export const antesDepoisRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(antesDepois).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(antesDepois).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   delete: protectedProcedure
@@ -215,8 +215,8 @@ export const imagemRealizacaoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(imagensRealizacoes).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(imagensRealizacoes).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   createMultiple: protectedProcedure
@@ -236,7 +236,7 @@ export const imagemRealizacaoRouter = router({
         legenda: img.legenda,
         ordem: index,
       }));
-      await db.insert(imagensRealizacoes).values(imagensToInsert);
+      await db.insert(imagensRealizacoes).values(imagensToInsert).returning();
       return { success: true, count: imagensToInsert.length };
     }),
 
@@ -280,8 +280,8 @@ export const imagemMelhoriaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(imagensMelhorias).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(imagensMelhorias).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   createMultiple: protectedProcedure
@@ -301,7 +301,7 @@ export const imagemMelhoriaRouter = router({
         legenda: img.legenda,
         ordem: index,
       }));
-      await db.insert(imagensMelhorias).values(imagensToInsert);
+      await db.insert(imagensMelhorias).values(imagensToInsert).returning();
       return { success: true, count: imagensToInsert.length };
     }),
 
@@ -345,8 +345,8 @@ export const imagemAquisicaoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(imagensAquisicoes).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(imagensAquisicoes).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   createMultiple: protectedProcedure
@@ -366,7 +366,7 @@ export const imagemAquisicaoRouter = router({
         legenda: img.legenda,
         ordem: index,
       }));
-      await db.insert(imagensAquisicoes).values(imagensToInsert);
+      await db.insert(imagensAquisicoes).values(imagensToInsert).returning();
       return { success: true, count: imagensToInsert.length };
     }),
 

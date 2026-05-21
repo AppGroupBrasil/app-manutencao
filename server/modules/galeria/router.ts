@@ -85,8 +85,8 @@ export const albumRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(albuns).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(albuns).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   update: protectedProcedure
@@ -169,8 +169,8 @@ export const fotoRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(fotos).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(fotos).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   createMultiple: protectedProcedure
@@ -193,7 +193,7 @@ export const fotoRouter = router({
         ordem: foto.ordem ?? index,
       }));
       
-      await db.insert(fotos).values(fotosToInsert);
+      await db.insert(fotos).values(fotosToInsert).returning();
       return { success: true, count: fotosToInsert.length };
     }),
 

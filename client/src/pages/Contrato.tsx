@@ -18,7 +18,6 @@ import {
   FileText,
 } from "lucide-react";
 import { Link } from "wouter";
-import html2pdf from "html2pdf.js";
 
 const PLANOS = [
   { id: "individual", nome: "Individual", usuarios: 1, valor: 99 },
@@ -68,9 +67,9 @@ export default function Contrato() {
     setFormData((prev) => ({ ...prev, plano: value }));
   };
 
-  const handleGerarPDF = () => {
+  const handleGerarPDF = async () => {
     if (!contratoRef.current) return;
-
+    const { default: html2pdf } = await import("html2pdf.js");
     const element = contratoRef.current;
     const opt: any = {
       margin: 10,
@@ -79,7 +78,6 @@ export default function Contrato() {
       html2canvas: { scale: 2 },
       jsPDF: { orientation: "portrait", unit: "mm", format: "a4" },
     };
-
     (html2pdf() as any).set(opt).from(element).save();
   };
 

@@ -130,16 +130,16 @@ export const ocorrenciaRouter = router({
         categoria: input.categoria || "outros",
         assinaturaTecnico: input.assinaturaTecnico || null,
         assinaturaSolicitante: input.assinaturaSolicitante || null,
-      });
+      }).returning();
       await db.insert(ocorrenciaTimeline).values({
-        ocorrenciaId: result.insertId,
+        ocorrenciaId: result.id,
         tipo: "abertura",
         descricao: `OcorrÃªncia registrada: ${input.titulo}`,
         statusNovo: "pendente",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
       });
-      return { id: result.insertId, protocolo };
+      return { id: result.id, protocolo };
     }),
 
   update: protectedProcedure
@@ -181,7 +181,7 @@ export const ocorrenciaRouter = router({
           statusNovo: data.status,
           userId: ctx.user?.id,
           userNome: ctx.user?.name || "Sistema",
-        });
+        }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(ocorrenciaTimeline).values({
           ocorrenciaId: id,
@@ -230,8 +230,8 @@ export const ocorrenciaRouter = router({
         ...input,
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   getImagens: protectedProcedure
@@ -253,15 +253,15 @@ export const ocorrenciaRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const [result] = await db.insert(ocorrenciaImagens).values(input);
+      const [result] = await db.insert(ocorrenciaImagens).values(input).returning();
       await db.insert(ocorrenciaTimeline).values({
         ocorrenciaId: input.ocorrenciaId,
         tipo: "imagem_adicionada",
         descricao: "Nova imagem adicionada",
         userId: ctx.user?.id,
         userNome: ctx.user?.name || "Sistema",
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeImagem: protectedProcedure
@@ -301,8 +301,8 @@ export const ocorrenciaRouter = router({
         url: input.url,
         tipo: input.tipo,
         tamanho: input.tamanho || 0,
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   removeAnexo: protectedProcedure

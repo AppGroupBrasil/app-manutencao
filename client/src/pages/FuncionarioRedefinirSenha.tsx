@@ -79,13 +79,13 @@ export default function FuncionarioRedefinirSenha() {
                 </p>
                 <div className="pt-4 space-y-2">
                   <Button
-                    onClick={() => setLocation("/funcionario/recuperar-senha")}
+                    onClick={() => setLocation("/recuperar-senha")}
                     className="w-full bg-gradient-to-r from-amber-500 to-orange-600"
                   >
                     Solicitar Nova Recuperação
                   </Button>
                   <Button
-                    onClick={() => setLocation("/funcionario/login")}
+                    onClick={() => setLocation("/login")}
                     variant="outline"
                     className="w-full"
                   >
@@ -145,13 +145,13 @@ export default function FuncionarioRedefinirSenha() {
                 </p>
                 <div className="pt-4 space-y-2">
                   <Button
-                    onClick={() => setLocation("/funcionario/recuperar-senha")}
+                    onClick={() => setLocation("/recuperar-senha")}
                     className="w-full bg-gradient-to-r from-amber-500 to-orange-600"
                   >
                     Solicitar Nova Recuperação
                   </Button>
                   <Button
-                    onClick={() => setLocation("/funcionario/login")}
+                    onClick={() => setLocation("/login")}
                     variant="outline"
                     className="w-full"
                   >
@@ -188,7 +188,7 @@ export default function FuncionarioRedefinirSenha() {
                 </p>
                 <div className="pt-4">
                   <Button
-                    onClick={() => setLocation("/funcionario/login")}
+                    onClick={() => setLocation("/login")}
                     className="w-full bg-gradient-to-r from-green-500 to-emerald-600"
                   >
                     Ir para Login
@@ -283,7 +283,7 @@ export default function FuncionarioRedefinirSenha() {
         <div className="mt-6 text-center">
           <Button
             variant="ghost"
-            onClick={() => setLocation("/funcionario/login")}
+            onClick={() => setLocation("/login")}
             className="text-slate-600 hover:text-slate-800"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

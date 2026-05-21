@@ -34,7 +34,7 @@ export const lembreteRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       
-      const result = await db.insert(lembretes).values({
+      const [result] = await db.insert(lembretes).values({
         condominioId: input.condominioId,
         tipo: input.tipo,
         titulo: input.titulo,
@@ -44,9 +44,9 @@ export const lembreteRouter = router({
         referenciaId: input.referenciaId || null,
         referenciaTipo: input.referenciaTipo || null,
         canais: input.canais || ['push', 'email'],
-      });
+      }).returning();
       
-      return { success: true, id: Number(result[0].insertId) };
+      return { success: true, id: Number(result.id) };
     }),
   
   // Excluir lembrete

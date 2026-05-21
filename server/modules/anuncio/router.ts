@@ -46,8 +46,8 @@ export const anuncianteRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(anunciantes).values(input);
-      return { id: Number(result[0].insertId) };
+      const [result] = await db.insert(anunciantes).values(input).returning();
+      return { id: Number(result.id) };
     }),
 
   update: protectedProcedure
@@ -139,11 +139,11 @@ export const anuncioRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(anuncios).values({
+      const [result] = await db.insert(anuncios).values({
         ...input,
         status: "ativo",
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   update: protectedProcedure

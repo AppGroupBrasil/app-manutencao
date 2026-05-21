@@ -67,7 +67,7 @@ export const appAcessoRouter = router({
         descricao: input.descricao,
         permissao: input.permissao,
         validoAte: input.validoAte,
-      }).$returningId();
+      }).returning();
       
       return { id: novoCodigo.id, codigo };
     }),
@@ -141,7 +141,7 @@ export const appAcessoRouter = router({
         email: input.email,
         senhaHash,
         permissao: input.permissao,
-      }).$returningId();
+      }).returning();
       
       return { id: novoUsuario.id, email: input.email };
     }),

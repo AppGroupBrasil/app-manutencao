@@ -13,7 +13,8 @@ export const templatesCategoriasRouter = router({
       }).optional(),
     )
     .query(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       let query = db.select().from(templatesCategorias);
       if (input?.segmento) {
         query = query.where(eq(templatesCategorias.segmento, input.segmento)) as any;
@@ -24,7 +25,8 @@ export const templatesCategoriasRouter = router({
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       const rows = await db
         .select()
         .from(templatesCategorias)
@@ -43,15 +45,16 @@ export const templatesCategoriasRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       const [result] = await db.insert(templatesCategorias).values({
         segmento: input.segmento,
         tipo: input.tipo,
         nome: input.nome,
         campos: input.campos || {},
         ativo: input.ativo ?? false,
-      });
-      return { id: result.insertId };
+      }).returning();
+      return { id: result.id };
     }),
 
   update: protectedProcedure
@@ -64,7 +67,8 @@ export const templatesCategoriasRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       const { id, ...data } = input;
       await db
         .update(templatesCategorias)
@@ -76,7 +80,8 @@ export const templatesCategoriasRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
       await db
         .delete(templatesCategorias)
         .where(eq(templatesCategorias.id, input.id));

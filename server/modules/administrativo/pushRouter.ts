@@ -63,15 +63,15 @@ export const configPushRouter = router({
       }
       
       // Criar novo
-      const result = await db.insert(configuracoesPush).values({
+      const [result] = await db.insert(configuracoesPush).values({
         condominioId: input.condominioId,
         vapidPublicKey: input.vapidPublicKey || null,
         vapidPrivateKey: input.vapidPrivateKey || null,
         vapidSubject: input.vapidSubject || null,
         ativo: input.ativo || false,
-      });
+      }).returning();
       
-      return { success: true, id: Number(result[0].insertId) };
+      return { success: true, id: Number(result.id) };
     }),
   
   // Testar configuraÃ§Ãµes VAPID

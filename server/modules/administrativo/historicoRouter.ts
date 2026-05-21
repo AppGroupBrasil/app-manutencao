@@ -136,9 +136,9 @@ export const historicoAtividadesRouter = router({
         usuarioId: ctx.user?.id,
         usuarioNome: ctx.user?.name || "Sistema",
         metadados: input.metadados,
-      });
+      }).returning();
       
-      return { id: registro.insertId };
+      return { id: registro.id };
     }),
   
   // Obter estatísticas do histórico

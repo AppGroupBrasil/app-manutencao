@@ -158,8 +158,8 @@ export const tarefasSimplesRouter = router({
         assinaturaTecnico: input.assinaturaTecnico || null,
         assinaturaSolicitante: input.assinaturaSolicitante || null,
         status: "rascunho",
-      });
-      return { id: Number(result.insertId), protocolo: input.protocolo };
+      }).returning();
+      return { id: Number(result.id), protocolo: input.protocolo };
     }),
 
   // Atualizar tarefa simples
@@ -394,7 +394,7 @@ export const tarefasSimplesRouter = router({
                 itemProtocolo: tarefa.protocolo,
                 itemTitulo: tarefa.titulo,
                 token: token,
-            });
+            }).returning();
         }
       }
 

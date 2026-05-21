@@ -4,6 +4,7 @@ import { getDb } from "../../db";
 import { 
   linksCompartilhaveis, 
   historicoCompartilhamentos, 
+  historicoAtividades,
   vistorias, 
   vistoriaImagens, 
   vistoriaTimeline, 
@@ -23,12 +24,41 @@ import {
   membrosEquipe 
 } from "../../../drizzle/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { publicProcedure, protectedProcedure, protectedOrFuncionarioProcedure, router } from "../../_core/trpc";
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 
+/** Helper para registar atividade na timeline */
+async function registrarAtividadeLink(
+  db: any,
+  opts: {
+    condominioId: number;
+    linkId: number;
+    acao: "editado" | "criado" | "compartilhado" | "cancelado";
+    descricao: string;
+    valorAnterior?: string;
+    valorNovo?: string;
+    usuarioId?: number | null;
+    usuarioNome: string;
+  }
+) {
+  await db.insert(historicoAtividades).values({
+    condominioId: opts.condominioId,
+    entidadeTipo: "vistoria", // using closest available enum value
+    entidadeId: opts.linkId,
+    entidadeProtocolo: `LINK-${opts.linkId}`,
+    entidadeTitulo: "Link/QR Code",
+    acao: opts.acao,
+    descricao: opts.descricao,
+    valorAnterior: opts.valorAnterior,
+    valorNovo: opts.valorNovo,
+    usuarioId: opts.usuarioId,
+    usuarioNome: opts.usuarioNome,
+  }).returning();
+}
+
 export const linkCompartilhavelRouter = router({
-  list: protectedProcedure
+  list: protectedOrFuncionarioProcedure
     .input(z.object({ condominioId: z.number(), tipo: z.enum(["vistoria", "manutencao", "ocorrencia", "checklist"]).optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -42,7 +72,7 @@ export const linkCompartilhavelRouter = router({
         .orderBy(desc(linksCompartilhaveis.createdAt));
     }),
 
-  get: protectedProcedure
+  get: protectedOrFuncionarioProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -82,7 +112,7 @@ export const linkCompartilhavelRouter = router({
       return result[0];
     }),
 
-  create: protectedProcedure
+  create: protectedOrFuncionarioProcedure
     .input(z.object({
       condominioId: z.number(),
       tipo: z.enum(["vistoria", "manutencao", "ocorrencia", "checklist", "ordem-servico"]),
@@ -94,44 +124,90 @@ export const linkCompartilhavelRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       const token = nanoid(32);
-      const result = await db.insert(linksCompartilhaveis).values({
+      const autorNome = ctx.user?.name || ctx.funcionario?.nome || "Usuário";
+      const autorId = ctx.user?.id || null;
+      const [result] = await db.insert(linksCompartilhaveis).values({
         condominioId: input.condominioId,
         tipo: input.tipo,
         itemId: input.itemId,
         token,
         editavel: input.editavel,
         expiracaoHoras: input.expiracaoHoras || 168,
-        criadoPorId: ctx.user.id,
-        criadoPorNome: ctx.user.name || "UsuÃ¡rio",
+        criadoPorId: autorId,
+        criadoPorNome: autorNome,
+      }).returning();
+      // Registrar na timeline
+      await registrarAtividadeLink(db, {
+        condominioId: input.condominioId,
+        linkId: result.id,
+        acao: "criado",
+        descricao: `Link/QR Code do tipo "${input.tipo}" criado por ${autorNome}`,
+        usuarioId: autorId,
+        usuarioNome: autorNome,
       });
-      return { id: result[0].insertId, token };
+      return { id: result.id, token };
     }),
 
-  update: protectedProcedure
+  update: protectedOrFuncionarioProcedure
     .input(z.object({
       id: z.number(),
       editavel: z.boolean().optional(),
       expiracaoHoras: z.number().optional(),
       ativo: z.boolean().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       const { id, ...data } = input;
+      // Buscar estado anterior para registar mudanças
+      const [linkAnterior] = await db.select().from(linksCompartilhaveis).where(eq(linksCompartilhaveis.id, id)).limit(1);
       await db.update(linksCompartilhaveis).set(data).where(eq(linksCompartilhaveis.id, id));
+      // Registrar na timeline
+      if (linkAnterior) {
+        const autorNome = ctx.user?.name || ctx.funcionario?.nome || "Usuário";
+        const autorId = ctx.user?.id || null;
+        const changes: string[] = [];
+        if (data.editavel !== undefined && data.editavel !== linkAnterior.editavel) changes.push(`editável: ${linkAnterior.editavel} → ${data.editavel}`);
+        if (data.expiracaoHoras !== undefined && data.expiracaoHoras !== linkAnterior.expiracaoHoras) changes.push(`expiração: ${linkAnterior.expiracaoHoras}h → ${data.expiracaoHoras}h`);
+        if (data.ativo !== undefined && data.ativo !== linkAnterior.ativo) changes.push(`ativo: ${linkAnterior.ativo} → ${data.ativo}`);
+        await registrarAtividadeLink(db, {
+          condominioId: linkAnterior.condominioId,
+          linkId: id,
+          acao: "editado",
+          descricao: `Link/QR Code editado por ${autorNome}: ${changes.join(", ") || "sem alterações"}`,
+          valorAnterior: JSON.stringify({ editavel: linkAnterior.editavel, expiracaoHoras: linkAnterior.expiracaoHoras, ativo: linkAnterior.ativo }),
+          valorNovo: JSON.stringify(data),
+          usuarioId: autorId,
+          usuarioNome: autorNome,
+        });
+      }
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: protectedOrFuncionarioProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
+      const [link] = await db.select().from(linksCompartilhaveis).where(eq(linksCompartilhaveis.id, input.id)).limit(1);
       await db.update(linksCompartilhaveis).set({ ativo: false }).where(eq(linksCompartilhaveis.id, input.id));
+      // Registrar na timeline
+      if (link) {
+        const autorNome = ctx.user?.name || ctx.funcionario?.nome || "Usuário";
+        const autorId = ctx.user?.id || null;
+        await registrarAtividadeLink(db, {
+          condominioId: link.condominioId,
+          linkId: input.id,
+          acao: "cancelado",
+          descricao: `Link/QR Code desativado por ${autorNome}`,
+          usuarioId: autorId,
+          usuarioNome: autorNome,
+        });
+      }
       return { success: true };
     }),
 
-  compartilhar: protectedProcedure
+  compartilhar: protectedOrFuncionarioProcedure
     .input(z.object({
       linkId: z.number(),
       membroId: z.number().optional(),
@@ -154,18 +230,32 @@ export const linkCompartilhavelRouter = router({
         }
       }
       
-      // Registrar histÃ³rico de compartilhamento
+      // Registrar histórico de compartilhamento
+      const autorNome = ctx.user?.name || ctx.funcionario?.nome || "Usuário";
+      const autorId = ctx.user?.id || null;
       await db.insert(historicoCompartilhamentos).values({
         linkId: input.linkId,
         membroId: input.membroId || null,
         membroNome: nome || null,
         membroWhatsapp: whatsapp || null,
-        compartilhadoPorId: ctx.user.id,
-        compartilhadoPorNome: ctx.user.name || "UsuÃ¡rio",
-      });
+        compartilhadoPorId: autorId,
+        compartilhadoPorNome: autorNome,
+      }).returning();
       
       // Buscar link para retornar URL completa
       const link = await db.select().from(linksCompartilhaveis).where(eq(linksCompartilhaveis.id, input.linkId)).limit(1);
+      
+      // Registrar na timeline
+      if (link[0]) {
+        await registrarAtividadeLink(db, {
+          condominioId: link[0].condominioId,
+          linkId: input.linkId,
+          acao: "compartilhado",
+          descricao: `Link compartilhado por ${autorNome} com ${nome || "destinatário"}`,
+          usuarioId: autorId,
+          usuarioNome: autorNome,
+        });
+      }
       
       return { 
         success: true, 
@@ -174,7 +264,7 @@ export const linkCompartilhavelRouter = router({
       };
     }),
 
-  historicoCompartilhamentos: protectedProcedure
+  historicoCompartilhamentos: protectedOrFuncionarioProcedure
     .input(z.object({ linkId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -385,7 +475,7 @@ export const comentarioRouter = router({
       if (!db) throw new Error("Database not available");
       
       // Criar comentÃ¡rio
-      const result = await db.insert(comentariosItem).values({
+      const [result] = await db.insert(comentariosItem).values({
         itemId: input.itemId,
         itemTipo: input.itemTipo,
         condominioId: input.condominioId,
@@ -395,9 +485,9 @@ export const comentarioRouter = router({
         autorFoto: input.autorFoto || null,
         texto: input.texto,
         isInterno: input.isInterno || false,
-      });
+      }).returning();
       
-      const comentarioId = result[0].insertId;
+      const comentarioId = result.id;
       
       // Criar anexos se houver
       if (input.anexos && input.anexos.length > 0) {
@@ -424,7 +514,7 @@ export const comentarioRouter = router({
               nome: anexo.nome,
               tipo: anexo.tipo,
               tamanho: anexo.tamanho || null,
-            });
+            }).returning();
           })
         );
       }
@@ -476,14 +566,14 @@ export const comentarioRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       
-      const result = await db.insert(respostasComentario).values({
+      const [result] = await db.insert(respostasComentario).values({
         comentarioId: input.comentarioId,
         autorNome: input.autorNome,
         autorFoto: input.autorFoto || null,
         texto: input.texto,
-      });
+      }).returning();
       
-      return { id: result[0].insertId };
+      return { id: result.id };
     }),
 
   // Contar comentÃ¡rios nÃ£o lidos por item

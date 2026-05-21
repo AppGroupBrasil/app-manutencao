@@ -102,8 +102,8 @@ export const valoresSalvosRouter = router({
           return { id: existing[0].id, isNew: false };
         }
         
-        const [result] = await db.insert(valoresSalvos).values(input);
-        return { id: result.insertId, isNew: true };
+        const [result] = await db.insert(valoresSalvos).values(input).returning();
+        return { id: result.id, isNew: true };
       }),
 
     delete: protectedProcedure

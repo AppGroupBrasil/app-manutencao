@@ -6,18 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
-import { Building2, Lock, Mail, Loader2 } from "lucide-react";
+import { Building2, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
 
 export default function FuncionarioLogin() {
   const [, setLocation] = useLocation();
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [senha, setSenha] = useState("");
+  const [showSenha, setShowSenha] = useState(false);
 
   const loginMutation = trpc.funcionario.login.useMutation({
     onSuccess: (data) => {
       toast.success(`Bem-vindo, ${data.funcionario.nome}!`);
-      // Redirecionar para o dashboard do funcionário
-      setLocation("/funcionario/dashboard");
+      setLocation("/dashboard");
     },
     onError: (error) => {
       toast.error(error.message);
@@ -26,11 +26,11 @@ export default function FuncionarioLogin() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !senha) {
-      toast.error("Preencha o email e a senha");
+    if (!identificador || !senha) {
+      toast.error("Preencha o usuário e a senha");
       return;
     }
-    loginMutation.mutate({ email, senha });
+    loginMutation.mutate({ identificador, senha });
   };
 
   return (
@@ -50,40 +50,66 @@ export default function FuncionarioLogin() {
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl text-center">Entrar</CardTitle>
             <CardDescription className="text-center">
-              Use suas credenciais fornecidas pelo administrador
+              Use seu nome de usuário ou e-mail e senha de 6 dígitos
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700">Email</Label>
+                <Label htmlFor="identificador" className="text-slate-700">Usuário ou E-mail</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="seu.email@exemplo.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="identificador"
+                    type="text"
+                    placeholder="nomecompleto ou email@exemplo.com"
+                    value={identificador}
+                    onChange={(e) => setIdentificador(e.target.value)}
                     className="pl-10"
+                    autoComplete="username"
                     disabled={loginMutation.isPending}
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="senha" className="text-slate-700">Senha</Label>
+                <Label htmlFor="senha" className="text-slate-700">Senha (6 dígitos)</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
                     id="senha"
-                    type="password"
-                    placeholder="••••••••"
+                    type={showSenha ? "text" : "password"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
                     value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
-                    className="pl-10"
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      setSenha(v);
+                    }}
+                    className="pl-10 pr-10 tracking-[0.5em] font-mono"
+                    autoComplete="current-password"
                     disabled={loginMutation.isPending}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowSenha(!showSenha)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    tabIndex={-1}
+                  >
+                    {showSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {/* Indicador de dígitos */}
+                <div className="flex gap-2 justify-center mt-1">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                        i < senha.length ? 'bg-blue-500' : 'bg-slate-200'
+                      }`}
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -105,7 +131,7 @@ export default function FuncionarioLogin() {
 
             <div className="mt-4 text-center">
               <a 
-                href="/funcionario/recuperar-senha" 
+                href="/recuperar-senha" 
                 className="text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
                 Esqueceu a senha?

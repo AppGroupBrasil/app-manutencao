@@ -87,8 +87,8 @@ export const statusPersonalizadosRouter = router({
         cor: input.cor,
         icone: input.icone,
         ordem: nextOrdem,
-      });
-      return { id: Number(result.insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   // Atualizar status

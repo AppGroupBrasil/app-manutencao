@@ -29,11 +29,11 @@ export const caronaRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(caronas).values({
+      const [result] = await db.insert(caronas).values({
         ...input,
         usuarioId: ctx.user.id,
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   updateStatus: protectedProcedure
@@ -99,7 +99,7 @@ export const caronaRouter = router({
       }
       
       const { token, data, vagas, tipo, ...rest } = input;
-      const result = await db.insert(caronas).values({
+      const [result] = await db.insert(caronas).values({
         ...rest,
         tipo: tipo === "ofereco" ? "oferece" : "procura",
         dataCarona: data,
@@ -107,8 +107,8 @@ export const caronaRouter = router({
         condominioId: morador.condominioId,
         moradorId: morador.id,
         status: "ativa",
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   // Excluir carona pelo morador

@@ -55,16 +55,16 @@ export const configEmailRouter = router({
       }
       
       // Criar novo
-      const result = await db.insert(configuracoesEmail).values({
+      const [result] = await db.insert(configuracoesEmail).values({
         condominioId: input.condominioId,
         provedor: input.provedor || 'resend',
         apiKey: input.apiKey || null,
         emailRemetente: input.emailRemetente || null,
         nomeRemetente: input.nomeRemetente || null,
         ativo: input.ativo || false,
-      });
+      }).returning();
       
-      return { success: true, id: Number(result[0].insertId) };
+      return { success: true, id: Number(result.id) };
     }),
   
   // Verificar se o serviÃ§o de email estÃ¡ configurado
@@ -151,7 +151,7 @@ export const configEmailRouter = router({
         sucessos: result.sent,
         falhas: result.failed,
         enviadoPor: ctx.user.id,
-      });
+      }).returning();
       
       return { 
         success: result.sent > 0, 
@@ -229,7 +229,7 @@ export const configEmailRouter = router({
         sucessos: result.sent,
         falhas: result.failed,
         enviadoPor: ctx.user.id,
-      });
+      }).returning();
       
       return { 
         success: result.sent > 0, 

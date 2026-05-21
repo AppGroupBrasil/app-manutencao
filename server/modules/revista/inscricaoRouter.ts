@@ -27,11 +27,11 @@ export const inscricaoRevistaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db.insert(inscricoesRevista).values({
+      const [result] = await db.insert(inscricoesRevista).values({
         ...input,
         status: "pendente",
-      });
-      return { id: Number(result[0].insertId) };
+      }).returning();
+      return { id: Number(result.id) };
     }),
 
   ativar: protectedProcedure

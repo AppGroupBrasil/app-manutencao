@@ -71,7 +71,7 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!isUnauthorized) return;
 
   // Não redirecionar se já estiver em páginas públicas
-  const publicPaths = ['/login', '/registar', '/recuperar-senha', '/redefinir-senha', '/', '/demo', '/contrato', '/apresentacao'];
+  const publicPaths = ['/login', '/recuperar-senha', '/redefinir-senha', '/', '/contrato', '/apresentacao', '/morador', '/equipe', '/votar', '/compartilhado', '/timeline', '/cadastro', '/assembleia', '/publico', '/manutencao', '/notificacao', '/termos', '/privacidade'];
   const currentPath = window.location.pathname;
   const isPublicPath = publicPaths.some(path => {
     if (path === "/") return currentPath === "/";

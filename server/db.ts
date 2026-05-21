@@ -1,5 +1,5 @@
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "../drizzle/schema";
 import { InsertUser, users, vencimentos, vencimentoAlertas, vencimentoEmails, vencimentoNotificacoes, InsertVencimento, InsertVencimentoAlerta, InsertVencimentoEmail, InsertVencimentoNotificacao, configuracoesFinanceiras } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -7,27 +7,22 @@ import { desc, and, lte, gte, sql, eq } from "drizzle-orm";
 import { sendEmail } from "./_core/email";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-let _pool: mysql.Pool | null = null;
+let _client: ReturnType<typeof postgres> | null = null;
 
-// Lazily create the drizzle instance with connection pool.
+// Lazily create the drizzle instance with postgres.js connection.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // Criar pool de conexões para melhor performance sob carga
-      _pool = mysql.createPool({
-        uri: process.env.DATABASE_URL,
-        connectionLimit: 10,       // máximo de conexões simultâneas
-        waitForConnections: true,   // esperar se todas estiverem em uso
-        queueLimit: 50,             // máximo de requests na fila
-        idleTimeout: 60000,         // fechar conexões ociosas após 60s
-        enableKeepAlive: true,
-        keepAliveInitialDelay: 30000,
+      _client = postgres(process.env.DATABASE_URL, {
+        max: 10,
+        idle_timeout: 60,
+        connect_timeout: 30,
       });
-      _db = drizzle(_pool as any, { schema, mode: "default" });
+      _db = drizzle(_client, { schema });
     } catch (error) {
       console.error("[Database] Failed to connect:", error);
       _db = null;
-      _pool = null;
+      _client = null;
     }
   }
   return _db;
@@ -41,6 +36,11 @@ export async function requireDb() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db;
+}
+
+/** Acesso ao client postgres.js raw (para DDL/migrações) */
+export function getRawClient() {
+  return _client;
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -96,7 +96,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
       set: updateSet,
     });
     
@@ -200,7 +201,7 @@ export async function createLocalUser(data: { email: string; name: string; senha
   // Gerar openId único para utilizadores locais
   const openId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
   
-  const result = await db.insert(users).values({
+  const [result] = await db.insert(users).values({
     openId,
     email: data.email,
     name: data.name,
@@ -208,9 +209,9 @@ export async function createLocalUser(data: { email: string; name: string; senha
     loginMethod: 'local',
     role: 'sindico',
     lastSignedIn: new Date(),
-  });
+  }).returning({ id: users.id });
 
-  return result[0].insertId;
+  return result.id;
 }
 
 export async function updateUserPassword(userId: number, senhaHash: string) {
@@ -256,8 +257,8 @@ export async function createVencimento(data: InsertVencimento) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(vencimentos).values(data);
-  return result[0].insertId;
+  const [result] = await db.insert(vencimentos).values(data).returning({ id: vencimentos.id });
+  return result.id;
 }
 
 export async function updateVencimento(id: number, data: Partial<InsertVencimento>) {
@@ -360,8 +361,8 @@ export async function createVencimentoAlerta(data: InsertVencimentoAlerta) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(vencimentoAlertas).values(data);
-  return result[0].insertId;
+  const [result] = await db.insert(vencimentoAlertas).values(data).returning({ id: vencimentoAlertas.id });
+  return result.id;
 }
 
 export async function getAlertasByVencimento(vencimentoId: number) {
@@ -409,8 +410,8 @@ export async function createVencimentoEmail(data: InsertVencimentoEmail) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(vencimentoEmails).values(data);
-  return result[0].insertId;
+  const [result] = await db.insert(vencimentoEmails).values(data).returning({ id: vencimentoEmails.id });
+  return result.id;
 }
 
 export async function getEmailsByCondominio(condominioId: number) {
@@ -441,8 +442,8 @@ export async function createVencimentoNotificacao(data: InsertVencimentoNotifica
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(vencimentoNotificacoes).values(data);
-  return result[0].insertId;
+  const [result] = await db.insert(vencimentoNotificacoes).values(data).returning({ id: vencimentoNotificacoes.id });
+  return result.id;
 }
 
 export async function getNotificacoesByVencimento(vencimentoId: number) {
@@ -546,17 +547,17 @@ export async function getVencimentosPorMes(condominioId: number, ano: number) {
   if (!db) return [];
   
   const result = await db.select({
-    mes: sql<number>`MONTH(data_vencimento)`,
+    mes: sql<number>`EXTRACT(MONTH FROM data_vencimento)`,
     total: sql<number>`COUNT(*)`,
-    vencidos: sql<number>`SUM(CASE WHEN data_vencimento < CURDATE() AND status = 'ativo' THEN 1 ELSE 0 END)`,
+    vencidos: sql<number>`SUM(CASE WHEN data_vencimento < CURRENT_DATE AND status = 'ativo' THEN 1 ELSE 0 END)`,
     ativos: sql<number>`SUM(CASE WHEN status = 'ativo' THEN 1 ELSE 0 END)`,
   }).from(vencimentos)
     .where(and(
       eq(vencimentos.condominioId, condominioId),
-      sql`YEAR(data_vencimento) = ${ano}`
+      sql`EXTRACT(YEAR FROM data_vencimento) = ${ano}`
     ))
-    .groupBy(sql`MONTH(data_vencimento)`)
-    .orderBy(sql`MONTH(data_vencimento)`);
+    .groupBy(sql`EXTRACT(MONTH FROM data_vencimento)`)
+    .orderBy(sql`EXTRACT(MONTH FROM data_vencimento)`);
   
   return result;
 }
@@ -568,7 +569,7 @@ export async function getVencimentosPorCategoria(condominioId: number) {
   const result = await db.select({
     tipo: vencimentos.tipo,
     total: sql<number>`COUNT(*)`,
-    vencidos: sql<number>`SUM(CASE WHEN data_vencimento < CURDATE() AND status = 'ativo' THEN 1 ELSE 0 END)`,
+    vencidos: sql<number>`SUM(CASE WHEN data_vencimento < CURRENT_DATE AND status = 'ativo' THEN 1 ELSE 0 END)`,
     ativos: sql<number>`SUM(CASE WHEN status = 'ativo' THEN 1 ELSE 0 END)`,
     valorTotal: sql<number>`COALESCE(SUM(valor), 0)`,
   }).from(vencimentos)
@@ -622,8 +623,8 @@ export async function getEstatisticasGeraisVencimentos(condominioId: number) {
   const result = await db.select({
     total: sql<number>`COUNT(*)`,
     ativos: sql<number>`SUM(CASE WHEN status = 'ativo' THEN 1 ELSE 0 END)`,
-    vencidos: sql<number>`SUM(CASE WHEN data_vencimento < CURDATE() AND status = 'ativo' THEN 1 ELSE 0 END)`,
-    proximos30dias: sql<number>`SUM(CASE WHEN data_vencimento >= CURDATE() AND data_vencimento <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND status = 'ativo' THEN 1 ELSE 0 END)`,
+    vencidos: sql<number>`SUM(CASE WHEN data_vencimento < CURRENT_DATE AND status = 'ativo' THEN 1 ELSE 0 END)`,
+    proximos30dias: sql<number>`SUM(CASE WHEN data_vencimento >= CURRENT_DATE AND data_vencimento <= CURRENT_DATE + INTERVAL '30 days' AND status = 'ativo' THEN 1 ELSE 0 END)`,
     valorTotalAtivo: sql<number>`COALESCE(SUM(CASE WHEN status = 'ativo' THEN valor ELSE 0 END), 0)`,
     contratos: sql<number>`SUM(CASE WHEN tipo = 'contrato' THEN 1 ELSE 0 END)`,
     servicos: sql<number>`SUM(CASE WHEN tipo = 'servico' THEN 1 ELSE 0 END)`,
@@ -639,8 +640,8 @@ export async function getEvolucaoVencimentos(condominioId: number, meses: number
   if (!db) return [];
   
   const result = await db.select({
-    ano: sql<number>`YEAR(data_vencimento)`,
-    mes: sql<number>`MONTH(data_vencimento)`,
+    ano: sql<number>`EXTRACT(YEAR FROM data_vencimento)`,
+    mes: sql<number>`EXTRACT(MONTH FROM data_vencimento)`,
     total: sql<number>`COUNT(*)`,
     contratos: sql<number>`SUM(CASE WHEN tipo = 'contrato' THEN 1 ELSE 0 END)`,
     servicos: sql<number>`SUM(CASE WHEN tipo = 'servico' THEN 1 ELSE 0 END)`,
@@ -649,10 +650,10 @@ export async function getEvolucaoVencimentos(condominioId: number, meses: number
   }).from(vencimentos)
     .where(and(
       eq(vencimentos.condominioId, condominioId),
-      sql`data_vencimento >= DATE_SUB(CURDATE(), INTERVAL ${meses} MONTH)`
+      sql`data_vencimento >= CURRENT_DATE - INTERVAL '${sql.raw(String(meses))} months'`
     ))
-    .groupBy(sql`YEAR(data_vencimento)`, sql`MONTH(data_vencimento)`)
-    .orderBy(sql`YEAR(data_vencimento)`, sql`MONTH(data_vencimento)`);
+    .groupBy(sql`EXTRACT(YEAR FROM data_vencimento)`, sql`EXTRACT(MONTH FROM data_vencimento)`)
+    .orderBy(sql`EXTRACT(YEAR FROM data_vencimento)`, sql`EXTRACT(MONTH FROM data_vencimento)`);
   
   return result;
 }

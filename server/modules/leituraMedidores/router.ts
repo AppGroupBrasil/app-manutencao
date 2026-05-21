@@ -131,21 +131,21 @@ export const leituraMedidoresRouter = router({
         responsavelNome: input.responsavelNome || null,
         observacoes: input.observacoes || null,
         status: input.status || "pendente",
-      });
+      }).returning();
 
       // Adicionar imagens se houver
       if (input.imagens && input.imagens.length > 0) {
         for (let i = 0; i < input.imagens.length; i++) {
           await db.insert(leituraMedidorImagens).values({
-            leituraMedidorId: result.insertId,
+            leituraMedidorId: result.id,
             url: input.imagens[i].url,
             legenda: input.imagens[i].legenda || null,
             ordem: i,
-          });
+          }).returning();
         }
       }
 
-      return { id: result.insertId, protocolo };
+      return { id: result.id, protocolo };
     }),
 
   update: protectedProcedure
@@ -229,9 +229,9 @@ export const leituraMedidoresRouter = router({
         url: input.url,
         legenda: input.legenda || null,
         ordem: existingImages.length,
-      });
+      }).returning();
 
-      return { id: result.insertId };
+      return { id: result.id };
     }),
 
   removeImagem: protectedProcedure

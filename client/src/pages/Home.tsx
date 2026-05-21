@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { AppLoginModal } from "@/components/AppLoginModal";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,7 +46,6 @@ import {
 import { Link } from "wouter";
 
 export default function Home() {
-  const { user, loading, isAuthenticated } = useAuth();
   const [showAppLogin, setShowAppLogin] = useState(false);
 
   return (
