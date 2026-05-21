@@ -1,0 +1,115 @@
+services:
+  # ── PostgreSQL dedicado ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: app-manutencao-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: manutencao
+      POSTGRES_USER: manutencao
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD env var is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - coolify
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U manutencao"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── App Node (server Express + frontend estático) ──
+  app:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: app-manutencao
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      DATABASE_URL: postgresql://manutencao:${DB_PASSWORD}@app-manutencao-db:5432/manutencao
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET env var is required}
+      VITE_APP_ID: ${VITE_APP_ID:-app-manutencao-prod}
+      OAUTH_SERVER_URL: ${OAUTH_SERVER_URL:-}
+      OWNER_OPEN_ID: ${OWNER_OPEN_ID:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_BUCKET_NAME: ${AWS_BUCKET_NAME:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
+      # HTTPS
+      - "traefik.http.routers.app-manutencao-https.rule=Host(`appmanutencao.com.br`) || Host(`www.appmanutencao.com.br`)"
+      - "traefik.http.routers.app-manutencao-https.entrypoints=https"
+      - "traefik.http.routers.app-manutencao-https.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app-manutencao.loadbalancer.server.port=8080"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.app-manutencao-http.rule=Host(`appmanutencao.com.br`) || Host(`www.appmanutencao.com.br`)"
+      - "traefik.http.routers.app-manutencao-http.entrypoints=http"
+      - "traefik.http.routers.app-manutencao-http.middlewares=app-manutencao-redirect-https"
+      - "traefik.http.middlewares.app-manutencao-redirect-https.redirectscheme.scheme=https"
+      # www → raiz
+      - "traefik.http.routers.app-manutencao-www.rule=Host(`www.appmanutencao.com.br`)"
+      - "traefik.http.routers.app-manutencao-www.entrypoints=https"
+      - "traefik.http.routers.app-manutencao-www.tls=true"
+      - "traefik.http.routers.app-manutencao-www.middlewares=app-manutencao-redirect-www"
+      - "traefik.http.middlewares.app-manutencao-redirect-www.redirectregex.regex=^https://www\\.appmanutencao\\.com\\.br/(.*)"
+      - "traefik.http.middlewares.app-manutencao-redirect-www.redirectregex.replacement=https://appmanutencao.com.br/$${1}"
+      - "traefik.http.middlewares.app-manutencao-redirect-www.redirectregex.permanent=true"
+
+  # ── Backup diário do banco ──
+  backup:
+    image: postgres:16-alpine
+    container_name: app-manutencao-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASSWORD}
+    volumes:
+      - backups:/var/backups/manutencao
+    networks:
+      - coolify
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mkdir -p /var/backups/manutencao
+        while true; do
+          TS=$$(date +%Y%m%d_%H%M%S)
+          pg_dump -h app-manutencao-db -U manutencao manutencao | gzip > /var/backups/manutencao/manutencao_$$TS.sql.gz
+          find /var/backups/manutencao -name 'manutencao_*.sql.gz' -mtime +30 -delete
+          sleep 86400
+        done
+
+volumes:
+  pgdata:
+  uploads:
+  backups:
+
+networks:
+  coolify:
+    external: true
