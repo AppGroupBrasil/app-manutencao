@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { eq, desc, and, like } from "drizzle-orm";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { 
   jardinagem, 
@@ -8,8 +9,23 @@ import {
   condominios 
 } from "../../../drizzle/schema";
 
+// Exige o modulo "jardinagem" habilitado e valida que cada id recebido pertence
+// a organizacao da requisicao.
+const jardinagemProcedure = moduloUserProcedure(
+  "jardinagem",
+  escopoPorRegistro(
+    {
+      id: direto(jardinagem),
+      jardinagemId: direto(jardinagem),
+    },
+    {
+      removeImagem: { id: via(jardinagemImagens, "jardinagemId", jardinagem) },
+    },
+  ),
+);
+
 export const jardinagemRouter = router({
-  list: protectedProcedure
+  list: jardinagemProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -19,7 +35,7 @@ export const jardinagemRouter = router({
         .orderBy(desc(jardinagem.createdAt));
     }),
 
-  listWithDetails: protectedProcedure
+  listWithDetails: jardinagemProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -37,7 +53,7 @@ export const jardinagemRouter = router({
       return result;
     }),
 
-  getById: protectedProcedure
+  getById: jardinagemProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -50,7 +66,7 @@ export const jardinagemRouter = router({
       return { ...result, imagens };
     }),
 
-  searchByProtocolo: protectedProcedure
+  searchByProtocolo: jardinagemProcedure
     .input(z.object({ protocolo: z.string(), condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -63,7 +79,7 @@ export const jardinagemRouter = router({
         .orderBy(desc(jardinagem.createdAt));
     }),
 
-  create: protectedProcedure
+  create: jardinagemProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string(),
@@ -141,7 +157,7 @@ export const jardinagemRouter = router({
       return { id: result.id, protocolo };
     }),
 
-  update: protectedProcedure
+  update: jardinagemProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -180,7 +196,7 @@ export const jardinagemRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: jardinagemProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -195,7 +211,7 @@ export const jardinagemRouter = router({
     }),
 
   // Gerenciamento de imagens
-  addImagem: protectedProcedure
+  addImagem: jardinagemProcedure
     .input(z.object({
       jardinagemId: z.number(),
       url: z.string(),
@@ -218,7 +234,7 @@ export const jardinagemRouter = router({
       return { id: result.id };
     }),
 
-  removeImagem: protectedProcedure
+  removeImagem: jardinagemProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

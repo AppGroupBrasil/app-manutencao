@@ -1,18 +1,36 @@
 ﻿import { z } from "zod";
 import { eq, desc, and, like, sql } from "drizzle-orm";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
+import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
 import { generateFuncaoRapidaPDF } from "../../pdfFuncoesRapidas";
-import { 
-  manutencoes, 
-  manutencaoTimeline, 
-  manutencaoImagens, 
+import {
+  manutencoes,
+  manutencaoTimeline,
+  manutencaoImagens,
   manutencaoAnexos,
-  condominios 
+  condominios
 } from "../../../drizzle/schema";
 
+// Exige o modulo "manutencoes" habilitado e valida que cada id recebido
+// pertence a organizacao da requisicao.
+const manutencaoProcedure = moduloProcedure(
+  "manutencoes",
+  escopoPorRegistro(
+    {
+      id: direto(manutencoes),
+      manutencaoId: direto(manutencoes),
+    },
+    {
+      removeImagem: { id: via(manutencaoImagens, "manutencaoId", manutencoes) },
+      removeAnexo: { id: via(manutencaoAnexos, "manutencaoId", manutencoes) },
+    },
+  ),
+);
+
 export const manutencaoRouter = router({
-  list: protectedProcedure
+  list: manutencaoProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -23,7 +41,7 @@ export const manutencaoRouter = router({
     }),
 
   // Endpoint para relatÃ³rios - retorna dados completos com imagens e timeline
-  listWithDetails: protectedProcedure
+  listWithDetails: manutencaoProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -45,7 +63,7 @@ export const manutencaoRouter = router({
       return result;
     }),
 
-  getById: protectedProcedure
+  getById: manutencaoProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -54,7 +72,7 @@ export const manutencaoRouter = router({
       return result || null;
     }),
 
-  searchByProtocolo: protectedProcedure
+  searchByProtocolo: manutencaoProcedure
     .input(z.object({ protocolo: z.string(), condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -67,7 +85,7 @@ export const manutencaoRouter = router({
         .orderBy(desc(manutencoes.createdAt));
     }),
 
-  create: protectedProcedure
+  create: manutencaoProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string(),
@@ -134,13 +152,13 @@ export const manutencaoRouter = router({
         tipo: "abertura",
         descricao: `ManutenÃ§Ã£o criada: ${input.titulo}`,
         statusNovo: "pendente",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       });
       return { id: result.id, protocolo };
     }),
 
-  update: protectedProcedure
+  update: manutencaoProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -185,23 +203,23 @@ export const manutencaoRouter = router({
           descricao: `Status alterado de ${statusAnterior} para ${data.status}`,
           statusAnterior,
           statusNovo: data.status,
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(manutencaoTimeline).values({
           manutencaoId: id,
           tipo: "atualizacao",
           descricao: "Manutenção atualizada",
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         });
       }
       
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: manutencaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -213,7 +231,7 @@ export const manutencaoRouter = router({
       return { success: true };
     }),
 
-  getTimeline: protectedProcedure
+  getTimeline: manutencaoProcedure
     .input(z.object({ manutencaoId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -223,7 +241,7 @@ export const manutencaoRouter = router({
         .orderBy(desc(manutencaoTimeline.createdAt));
     }),
 
-  addTimelineEvent: protectedProcedure
+  addTimelineEvent: manutencaoProcedure
     .input(z.object({
       manutencaoId: z.number(),
       tipo: z.enum(["abertura", "atualizacao", "status_alterado", "comentario", "imagem_adicionada", "responsavel_alterado", "fechamento", "reabertura"]),
@@ -234,13 +252,13 @@ export const manutencaoRouter = router({
       if (!db) throw new Error("Database not available");
       const [result] = await db.insert(manutencaoTimeline).values({
         ...input,
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
-  getImagens: protectedProcedure
+  getImagens: manutencaoProcedure
     .input(z.object({ manutencaoId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -250,7 +268,7 @@ export const manutencaoRouter = router({
         .orderBy(manutencaoImagens.ordem);
     }),
 
-  addImagem: protectedProcedure
+  addImagem: manutencaoProcedure
     .input(z.object({
       manutencaoId: z.number(),
       url: z.string(),
@@ -264,13 +282,13 @@ export const manutencaoRouter = router({
         manutencaoId: input.manutencaoId,
         tipo: "imagem_adicionada",
         descricao: "Nova imagem adicionada",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
-  removeImagem: protectedProcedure
+  removeImagem: manutencaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -280,7 +298,7 @@ export const manutencaoRouter = router({
     }),
 
   // ========== ANEXOS (PDF/Documentos) ==========
-  getAnexos: protectedProcedure
+  getAnexos: manutencaoProcedure
     .input(z.object({ manutencaoId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -290,7 +308,7 @@ export const manutencaoRouter = router({
         .orderBy(desc(manutencaoAnexos.createdAt));
     }),
 
-  addAnexo: protectedProcedure
+  addAnexo: manutencaoProcedure
     .input(z.object({
       manutencaoId: z.number(),
       nome: z.string(),
@@ -311,7 +329,7 @@ export const manutencaoRouter = router({
       return { id: result.id };
     }),
 
-  removeAnexo: protectedProcedure
+  removeAnexo: manutencaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -320,7 +338,7 @@ export const manutencaoRouter = router({
       return { success: true };
     }),
 
-  getStats: protectedProcedure
+  getStats: manutencaoProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -346,7 +364,7 @@ export const manutencaoRouter = router({
     }),
 
   // Gerar PDF
-  generatePdf: protectedProcedure
+  generatePdf: manutencaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -397,7 +415,7 @@ export const manutencaoRouter = router({
     }),
 
   // Exportar manutenÃ§Ã£o em JSON para nuvem
-  exportJson: protectedProcedure
+  exportJson: manutencaoProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -423,7 +441,7 @@ export const manutencaoRouter = router({
     }),
 
   // Exportar todas as manutenÃ§Ãµes em JSON
-  exportAllJson: protectedProcedure
+  exportAllJson: manutencaoProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();

@@ -1,12 +1,31 @@
 ﻿
 import { z } from "zod";
-import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { publicProcedure, moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { albuns, fotos } from "../../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 
+// Exige o modulo "galeria" habilitado e valida o dono do registro.
+// Album tem condominioId; foto herda do album.
+const galeriaProcedure = moduloUserProcedure(
+  "galeria",
+  escopoPorRegistro({
+    id: direto(albuns),
+    albumId: direto(albuns),
+  }),
+);
+
+const fotoProcedure = moduloUserProcedure(
+  "galeria",
+  escopoPorRegistro({
+    id: via(fotos, "albumId", albuns),
+    albumId: direto(albuns),
+  }),
+);
+
 export const albumRouter = router({
-  list: protectedProcedure
+  list: galeriaProcedure
     .input(z.object({ condominioId: z.number(), categoria: z.string().optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -41,7 +60,7 @@ export const albumRouter = router({
         .orderBy(desc(albuns.createdAt));
     }),
 
-  getById: protectedProcedure
+  getById: galeriaProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -72,7 +91,7 @@ export const albumRouter = router({
       };
     }),
 
-  create: protectedProcedure
+  create: galeriaProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string().min(1),
@@ -89,7 +108,7 @@ export const albumRouter = router({
       return { id: Number(result.id) };
     }),
 
-  update: protectedProcedure
+  update: galeriaProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().min(1).optional(),
@@ -109,7 +128,7 @@ export const albumRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: galeriaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -121,7 +140,7 @@ export const albumRouter = router({
       return { success: true };
     }),
 
-  stats: protectedProcedure
+  stats: galeriaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -146,7 +165,7 @@ export const albumRouter = router({
 });
 
 export const fotoRouter = router({
-  list: protectedProcedure
+  list: fotoProcedure
     .input(z.object({ albumId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -156,7 +175,7 @@ export const fotoRouter = router({
         .orderBy(fotos.ordem);
     }),
 
-  create: protectedProcedure
+  create: fotoProcedure
     .input(z.object({
       albumId: z.number(),
       url: z.string().min(1),
@@ -173,7 +192,7 @@ export const fotoRouter = router({
       return { id: Number(result.id) };
     }),
 
-  createMultiple: protectedProcedure
+  createMultiple: fotoProcedure
     .input(z.object({
       albumId: z.number(),
       fotos: z.array(z.object({
@@ -197,7 +216,7 @@ export const fotoRouter = router({
       return { success: true, count: fotosToInsert.length };
     }),
 
-  update: protectedProcedure
+  update: fotoProcedure
     .input(z.object({
       id: z.number(),
       legenda: z.string().optional(),
@@ -211,7 +230,7 @@ export const fotoRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: fotoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -220,7 +239,7 @@ export const fotoRouter = router({
       return { success: true };
     }),
 
-  reorder: protectedProcedure
+  reorder: fotoProcedure
     .input(z.object({
       fotos: z.array(z.object({
         id: z.number(),

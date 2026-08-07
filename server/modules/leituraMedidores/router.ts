@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { eq, desc, and, like } from "drizzle-orm";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { 
   leituraMedidores, 
@@ -8,8 +9,23 @@ import {
   condominios 
 } from "../../../drizzle/schema";
 
+// Exige o modulo "leitura-medidores" habilitado e valida que cada id recebido pertence
+// a organizacao da requisicao.
+const medidoresProcedure = moduloUserProcedure(
+  "leitura-medidores",
+  escopoPorRegistro(
+    {
+      id: direto(leituraMedidores),
+      leituraMedidorId: direto(leituraMedidores),
+    },
+    {
+      removeImagem: { id: via(leituraMedidorImagens, "leituraMedidorId", leituraMedidores) },
+    },
+  ),
+);
+
 export const leituraMedidoresRouter = router({
-  list: protectedProcedure
+  list: medidoresProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -19,7 +35,7 @@ export const leituraMedidoresRouter = router({
         .orderBy(desc(leituraMedidores.createdAt));
     }),
 
-  listWithDetails: protectedProcedure
+  listWithDetails: medidoresProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -37,7 +53,7 @@ export const leituraMedidoresRouter = router({
       return result;
     }),
 
-  getById: protectedProcedure
+  getById: medidoresProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -50,7 +66,7 @@ export const leituraMedidoresRouter = router({
       return { ...result, imagens };
     }),
 
-  searchByProtocolo: protectedProcedure
+  searchByProtocolo: medidoresProcedure
     .input(z.object({ protocolo: z.string(), condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -63,7 +79,7 @@ export const leituraMedidoresRouter = router({
         .orderBy(desc(leituraMedidores.createdAt));
     }),
 
-  create: protectedProcedure
+  create: medidoresProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string(),
@@ -148,7 +164,7 @@ export const leituraMedidoresRouter = router({
       return { id: result.id, protocolo };
     }),
 
-  update: protectedProcedure
+  update: medidoresProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -196,7 +212,7 @@ export const leituraMedidoresRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: medidoresProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -211,7 +227,7 @@ export const leituraMedidoresRouter = router({
     }),
 
   // Gerenciamento de imagens
-  addImagem: protectedProcedure
+  addImagem: medidoresProcedure
     .input(z.object({
       leituraMedidorId: z.number(),
       url: z.string(),
@@ -234,7 +250,7 @@ export const leituraMedidoresRouter = router({
       return { id: result.id };
     }),
 
-  removeImagem: protectedProcedure
+  removeImagem: medidoresProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

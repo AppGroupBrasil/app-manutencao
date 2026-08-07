@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "db:materializar-modulos": "tsx scripts/db/materializar-modulos.ts",
     "cap:sync": "npx cap sync",
     "cap:build:android": "pnpm build:client && npx cap sync android",
     "cap:build:ios": "pnpm build:client && npx cap sync ios",

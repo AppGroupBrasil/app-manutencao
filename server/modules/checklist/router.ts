@@ -1,6 +1,8 @@
 ﻿import { z } from "zod";
 import { eq, desc, and, like, or, sql } from "drizzle-orm";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
+import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
 
 // Auto-criar colunas de assinatura se não existirem
@@ -28,8 +30,26 @@ import {
   condominios 
 } from "../../../drizzle/schema";
 
+// Exige o modulo "checklists" habilitado e valida que cada id recebido pertence
+// a organizacao da requisicao.
+const checklistProcedure = moduloProcedure(
+  "checklists",
+  escopoPorRegistro(
+    {
+      id: direto(checklists),
+      checklistId: direto(checklists),
+    },
+    {
+      updateItem: { id: via(checklistItens, "checklistId", checklists) },
+      removeItem: { id: via(checklistItens, "checklistId", checklists) },
+      removeImagem: { id: via(checklistImagens, "checklistId", checklists) },
+      removeAnexo: { id: via(checklistAnexos, "checklistId", checklists) },
+    },
+  ),
+);
+
 export const checklistRouter = router({
-  list: protectedProcedure
+  list: checklistProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -39,7 +59,7 @@ export const checklistRouter = router({
         .orderBy(desc(checklists.createdAt));
     }),
 
-  listWithDetails: protectedProcedure
+  listWithDetails: checklistProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -57,7 +77,7 @@ export const checklistRouter = router({
       return result;
     }),
 
-  getById: protectedProcedure
+  getById: checklistProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -66,7 +86,7 @@ export const checklistRouter = router({
       return result || null;
     }),
 
-  searchByProtocolo: protectedProcedure
+  searchByProtocolo: checklistProcedure
     .input(z.object({ protocolo: z.string(), condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -79,7 +99,7 @@ export const checklistRouter = router({
         .orderBy(desc(checklists.createdAt));
     }),
 
-  create: protectedProcedure
+  create: checklistProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string(),
@@ -164,13 +184,13 @@ export const checklistRouter = router({
         tipo: "abertura",
         descricao: `Checklist criado: ${input.titulo}`,
         statusNovo: "pendente",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id, protocolo };
     }),
 
-  update: protectedProcedure
+  update: checklistProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -211,23 +231,23 @@ export const checklistRouter = router({
           descricao: `Status alterado de ${statusAnterior} para ${data.status}`,
           statusAnterior,
           statusNovo: data.status,
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(checklistTimeline).values({
           checklistId: id,
           tipo: "atualizacao",
           descricao: "Checklist atualizado",
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         });
       }
       
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: checklistProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -241,7 +261,7 @@ export const checklistRouter = router({
     }),
 
   // Itens do checklist
-  getItens: protectedProcedure
+  getItens: checklistProcedure
     .input(z.object({ checklistId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -251,7 +271,7 @@ export const checklistRouter = router({
         .orderBy(checklistItens.ordem);
     }),
 
-  addItem: protectedProcedure
+  addItem: checklistProcedure
     .input(z.object({
       checklistId: z.number(),
       descricao: z.string(),
@@ -266,7 +286,7 @@ export const checklistRouter = router({
       return { id: result.id };
     }),
 
-  updateItem: protectedProcedure
+  updateItem: checklistProcedure
     .input(z.object({
       id: z.number(),
       descricao: z.string().optional(),
@@ -291,8 +311,8 @@ export const checklistRouter = router({
             checklistId,
             tipo: "item_completo",
             descricao: data.completo ? `Item concluÃ­do: ${itemAtual?.descricao}` : `Item reaberto: ${itemAtual?.descricao}`,
-            userId: ctx.user?.id,
-            userNome: ctx.user?.name || "Sistema",
+            userId: autorDaRequisicao(ctx).userId,
+            userNome: autorDaRequisicao(ctx).nome,
           }).returning();
           
           // Atualizar contagem de itens completos
@@ -305,7 +325,7 @@ export const checklistRouter = router({
       return { success: true };
     }),
 
-  removeItem: protectedProcedure
+  removeItem: checklistProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -323,7 +343,7 @@ export const checklistRouter = router({
       return { success: true };
     }),
 
-  getTimeline: protectedProcedure
+  getTimeline: checklistProcedure
     .input(z.object({ checklistId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -333,7 +353,7 @@ export const checklistRouter = router({
         .orderBy(desc(checklistTimeline.createdAt));
     }),
 
-  addTimelineEvent: protectedProcedure
+  addTimelineEvent: checklistProcedure
     .input(z.object({
       checklistId: z.number(),
       tipo: z.enum(["abertura", "atualizacao", "status_alterado", "comentario", "imagem_adicionada", "responsavel_alterado", "item_completo", "fechamento", "reabertura"]),
@@ -344,13 +364,13 @@ export const checklistRouter = router({
       if (!db) throw new Error("Database not available");
       const [result] = await db.insert(checklistTimeline).values({
         ...input,
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
-  getImagens: protectedProcedure
+  getImagens: checklistProcedure
     .input(z.object({ checklistId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -360,7 +380,7 @@ export const checklistRouter = router({
         .orderBy(checklistImagens.ordem);
     }),
 
-  addImagem: protectedProcedure
+  addImagem: checklistProcedure
     .input(z.object({
       checklistId: z.number(),
       url: z.string(),
@@ -374,13 +394,13 @@ export const checklistRouter = router({
         checklistId: input.checklistId,
         tipo: "imagem_adicionada",
         descricao: "Nova imagem adicionada",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
-  removeImagem: protectedProcedure
+  removeImagem: checklistProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -390,7 +410,7 @@ export const checklistRouter = router({
     }),
 
   // ========== ANEXOS (PDF/Documentos) ==========
-  getAnexos: protectedProcedure
+  getAnexos: checklistProcedure
     .input(z.object({ checklistId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -400,7 +420,7 @@ export const checklistRouter = router({
         .orderBy(desc(checklistAnexos.createdAt));
     }),
 
-  addAnexo: protectedProcedure
+  addAnexo: checklistProcedure
     .input(z.object({
       checklistId: z.number(),
       nome: z.string(),
@@ -421,7 +441,7 @@ export const checklistRouter = router({
       return { id: result.id };
     }),
 
-  removeAnexo: protectedProcedure
+  removeAnexo: checklistProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -430,7 +450,7 @@ export const checklistRouter = router({
       return { success: true };
     }),
 
-  getStats: protectedProcedure
+  getStats: checklistProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -456,7 +476,7 @@ export const checklistRouter = router({
     }),
 
   // Gerar PDF
-  generatePdf: protectedProcedure
+  generatePdf: checklistProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -504,7 +524,7 @@ export const checklistRouter = router({
     }),
 
   // Exportar checklist em JSON para nuvem
-  exportJson: protectedProcedure
+  exportJson: checklistProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -532,7 +552,7 @@ export const checklistRouter = router({
     }),
 
   // Exportar todos os checklists em JSON
-  exportAllJson: protectedProcedure
+  exportAllJson: checklistProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -558,7 +578,7 @@ export const checklistRouter = router({
     }),
 
   // ==================== TEMPLATES DE CHECKLIST ====================
-  listTemplates: protectedProcedure
+  listTemplates: checklistProcedure
     .input(z.object({ condominioId: z.number().optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -588,7 +608,7 @@ export const checklistRouter = router({
       return templatesComItens;
     }),
 
-  getTemplate: protectedProcedure
+  getTemplate: checklistProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -604,7 +624,7 @@ export const checklistRouter = router({
       return { ...template, itens };
     }),
 
-  createTemplate: protectedProcedure
+  createTemplate: checklistProcedure
     .input(z.object({
       condominioId: z.number().optional(),
       nome: z.string(),
@@ -637,7 +657,7 @@ export const checklistRouter = router({
       return { id: templateId };
     }),
 
-  updateTemplate: protectedProcedure
+  updateTemplate: checklistProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().optional(),
@@ -678,7 +698,7 @@ export const checklistRouter = router({
       return { success: true };
     }),
 
-  deleteTemplate: protectedProcedure
+  deleteTemplate: checklistProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

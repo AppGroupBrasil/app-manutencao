@@ -1,15 +1,34 @@
 ﻿import { z } from "zod";
 import { eq, desc, and, like, sql } from "drizzle-orm";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
+import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
 import { generateFuncaoRapidaPDF } from "../../pdfFuncoesRapidas";
-import { 
-  vistorias, 
-  vistoriaTimeline, 
-  vistoriaImagens, 
+import {
+  vistorias,
+  vistoriaTimeline,
+  vistoriaImagens,
   vistoriaAnexos,
-  condominios 
+  condominios
 } from "../../../drizzle/schema";
+
+// Exige o modulo "vistorias" habilitado e valida que cada id recebido pertence
+// a organizacao da requisicao. `id` aponta para a vistoria, exceto nas rotas
+// listadas em `overrides`, onde e o id de um registro filho.
+const vistoriaProcedure = moduloProcedure(
+  "vistorias",
+  escopoPorRegistro(
+    {
+      id: direto(vistorias),
+      vistoriaId: direto(vistorias),
+    },
+    {
+      removeImagem: { id: via(vistoriaImagens, "vistoriaId", vistorias) },
+      removeAnexo: { id: via(vistoriaAnexos, "vistoriaId", vistorias) },
+    },
+  ),
+);
 
 // Auto-criar colunas de assinatura se não existirem
 async function ensureSignatureColumns() {
@@ -26,7 +45,7 @@ async function ensureSignatureColumns() {
 ensureSignatureColumns();
 
 export const vistoriaRouter = router({
-  list: protectedProcedure
+  list: vistoriaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -36,7 +55,7 @@ export const vistoriaRouter = router({
         .orderBy(desc(vistorias.createdAt));
     }),
 
-  listWithDetails: protectedProcedure
+  listWithDetails: vistoriaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -55,7 +74,7 @@ export const vistoriaRouter = router({
       return result;
     }),
 
-  getById: protectedProcedure
+  getById: vistoriaProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -64,7 +83,7 @@ export const vistoriaRouter = router({
       return result || null;
     }),
 
-  searchByProtocolo: protectedProcedure
+  searchByProtocolo: vistoriaProcedure
     .input(z.object({ protocolo: z.string(), condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -77,7 +96,7 @@ export const vistoriaRouter = router({
         .orderBy(desc(vistorias.createdAt));
     }),
 
-  create: protectedProcedure
+  create: vistoriaProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string(),
@@ -136,13 +155,13 @@ export const vistoriaRouter = router({
         tipo: "abertura",
         descricao: `Vistoria criada: ${input.titulo}`,
         statusNovo: "pendente",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       });
       return { id: result.id, protocolo };
     }),
 
-  update: protectedProcedure
+  update: vistoriaProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -186,23 +205,23 @@ export const vistoriaRouter = router({
           descricao: `Status alterado de ${statusAnterior} para ${data.status}`,
           statusAnterior,
           statusNovo: data.status,
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(vistoriaTimeline).values({
           vistoriaId: id,
           tipo: "atualizacao",
           descricao: "Vistoria atualizada",
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         });
       }
       
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: vistoriaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -215,7 +234,7 @@ export const vistoriaRouter = router({
     }),
 
   // Timeline
-  getTimeline: protectedProcedure
+  getTimeline: vistoriaProcedure
     .input(z.object({ vistoriaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -225,7 +244,7 @@ export const vistoriaRouter = router({
         .orderBy(desc(vistoriaTimeline.createdAt));
     }),
 
-  addTimelineEvent: protectedProcedure
+  addTimelineEvent: vistoriaProcedure
     .input(z.object({
       vistoriaId: z.number(),
       tipo: z.enum(["abertura", "atualizacao", "status_alterado", "comentario", "imagem_adicionada", "responsavel_alterado", "fechamento", "reabertura"]),
@@ -236,14 +255,14 @@ export const vistoriaRouter = router({
       if (!db) throw new Error("Database not available");
       const [result] = await db.insert(vistoriaTimeline).values({
         ...input,
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
   // Imagens
-  getImagens: protectedProcedure
+  getImagens: vistoriaProcedure
     .input(z.object({ vistoriaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -253,7 +272,7 @@ export const vistoriaRouter = router({
         .orderBy(vistoriaImagens.ordem);
     }),
 
-  addImagem: protectedProcedure
+  addImagem: vistoriaProcedure
     .input(z.object({
       vistoriaId: z.number(),
       url: z.string(),
@@ -268,13 +287,13 @@ export const vistoriaRouter = router({
         vistoriaId: input.vistoriaId,
         tipo: "imagem_adicionada",
         descricao: "Nova imagem adicionada",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
-  removeImagem: protectedProcedure
+  removeImagem: vistoriaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -283,7 +302,7 @@ export const vistoriaRouter = router({
       return { success: true };
     }),
   // ========== ANEXOS (PDF/Documentos) ==========
-  getAnexos: protectedProcedure
+  getAnexos: vistoriaProcedure
     .input(z.object({ vistoriaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -293,7 +312,7 @@ export const vistoriaRouter = router({
         .orderBy(desc(vistoriaAnexos.createdAt));
     }),
 
-  addAnexo: protectedProcedure
+  addAnexo: vistoriaProcedure
     .input(z.object({
       vistoriaId: z.number(),
       nome: z.string(),
@@ -314,7 +333,7 @@ export const vistoriaRouter = router({
       return { id: result.id };
     }),
 
-  removeAnexo: protectedProcedure
+  removeAnexo: vistoriaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -323,7 +342,7 @@ export const vistoriaRouter = router({
       return { success: true };
     }),
   // EstatÃ­sticas
-  getStats: protectedProcedure
+  getStats: vistoriaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -349,7 +368,7 @@ export const vistoriaRouter = router({
     }),
 
   // Gerar PDF
-  generatePdf: protectedProcedure
+  generatePdf: vistoriaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -395,7 +414,7 @@ export const vistoriaRouter = router({
     }),
 
   // Exportar vistoria em JSON para nuvem
-  exportJson: protectedProcedure
+  exportJson: vistoriaProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -421,7 +440,7 @@ export const vistoriaRouter = router({
     }),
 
   // Exportar todas as vistorias em JSON
-  exportAllJson: protectedProcedure
+  exportAllJson: vistoriaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();

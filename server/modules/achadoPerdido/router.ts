@@ -1,12 +1,30 @@
 ﻿
 import { z } from "zod";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { achadosPerdidos, imagensAchadosPerdidos } from "../../../drizzle/schema";
 import { eq, desc, asc } from "drizzle-orm";
 
+// Exige o modulo "achados-perdidos" habilitado e valida o dono do registro.
+const achadoProcedure = moduloUserProcedure(
+  "achados-perdidos",
+  escopoPorRegistro({
+    id: direto(achadosPerdidos),
+    achadoPerdidoId: direto(achadosPerdidos),
+  }),
+);
+
+const imagemAchadoProcedure = moduloUserProcedure(
+  "achados-perdidos",
+  escopoPorRegistro({
+    id: via(imagensAchadosPerdidos, "achadoPerdidoId", achadosPerdidos),
+    achadoPerdidoId: direto(achadosPerdidos),
+  }),
+);
+
 export const achadoPerdidoRouter = router({
-  list: protectedProcedure
+  list: achadoProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -16,7 +34,7 @@ export const achadoPerdidoRouter = router({
         .orderBy(desc(achadosPerdidos.createdAt));
     }),
 
-  create: protectedProcedure
+  create: achadoProcedure
     .input(z.object({
       condominioId: z.number(),
       tipo: z.enum(["achado", "perdido"]),
@@ -37,7 +55,7 @@ export const achadoPerdidoRouter = router({
       return { id: Number(result.id) };
     }),
 
-  resolver: protectedProcedure
+  resolver: achadoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -48,7 +66,7 @@ export const achadoPerdidoRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: achadoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -57,7 +75,7 @@ export const achadoPerdidoRouter = router({
       return { success: true };
     }),
 
-  addImagem: protectedProcedure
+  addImagem: achadoProcedure
     .input(z.object({
       achadoPerdidoId: z.number(),
       imagemUrl: z.string(),
@@ -71,7 +89,7 @@ export const achadoPerdidoRouter = router({
       return { id: Number(result.id) };
     }),
 
-  listImagens: protectedProcedure
+  listImagens: achadoProcedure
     .input(z.object({ achadoPerdidoId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -83,7 +101,7 @@ export const achadoPerdidoRouter = router({
 });
 
 export const imagemAchadoPerdidoRouter = router({
-  list: protectedProcedure
+  list: imagemAchadoProcedure
     .input(z.object({ achadoPerdidoId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -93,7 +111,7 @@ export const imagemAchadoPerdidoRouter = router({
         .orderBy(imagensAchadosPerdidos.ordem);
     }),
 
-  create: protectedProcedure
+  create: imagemAchadoProcedure
     .input(z.object({
       achadoPerdidoId: z.number(),
       imagemUrl: z.string().min(1),
@@ -107,7 +125,7 @@ export const imagemAchadoPerdidoRouter = router({
       return { id: Number(result.id) };
     }),
 
-  createMultiple: protectedProcedure
+  createMultiple: imagemAchadoProcedure
     .input(z.object({
       achadoPerdidoId: z.number(),
       imagens: z.array(z.object({
@@ -128,7 +146,7 @@ export const imagemAchadoPerdidoRouter = router({
       return { success: true, count: imagensToInsert.length };
     }),
 
-  delete: protectedProcedure
+  delete: imagemAchadoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -137,7 +155,7 @@ export const imagemAchadoPerdidoRouter = router({
       return { success: true };
     }),
 
-  deleteAll: protectedProcedure
+  deleteAll: imagemAchadoProcedure
     .input(z.object({ achadoPerdidoId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

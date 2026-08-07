@@ -1,11 +1,26 @@
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
 import { eventos, revistas, moradores, notificacoes } from "../../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 
+// Exige o modulo "eventos" habilitado. Estas entidades pendem da revista,
+// entao o tenant e resolvido pela revista dona do registro.
+const eventoProcedure = moduloUserProcedure(
+  "eventos",
+  escopoPorRegistro(
+    {
+      revistaId: direto(revistas),
+      id: via(eventos, "revistaId", revistas),
+      eventoId: via(eventos, "revistaId", revistas),
+    },
+    {},
+  ),
+);
+
 export const eventoRouter = router({
-  list: protectedProcedure
+  list: eventoProcedure
     .input(z.object({ revistaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -15,7 +30,7 @@ export const eventoRouter = router({
         .orderBy(desc(eventos.dataEvento));
     }),
 
-  create: protectedProcedure
+  create: eventoProcedure
     .input(z.object({
       revistaId: z.number(),
       titulo: z.string().min(1),
@@ -40,7 +55,7 @@ export const eventoRouter = router({
       return { id: Number(result.id) };
     }),
 
-  update: protectedProcedure
+  update: eventoProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().min(1).optional(),
@@ -67,7 +82,7 @@ export const eventoRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: eventoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -77,7 +92,7 @@ export const eventoRouter = router({
     }),
 
   // Buscar eventos que precisam de lembrete
-  getPendingReminders: protectedProcedure
+  getPendingReminders: eventoProcedure
     .query(async () => {
       const db = await getDb();
       if (!db) return [];
@@ -101,7 +116,7 @@ export const eventoRouter = router({
     }),
 
   // Enviar lembretes para um evento
-  sendReminder: protectedProcedure
+  sendReminder: eventoProcedure
     .input(z.object({ eventoId: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -153,7 +168,7 @@ export const eventoRouter = router({
     }),
 
   // Enviar todos os lembretes pendentes
-  sendAllPendingReminders: protectedProcedure
+  sendAllPendingReminders: eventoProcedure
     .mutation(async ({ ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");

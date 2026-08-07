@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, Building2, Users, Wrench } from "lucide-react";
+import { Loader2, LogOut, Building2, Users, Wrench, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function AdminDashboard() {
@@ -97,6 +97,22 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-slate-500">Disponível em breve</p>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:border-slate-300 transition-colors"
+            onClick={() => setLocation("/admin/modulos")}
+          >
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-purple-500" />
+                <CardTitle className="text-base">Módulos</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-500">
+                Definir o que cada organização enxerga
+              </p>
             </CardContent>
           </Card>
         </div>

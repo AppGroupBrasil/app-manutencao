@@ -1,11 +1,25 @@
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
-import { avisos } from "../../../drizzle/schema";
+import { avisos, revistas } from "../../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
+// Exige o modulo "avisos" habilitado. Estas entidades pendem da revista,
+// entao o tenant e resolvido pela revista dona do registro.
+const avisoProcedure = moduloUserProcedure(
+  "avisos",
+  escopoPorRegistro(
+    {
+      revistaId: direto(revistas),
+      id: via(avisos, "revistaId", revistas),
+    },
+    {},
+  ),
+);
+
 export const avisoRouter = router({
-    list: protectedProcedure
+    list: avisoProcedure
       .input(z.object({ revistaId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -15,7 +29,7 @@ export const avisoRouter = router({
           .orderBy(desc(avisos.createdAt));
       }),
 
-    create: protectedProcedure
+    create: avisoProcedure
       .input(z.object({
         revistaId: z.number(),
         titulo: z.string().min(1),
@@ -31,7 +45,7 @@ export const avisoRouter = router({
         return { id: Number(result.id) };
       }),
 
-    update: protectedProcedure
+    update: avisoProcedure
       .input(z.object({
         id: z.number(),
         titulo: z.string().optional(),
@@ -48,7 +62,7 @@ export const avisoRouter = router({
         return { success: true };
       }),
 
-    delete: protectedProcedure
+    delete: avisoProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();

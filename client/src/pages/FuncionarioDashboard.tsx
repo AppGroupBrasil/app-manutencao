@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useBootstrap } from "@/hooks/useBootstrap";
 import { CoreModulesPanel } from "@/components/funcionario/CoreModulesPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,6 +111,9 @@ export default function FuncionarioDashboard() {
     retry: false,
   });
 
+  // Módulos liberados para a organização deste funcionário
+  const { temModulo } = useBootstrap();
+
   const logoutMutation = trpc.funcionario.logout.useMutation({
     onSuccess: () => {
       toast.success("Sessão encerrada. Até logo!");
@@ -213,9 +217,10 @@ export default function FuncionarioDashboard() {
     }
   };
 
-  // Filtrar apenas funções habilitadas
+  // Filtrar funções: permissão do funcionário E módulo liberado para a organização.
+  // A permissão individual nunca pode expor um módulo que o cliente não contratou.
   const funcoesDisponiveis = Object.entries(FUNCOES_CONFIG).filter(
-    ([key]) => funcoesHabilitadas.includes(key)
+    ([key]) => funcoesHabilitadas.includes(key) && temModulo(key)
   );
 
   // Filtrar apps da organização selecionado

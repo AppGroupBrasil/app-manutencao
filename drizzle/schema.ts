@@ -159,6 +159,11 @@ export const condominios = pgTable("condominios", {
   rodapeContato: varchar("rodapeContato", { length: 255 }),
   // Telefone de contato para mensagem de bloqueio
   telefoneContato: varchar("telefoneContato", { length: 20 }),
+  // Segmento de mercado — define o pacote de módulos padrão e o vocabulário.
+  // Valores em shared/modules/registry.ts (Segmento).
+  segmento: varchar("segmento", { length: 50 }).default("condominio"),
+  // Sobrescrita de vocabulário por tenant: { "menu.inspections": "Inspeções de Solda" }
+  labels: json("labels").$type<Record<string, string>>(),
   // Tema padrão da organização
   temaPadrao: varchar("temaPadrao", { length: 20 }).default("laranja"),
   layoutPadrao: varchar("layoutPadrao", { length: 20 }).default("classico"),

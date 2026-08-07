@@ -4,6 +4,17 @@ import { getDb } from "../../db";
 import { condominios } from "../../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { seedModulosDoTenant } from "../../_core/modules";
+import type { Segmento } from "../../../shared/modules/registry";
+
+const SEGMENTOS = [
+  "generico",
+  "condominio",
+  "metalurgia",
+  "oficina",
+  "academia",
+  "facilities",
+] as const;
 
 export const condominioRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => {
@@ -14,7 +25,8 @@ export const condominioRouter = router({
 
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
         const db = await getDb();
         if (!db) return null;
         const result = await db.select().from(condominios).where(eq(condominios.id, input.id)).limit(1);
@@ -33,15 +45,31 @@ export const condominioRouter = router({
         capaUrl: z.string().optional(),
         corPrimaria: z.string().optional(),
         corSecundaria: z.string().optional(),
+        // Define o pacote de módulos e o vocabulário iniciais
+        segmento: z.enum(SEGMENTOS).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
+        const segmento = (input.segmento ?? "condominio") as Segmento;
         const [result] = await db.insert(condominios).values({
           ...input,
+          segmento,
           sindicoId: ctx.user.id,
         }).returning();
-        return { id: Number(result.id) };
+
+        const id = Number(result.id);
+        // Grava explicitamente os módulos do segmento. Sem isto o tenant nasce
+        // dependendo do fallback e qualquer módulo novo mudaria o que ele vê.
+        // Falha aqui não invalida a organização já criada — ela cai no pacote
+        // do segmento até que alguém rode o seed de novo.
+        try {
+          await seedModulosDoTenant(id, segmento);
+        } catch (erro) {
+          console.error(`[condominio.create] seed de módulos falhou para #${id}:`, erro);
+        }
+
+        return { id };
       }),
 
     update: protectedProcedure
@@ -63,8 +91,12 @@ export const condominioRouter = router({
         cabecalhoNomeSindico: z.string().nullable().optional(),
         rodapeTexto: z.string().nullable().optional(),
         rodapeContato: z.string().nullable().optional(),
+        // Segmento e sobrescrita de vocabulário
+        segmento: z.enum(SEGMENTOS).optional(),
+        labels: z.record(z.string(), z.string()).nullable().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         const { id, ...data } = input;
@@ -85,7 +117,8 @@ export const condominioRouter = router({
     // Gerar token de cadastro para o condomínio
     generateCadastroToken: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         const token = nanoid(16);
@@ -100,7 +133,8 @@ export const condominioRouter = router({
         assembleiaLink: z.string(),
         assembleiaData: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         const updateData: Record<string, unknown> = {
@@ -132,7 +166,8 @@ export const condominioRouter = router({
     // Obter tema padrão da organização
     getTemaPadrao: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
         const db = await getDb();
         if (!db) return null;
         const result = await db.select({
@@ -153,7 +188,8 @@ export const condominioRouter = router({
         tamanhoFontePadrao: z.string().optional(),
         modoEscuroPadrao: z.boolean().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         const { id, ...data } = input;

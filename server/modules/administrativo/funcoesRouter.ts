@@ -1,169 +1,114 @@
-﻿import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "../../_core/trpc";
-import { getDb } from "../../db";
-import { eq, and } from "drizzle-orm";
-import { condominioFuncoes, FUNCOES_DISPONIVEIS } from "../../../drizzle/schema";
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { router, tenantProcedure } from "../../_core/trpc";
+import {
+  getCatalogoVisivel,
+  getModulosHabilitados,
+  seedModulosDoTenant,
+  setModuloHabilitado,
+} from "../../_core/modules";
+import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from "../../_core/trpc.types";
+import type { Segmento } from "../../../shared/modules/registry";
+
+/**
+ * Configuração de quais módulos cada organização enxerga.
+ *
+ * Duas mudanças em relação à versão anterior:
+ *  - o catálogo é filtrado por tenant (módulo restrito a um cliente não aparece
+ *    para os demais, nem na tela de configuração);
+ *  - tenant sem registros NÃO significa mais "tudo habilitado" — cai no pacote
+ *    padrão do segmento. Sem isso, todo módulo novo vazava para todos.
+ */
+
+function exigirAdmin(ctx: { user: { hierarquia?: string | null; role?: string | null } | null }) {
+  if (!ctx.user || getUserHierarquiaNivel(ctx.user) < HIERARQUIA_NIVEL.admin) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem alterar módulos.",
+    });
+  }
+}
 
 export const funcoesCondominioRouter = router({
-    // Listar todas as funÃ§Ãµes disponÃ­veis
-    listarDisponiveis: publicProcedure.query(() => {
-      return FUNCOES_DISPONIVEIS;
+  // Catálogo visível para ESTE tenant
+  listarDisponiveis: tenantProcedure
+    .input(z.object({ condominioId: z.number().optional() }).optional())
+    .query(({ ctx }) => {
+      return getCatalogoVisivel(ctx.condominioId).map((m) => ({
+        id: m.id,
+        nome: m.nome,
+        categoria: m.categoria,
+        descricao: m.descricao,
+      }));
     }),
 
-    // Obter funÃ§Ãµes habilitadas para um condomÃ­nio
-    listar: protectedProcedure
-      .input(z.object({ condominioId: z.number() }))
-      .query(async ({ input }) => {
-        const db = await getDb();
-        if (!db) return [];
-        
-        const result = await db.select()
-          .from(condominioFuncoes)
-          .where(eq(condominioFuncoes.condominioId, input.condominioId));
-        
-        return result;
-      }),
+  // Estado (ligado/desligado) de cada módulo do catálogo do tenant
+  listar: tenantProcedure
+    .input(z.object({ condominioId: z.number().optional() }).optional())
+    .query(async ({ ctx }) => {
+      const habilitados = new Set(await getModulosHabilitados(ctx.condominioId));
+      return getCatalogoVisivel(ctx.condominioId).map((m) => ({
+        condominioId: ctx.condominioId,
+        funcaoId: m.id,
+        habilitada: habilitados.has(m.id),
+      }));
+    }),
 
-    // Obter lista de IDs de funÃ§Ãµes habilitadas
-    listarHabilitadas: protectedProcedure
-      .input(z.object({ condominioId: z.number() }))
-      .query(async ({ input }) => {
-        const db = await getDb();
-        if (!db) return FUNCOES_DISPONIVEIS.map(f => f.id);
-        
-        const result = await db.select()
-          .from(condominioFuncoes)
-          .where(and(
-            eq(condominioFuncoes.condominioId, input.condominioId),
-            eq(condominioFuncoes.habilitada, true)
-          ));
-        
-        // Se nÃ£o hÃ¡ registros, todas estÃ£o habilitadas por padrÃ£o
-        if (result.length === 0) {
-          return FUNCOES_DISPONIVEIS.map(f => f.id);
-        }
-        
-        return result.map(r => r.funcaoId);
-      }),
+  // Apenas os IDs habilitados — consumido pelo menu
+  listarHabilitadas: tenantProcedure
+    .input(z.object({ condominioId: z.number().optional() }).optional())
+    .query(async ({ ctx }) => {
+      return getModulosHabilitados(ctx.condominioId);
+    }),
 
-    // Habilitar/desabilitar uma funÃ§Ã£o (apenas admin)
-    toggle: protectedProcedure
-      .input(z.object({
-        condominioId: z.number(),
+  toggle: tenantProcedure
+    .input(
+      z.object({
+        condominioId: z.number().optional(),
         funcaoId: z.string(),
         habilitada: z.boolean(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        // Verificar se Ã© admin
-        if (ctx.user?.role !== 'admin') {
-          throw new Error("Apenas administradores podem alterar funÃ§Ãµes");
-        }
-        
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        
-        // Verificar se jÃ¡ existe registro
-        const existing = await db.select()
-          .from(condominioFuncoes)
-          .where(and(
-            eq(condominioFuncoes.condominioId, input.condominioId),
-            eq(condominioFuncoes.funcaoId, input.funcaoId)
-          ));
-        
-        if (existing.length > 0) {
-          await db.update(condominioFuncoes)
-            .set({ habilitada: input.habilitada })
-            .where(and(
-              eq(condominioFuncoes.condominioId, input.condominioId),
-              eq(condominioFuncoes.funcaoId, input.funcaoId)
-            ));
-        } else {
-          await db.insert(condominioFuncoes).values({
-            condominioId: input.condominioId,
-            funcaoId: input.funcaoId,
-            habilitada: input.habilitada,
-          });
-        }
-        
-        return { success: true, ...input };
       }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      exigirAdmin(ctx);
+      await setModuloHabilitado(ctx.condominioId, input.funcaoId, input.habilitada);
+      return { success: true, condominioId: ctx.condominioId, funcaoId: input.funcaoId, habilitada: input.habilitada };
+    }),
 
-    // Atualizar mÃºltiplas funÃ§Ãµes de uma vez (apenas admin)
-    atualizarMultiplas: protectedProcedure
-      .input(z.object({
-        condominioId: z.number(),
-        funcoes: z.array(z.object({
-          funcaoId: z.string(),
-          habilitada: z.boolean(),
-        })),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        // Verificar se Ã© admin
-        if (ctx.user?.role !== 'admin') {
-          throw new Error("Apenas administradores podem alterar funÃ§Ãµes");
-        }
-        
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        
-        for (const funcao of input.funcoes) {
-          const existing = await db.select()
-            .from(condominioFuncoes)
-            .where(and(
-              eq(condominioFuncoes.condominioId, input.condominioId),
-              eq(condominioFuncoes.funcaoId, funcao.funcaoId)
-            ));
-          
-          if (existing.length > 0) {
-            await db.update(condominioFuncoes)
-              .set({ habilitada: funcao.habilitada })
-              .where(and(
-                eq(condominioFuncoes.condominioId, input.condominioId),
-                eq(condominioFuncoes.funcaoId, funcao.funcaoId)
-              ));
-          } else {
-            await db.insert(condominioFuncoes).values({
-              condominioId: input.condominioId,
-              funcaoId: funcao.funcaoId,
-              habilitada: funcao.habilitada,
-            });
-          }
-        }
-        
-        return { success: true, updated: input.funcoes.length };
+  atualizarMultiplas: tenantProcedure
+    .input(
+      z.object({
+        condominioId: z.number().optional(),
+        funcoes: z.array(
+          z.object({
+            funcaoId: z.string(),
+            habilitada: z.boolean(),
+          }),
+        ),
       }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      exigirAdmin(ctx);
+      for (const funcao of input.funcoes) {
+        await setModuloHabilitado(ctx.condominioId, funcao.funcaoId, funcao.habilitada);
+      }
+      return { success: true, updated: input.funcoes.length };
+    }),
 
-    // Inicializar funÃ§Ãµes para um condomÃ­nio (todas habilitadas)
-    inicializar: protectedProcedure
-      .input(z.object({ condominioId: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        // Verificar se Ã© admin
-        if (ctx.user?.role !== 'admin') {
-          throw new Error("Apenas administradores podem inicializar funÃ§Ãµes");
-        }
-        
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        
-        // Verificar se jÃ¡ existem registros
-        const existing = await db.select()
-          .from(condominioFuncoes)
-          .where(eq(condominioFuncoes.condominioId, input.condominioId));
-        
-        if (existing.length > 0) {
-          return { initialized: false, message: "FunÃ§Ãµes jÃ¡ inicializadas" };
-        }
-        
-        // Criar registros para todas as funÃ§Ãµes (todas habilitadas)
-        for (const funcao of FUNCOES_DISPONIVEIS) {
-          await db.insert(condominioFuncoes).values({
-            condominioId: input.condominioId,
-            funcaoId: funcao.id,
-            habilitada: true,
-          });
-        }
-        
-        return { initialized: true, count: FUNCOES_DISPONIVEIS.length };
+  // Grava o pacote padrão do segmento para o tenant
+  inicializar: tenantProcedure
+    .input(
+      z.object({
+        condominioId: z.number().optional(),
+        segmento: z.string().optional(),
       }),
-  });
-
+    )
+    .mutation(async ({ input, ctx }) => {
+      exigirAdmin(ctx);
+      const criados = await seedModulosDoTenant(
+        ctx.condominioId,
+        (input.segmento as Segmento) || undefined,
+      );
+      return { initialized: criados > 0, count: criados };
+    }),
+});

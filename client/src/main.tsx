@@ -105,6 +105,7 @@ queryClient.getMutationCache().subscribe(event => {
 const apiUrl = import.meta.env.VITE_API_URL || "/api/trpc";
 
 const SESSION_TOKEN_KEY = "app_session_token";
+const TENANT_ATIVO_KEY = "condominio_ativo";
 
 const trpcClient = trpc.createClient({
   links: [
@@ -118,6 +119,12 @@ const trpcClient = trpc.createClient({
         const headers = new Headers((init as any)?.headers);
         if (token && !headers.has("Authorization")) {
           headers.set("Authorization", `Bearer ${token}`);
+        }
+        // Organização ativa: só importa para quem administra mais de uma.
+        // O servidor ignora o valor se não pertencer ao usuário.
+        const tenantAtivo = localStorage.getItem(TENANT_ATIVO_KEY);
+        if (tenantAtivo && !headers.has("x-condominio-id")) {
+          headers.set("x-condominio-id", tenantAtivo);
         }
         return globalThis.fetch(input, {
           ...(init ?? {}),

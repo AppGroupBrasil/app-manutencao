@@ -1,6 +1,8 @@
 ﻿import { z } from "zod";
 import { eq, desc, and, like, sql } from "drizzle-orm";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
+import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
 
 // Auto-criar colunas de assinatura se não existirem
@@ -25,8 +27,24 @@ import {
   condominios 
 } from "../../../drizzle/schema";
 
+// Exige o modulo "ocorrencias" habilitado e valida que cada id recebido
+// pertence a organizacao da requisicao.
+const ocorrenciaProcedure = moduloProcedure(
+  "ocorrencias",
+  escopoPorRegistro(
+    {
+      id: direto(ocorrencias),
+      ocorrenciaId: direto(ocorrencias),
+    },
+    {
+      removeImagem: { id: via(ocorrenciaImagens, "ocorrenciaId", ocorrencias) },
+      removeAnexo: { id: via(ocorrenciaAnexos, "ocorrenciaId", ocorrencias) },
+    },
+  ),
+);
+
 export const ocorrenciaRouter = router({
-  list: protectedProcedure
+  list: ocorrenciaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -36,7 +54,7 @@ export const ocorrenciaRouter = router({
         .orderBy(desc(ocorrencias.createdAt));
     }),
 
-  listWithDetails: protectedProcedure
+  listWithDetails: ocorrenciaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -55,7 +73,7 @@ export const ocorrenciaRouter = router({
       return result;
     }),
 
-  getById: protectedProcedure
+  getById: ocorrenciaProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -64,7 +82,7 @@ export const ocorrenciaRouter = router({
       return result || null;
     }),
 
-  searchByProtocolo: protectedProcedure
+  searchByProtocolo: ocorrenciaProcedure
     .input(z.object({ protocolo: z.string(), condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -77,7 +95,7 @@ export const ocorrenciaRouter = router({
         .orderBy(desc(ocorrencias.createdAt));
     }),
 
-  create: protectedProcedure
+  create: ocorrenciaProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string(),
@@ -136,13 +154,13 @@ export const ocorrenciaRouter = router({
         tipo: "abertura",
         descricao: `OcorrÃªncia registrada: ${input.titulo}`,
         statusNovo: "pendente",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       });
       return { id: result.id, protocolo };
     }),
 
-  update: protectedProcedure
+  update: ocorrenciaProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -179,23 +197,23 @@ export const ocorrenciaRouter = router({
           descricao: `Status alterado de ${statusAnterior} para ${data.status}`,
           statusAnterior,
           statusNovo: data.status,
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         }).returning();
       } else if (Object.keys(data).length > 0) {
         await db.insert(ocorrenciaTimeline).values({
           ocorrenciaId: id,
           tipo: "atualizacao",
           descricao: "Ocorrência atualizada",
-          userId: ctx.user?.id,
-          userNome: ctx.user?.name || "Sistema",
+          userId: autorDaRequisicao(ctx).userId,
+          userNome: autorDaRequisicao(ctx).nome,
         });
       }
       
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: ocorrenciaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -207,7 +225,7 @@ export const ocorrenciaRouter = router({
       return { success: true };
     }),
 
-  getTimeline: protectedProcedure
+  getTimeline: ocorrenciaProcedure
     .input(z.object({ ocorrenciaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -217,7 +235,7 @@ export const ocorrenciaRouter = router({
         .orderBy(desc(ocorrenciaTimeline.createdAt));
     }),
 
-  addTimelineEvent: protectedProcedure
+  addTimelineEvent: ocorrenciaProcedure
     .input(z.object({
       ocorrenciaId: z.number(),
       tipo: z.enum(["abertura", "atualizacao", "status_alterado", "comentario", "imagem_adicionada", "responsavel_alterado", "fechamento", "reabertura"]),
@@ -228,13 +246,13 @@ export const ocorrenciaRouter = router({
       if (!db) throw new Error("Database not available");
       const [result] = await db.insert(ocorrenciaTimeline).values({
         ...input,
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
-  getImagens: protectedProcedure
+  getImagens: ocorrenciaProcedure
     .input(z.object({ ocorrenciaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -244,7 +262,7 @@ export const ocorrenciaRouter = router({
         .orderBy(ocorrenciaImagens.ordem);
     }),
 
-  addImagem: protectedProcedure
+  addImagem: ocorrenciaProcedure
     .input(z.object({
       ocorrenciaId: z.number(),
       url: z.string(),
@@ -258,13 +276,13 @@ export const ocorrenciaRouter = router({
         ocorrenciaId: input.ocorrenciaId,
         tipo: "imagem_adicionada",
         descricao: "Nova imagem adicionada",
-        userId: ctx.user?.id,
-        userNome: ctx.user?.name || "Sistema",
+        userId: autorDaRequisicao(ctx).userId,
+        userNome: autorDaRequisicao(ctx).nome,
       }).returning();
       return { id: result.id };
     }),
 
-  removeImagem: protectedProcedure
+  removeImagem: ocorrenciaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -274,7 +292,7 @@ export const ocorrenciaRouter = router({
     }),
 
   // ========== ANEXOS (PDF/Documentos) ==========
-  getAnexos: protectedProcedure
+  getAnexos: ocorrenciaProcedure
     .input(z.object({ ocorrenciaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -284,7 +302,7 @@ export const ocorrenciaRouter = router({
         .orderBy(desc(ocorrenciaAnexos.createdAt));
     }),
 
-  addAnexo: protectedProcedure
+  addAnexo: ocorrenciaProcedure
     .input(z.object({
       ocorrenciaId: z.number(),
       nome: z.string(),
@@ -305,7 +323,7 @@ export const ocorrenciaRouter = router({
       return { id: result.id };
     }),
 
-  removeAnexo: protectedProcedure
+  removeAnexo: ocorrenciaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -314,7 +332,7 @@ export const ocorrenciaRouter = router({
       return { success: true };
     }),
 
-  getStats: protectedProcedure
+  getStats: ocorrenciaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -340,7 +358,7 @@ export const ocorrenciaRouter = router({
     }),
 
   // Gerar PDF
-  generatePdf: protectedProcedure
+  generatePdf: ocorrenciaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -386,7 +404,7 @@ export const ocorrenciaRouter = router({
     }),
 
   // Exportar ocorrÃªncia em JSON para nuvem
-  exportJson: protectedProcedure
+  exportJson: ocorrenciaProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -412,7 +430,7 @@ export const ocorrenciaRouter = router({
     }),
 
   // Exportar todas as ocorrÃªncias em JSON
-  exportAllJson: protectedProcedure
+  exportAllJson: ocorrenciaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();

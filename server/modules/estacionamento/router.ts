@@ -1,12 +1,30 @@
 ﻿
 import { z } from "zod";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { vagasEstacionamento, imagensVagas } from "../../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
+// Exige o modulo "vagas" habilitado e valida o dono do registro.
+const vagaProcedure = moduloUserProcedure(
+  "vagas",
+  escopoPorRegistro({
+    id: direto(vagasEstacionamento),
+    vagaId: direto(vagasEstacionamento),
+  }),
+);
+
+const imagemVagaProcedure = moduloUserProcedure(
+  "vagas",
+  escopoPorRegistro({
+    id: via(imagensVagas, "vagaId", vagasEstacionamento),
+    vagaId: direto(vagasEstacionamento),
+  }),
+);
+
 export const vagaEstacionamentoRouter = router({
-  list: protectedProcedure
+  list: vagaProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -16,7 +34,7 @@ export const vagaEstacionamentoRouter = router({
         .orderBy(vagasEstacionamento.numero);
     }),
 
-  getById: protectedProcedure
+  getById: vagaProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -27,7 +45,7 @@ export const vagaEstacionamentoRouter = router({
       return result[0] || null;
     }),
 
-  create: protectedProcedure
+  create: vagaProcedure
     .input(z.object({
       condominioId: z.number(),
       numero: z.string().min(1),
@@ -52,7 +70,7 @@ export const vagaEstacionamentoRouter = router({
         return { success: true };
     }),
 
-  update: protectedProcedure
+  update: vagaProcedure
     .input(z.object({
       id: z.number(),
       numero: z.string().optional(),
@@ -76,7 +94,7 @@ export const vagaEstacionamentoRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: vagaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -87,7 +105,7 @@ export const vagaEstacionamentoRouter = router({
 });
 
 export const imagemVagaRouter = router({
-  list: protectedProcedure
+  list: imagemVagaProcedure
     .input(z.object({ vagaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -97,7 +115,7 @@ export const imagemVagaRouter = router({
         .orderBy(imagensVagas.ordem);
     }),
 
-  create: protectedProcedure
+  create: imagemVagaProcedure
     .input(z.object({
       vagaId: z.number(),
       tipo: z.enum(["imagem", "anexo"]).optional(),
@@ -113,7 +131,7 @@ export const imagemVagaRouter = router({
       return { id: Number(result.id) };
     }),
 
-  createMultiple: protectedProcedure
+  createMultiple: imagemVagaProcedure
     .input(z.object({
       vagaId: z.number(),
       arquivos: z.array(z.object({
@@ -138,7 +156,7 @@ export const imagemVagaRouter = router({
       return { success: true, count: arquivosToInsert.length };
     }),
 
-  delete: protectedProcedure
+  delete: imagemVagaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -147,7 +165,7 @@ export const imagemVagaRouter = router({
       return { success: true };
     }),
 
-  deleteAll: protectedProcedure
+  deleteAll: imagemVagaProcedure
     .input(z.object({ vagaId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { eq, desc, and, like } from "drizzle-orm";
-import { protectedProcedure, router } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { 
   controlePragas, 
@@ -8,8 +9,23 @@ import {
   condominios 
 } from "../../../drizzle/schema";
 
+// Exige o modulo "controle-pragas" habilitado e valida que cada id recebido pertence
+// a organizacao da requisicao.
+const pragasProcedure = moduloUserProcedure(
+  "controle-pragas",
+  escopoPorRegistro(
+    {
+      id: direto(controlePragas),
+      controlePragaId: direto(controlePragas),
+    },
+    {
+      removeImagem: { id: via(controlePragaImagens, "controlePragaId", controlePragas) },
+    },
+  ),
+);
+
 export const controlePragasRouter = router({
-  list: protectedProcedure
+  list: pragasProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -19,7 +35,7 @@ export const controlePragasRouter = router({
         .orderBy(desc(controlePragas.createdAt));
     }),
 
-  listWithDetails: protectedProcedure
+  listWithDetails: pragasProcedure
     .input(z.object({ condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -37,7 +53,7 @@ export const controlePragasRouter = router({
       return result;
     }),
 
-  getById: protectedProcedure
+  getById: pragasProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -50,7 +66,7 @@ export const controlePragasRouter = router({
       return { ...result, imagens };
     }),
 
-  searchByProtocolo: protectedProcedure
+  searchByProtocolo: pragasProcedure
     .input(z.object({ protocolo: z.string(), condominioId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -63,7 +79,7 @@ export const controlePragasRouter = router({
         .orderBy(desc(controlePragas.createdAt));
     }),
 
-  create: protectedProcedure
+  create: pragasProcedure
     .input(z.object({
       condominioId: z.number(),
       titulo: z.string(),
@@ -141,7 +157,7 @@ export const controlePragasRouter = router({
       return { id: result.id, protocolo };
     }),
 
-  update: protectedProcedure
+  update: pragasProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -180,7 +196,7 @@ export const controlePragasRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: pragasProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -195,7 +211,7 @@ export const controlePragasRouter = router({
     }),
 
   // Gerenciamento de imagens
-  addImagem: protectedProcedure
+  addImagem: pragasProcedure
     .input(z.object({
       controlePragaId: z.number(),
       url: z.string(),
@@ -218,7 +234,7 @@ export const controlePragasRouter = router({
       return { id: result.id };
     }),
 
-  removeImagem: protectedProcedure
+  removeImagem: pragasProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

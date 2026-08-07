@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { router, protectedProcedure, publicProcedure } from "../../_core/trpc";
+import { router, moduloUserProcedure, publicProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { 
     timelines, 
@@ -14,6 +15,7 @@ import {
     timelineNotificacoesConfig, 
     timelineNotificacoesHistorico, 
     timelineChat,
+    membrosEquipe as membrosEquipeTabela,
     users,
     condominios 
 } from "../../../drizzle/schema";
@@ -22,6 +24,38 @@ import { nanoid } from "nanoid";
 import { sendEmail, emailTemplates } from "../../_core/email";
 import { storagePut } from "../../storage";
 import QRCode from "qrcode";
+
+// Exige o modulo "timeline" habilitado e valida que cada id recebido pertence a
+// organizacao da requisicao. Aqui `id` muda de tabela conforme a rota: nas de
+// cadastro auxiliar aponta para responsavel/local/status/prioridade/titulo, e
+// nas demais para a propria timeline. Todas essas tabelas tem condominioId.
+const timelineProcedure = moduloUserProcedure(
+  "timeline",
+  escopoPorRegistro(
+    {
+      id: direto(timelines),
+      timelineId: direto(timelines),
+      // Impede vincular a timeline a registros de outra organizacao
+      tituloPredefId: direto(timelineTitulos),
+      membroEquipeId: direto(membrosEquipeTabela),
+    },
+    {
+      atualizarResponsavel: { id: direto(timelineResponsaveis) },
+      excluirResponsavel: { id: direto(timelineResponsaveis) },
+      excluirLocal: { id: direto(timelineLocais) },
+      excluirStatus: { id: direto(timelineStatus) },
+      excluirPrioridade: { id: direto(timelinePrioridades) },
+      excluirTitulo: { id: direto(timelineTitulos) },
+      atualizar: {
+        id: direto(timelines),
+        localId: direto(timelineLocais),
+        statusId: direto(timelineStatus),
+        prioridadeId: direto(timelinePrioridades),
+        responsavelId: direto(timelineResponsaveis),
+      },
+    },
+  ),
+);
 
 // Helper: baixar imagem de URL externa e converter para base64 para uso no jsPDF
 async function fetchImageAsBase64(url: string): Promise<string | null> {
@@ -461,7 +495,7 @@ async function gerarTimelinePdfInterno(db: any, timeline: any) {
 
 export const timelineRouter = router({
     // ==================== CONFIGURAÇÕES - RESPONSÁVEIS ====================
-    listarResponsaveis: protectedProcedure
+    listarResponsaveis: timelineProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -474,7 +508,7 @@ export const timelineRouter = router({
           .orderBy(timelineResponsaveis.nome);
       }),
 
-    criarResponsavel: protectedProcedure
+    criarResponsavel: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(2),
@@ -489,7 +523,7 @@ export const timelineRouter = router({
         return { id: result.id };
       }),
 
-    atualizarResponsavel: protectedProcedure
+    atualizarResponsavel: timelineProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(2).optional(),
@@ -505,7 +539,7 @@ export const timelineRouter = router({
         return { success: true };
       }),
 
-    excluirResponsavel: protectedProcedure
+    excluirResponsavel: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -515,7 +549,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== CONFIGURAÇÕES - LOCAIS ====================
-    listarLocais: protectedProcedure
+    listarLocais: timelineProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -528,7 +562,7 @@ export const timelineRouter = router({
           .orderBy(timelineLocais.nome);
       }),
 
-    criarLocal: protectedProcedure
+    criarLocal: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(2),
@@ -541,7 +575,7 @@ export const timelineRouter = router({
         return { id: result.id };
       }),
 
-    excluirLocal: protectedProcedure
+    excluirLocal: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -551,7 +585,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== CONFIGURAÇÕES - STATUS ====================
-    listarStatus: protectedProcedure
+    listarStatus: timelineProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -564,7 +598,7 @@ export const timelineRouter = router({
           .orderBy(timelineStatus.ordem);
       }),
 
-    criarStatus: protectedProcedure
+    criarStatus: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(2),
@@ -579,7 +613,7 @@ export const timelineRouter = router({
         return { id: result.id };
       }),
 
-    excluirStatus: protectedProcedure
+    excluirStatus: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -589,7 +623,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== CONFIGURAÇÕES - PRIORIDADES ====================
-    listarPrioridades: protectedProcedure
+    listarPrioridades: timelineProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -602,7 +636,7 @@ export const timelineRouter = router({
           .orderBy(timelinePrioridades.nivel);
       }),
 
-    criarPrioridade: protectedProcedure
+    criarPrioridade: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(2),
@@ -617,7 +651,7 @@ export const timelineRouter = router({
         return { id: result.id };
       }),
 
-    excluirPrioridade: protectedProcedure
+    excluirPrioridade: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -627,7 +661,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== CONFIGURAÇÕES - TÍTULOS ====================
-    listarTitulos: protectedProcedure
+    listarTitulos: timelineProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -640,7 +674,7 @@ export const timelineRouter = router({
           .orderBy(timelineTitulos.titulo);
       }),
 
-    criarTitulo: protectedProcedure
+    criarTitulo: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         titulo: z.string().min(2),
@@ -653,7 +687,7 @@ export const timelineRouter = router({
         return { id: result.id };
       }),
 
-    excluirTitulo: protectedProcedure
+    excluirTitulo: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -663,7 +697,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - CRUD PRINCIPAL ====================
-    listar: protectedProcedure
+    listar: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         estado: z.enum(["rascunho", "enviado", "registado"]).optional(),
@@ -703,7 +737,7 @@ export const timelineRouter = router({
         return { items, total: Number(countResult?.count || 0) };
       }),
 
-    obter: protectedProcedure
+    obter: timelineProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -745,7 +779,7 @@ export const timelineRouter = router({
         };
       }),
 
-    criar: protectedProcedure
+    criar: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         responsavelId: z.number(),
@@ -837,7 +871,7 @@ export const timelineRouter = router({
         return { id: timelineId, protocolo, tokenPublico };
       }),
 
-    atualizar: protectedProcedure
+    atualizar: timelineProcedure
       .input(z.object({
         id: z.number(),
         responsavelId: z.number().optional(),
@@ -973,7 +1007,7 @@ export const timelineRouter = router({
         return { success: true };
       }),
 
-    excluir: protectedProcedure
+    excluir: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -992,7 +1026,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - IMAGENS ====================
-    adicionarImagem: protectedProcedure
+    adicionarImagem: timelineProcedure
       .input(z.object({
         timelineId: z.number(),
         url: z.string(),
@@ -1041,7 +1075,7 @@ export const timelineRouter = router({
         return { id: result.id };
       }),
 
-    removerImagem: protectedProcedure
+    removerImagem: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -1051,7 +1085,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - COMPARTILHAMENTO ====================
-    compartilhar: protectedProcedure
+    compartilhar: timelineProcedure
       .input(z.object({
         timelineId: z.number(),
         membroEquipeId: z.number().optional(),
@@ -1117,7 +1151,7 @@ export const timelineRouter = router({
         return { id: result.id };
       }),
 
-    listarCompartilhamentos: protectedProcedure
+    listarCompartilhamentos: timelineProcedure
       .input(z.object({ timelineId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1556,7 +1590,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - PDF ====================
-    gerarPdf: protectedProcedure
+    gerarPdf: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1602,7 +1636,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - REGISTAR (FINALIZAR) ====================
-    registar: protectedProcedure
+    registar: timelineProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1625,7 +1659,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - ESTATÍSTICAS BÁSICAS ====================
-    estatisticasBasicas: protectedProcedure
+    estatisticasBasicas: timelineProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1643,7 +1677,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - CONFIGURAÇÕES DE NOTIFICAÇÕES ====================
-    obterConfigNotificacoes: protectedProcedure
+    obterConfigNotificacoes: timelineProcedure
       .input(z.object({ timelineId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1656,7 +1690,7 @@ export const timelineRouter = router({
         return config || null;
       }),
 
-    salvarConfigNotificacoes: protectedProcedure
+    salvarConfigNotificacoes: timelineProcedure
       .input(z.object({
         timelineId: z.number(),
         notificarResponsavel: z.boolean().default(true),
@@ -1710,7 +1744,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - ENVIO DE NOTIFICAÇÕES ====================
-    enviarNotificacao: protectedProcedure
+    enviarNotificacao: timelineProcedure
       .input(z.object({
         timelineId: z.number(),
         tipoEvento: z.enum(["mudanca_status", "atualizacao", "nova_imagem", "comentario", "compartilhamento", "criacao", "finalizacao"]),
@@ -1870,7 +1904,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== TIMELINE - HISTÓRICO DE NOTIFICAÇÕES ====================
-    listarHistoricoNotificacoes: protectedProcedure
+    listarHistoricoNotificacoes: timelineProcedure
       .input(z.object({
         timelineId: z.number(),
         limite: z.number().default(50),
@@ -1888,7 +1922,7 @@ export const timelineRouter = router({
       }),
 
     // ==================== DASHBOARD / ESTATÍSTICAS ====================
-    estatisticas: protectedProcedure
+    estatisticas: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         periodo: z.enum(["7dias", "30dias", "90dias", "ano", "todos"]).default("30dias"),
@@ -2006,7 +2040,7 @@ export const timelineRouter = router({
         };
       }),
 
-    alertas: protectedProcedure
+    alertas: timelineProcedure
       .input(z.object({
         condominioId: z.number(),
         limite: z.number().default(20),
@@ -2085,7 +2119,7 @@ export const timelineRouter = router({
         return alertas;
       }),
 
-    resumoRapido: protectedProcedure
+    resumoRapido: timelineProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();

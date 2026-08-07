@@ -14,6 +14,7 @@ import Home from "./pages/Home";
 const FuncionarioLogin = lazy(() => import("./pages/FuncionarioLogin"));
 const SindicoLogin = lazy(() => import("./pages/SindicoLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminModulos = lazy(() => import("./pages/AdminModulos"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
 const FuncionarioRecuperarSenha = lazy(() => import("./pages/FuncionarioRecuperarSenha"));
 const FuncionarioRedefinirSenha = lazy(() => import("./pages/FuncionarioRedefinirSenha"));
@@ -68,6 +69,7 @@ function Router() {
       <Route path="/sindico/login" component={SindicoLogin} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/modulos" component={AdminModulos} />
       <Route path="/recuperar-senha" component={FuncionarioRecuperarSenha} />
       <Route path="/redefinir-senha/:token" component={FuncionarioRedefinirSenha} />
       <Route path="/dashboard" component={FuncionarioDashboard} />

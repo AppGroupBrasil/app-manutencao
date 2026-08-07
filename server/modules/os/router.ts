@@ -1,4 +1,5 @@
-import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { publicProcedure, moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
 import { 
@@ -16,15 +17,59 @@ import {
   osImagens,
   osAnexos,
   notificacoes,
+  manutencoes,
+  funcionarios,
   condominios
 } from "../../../drizzle/schema"; // Adjusted path
 import { eq, and, desc, like, or, sql, gte, inArray, asc, not } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 
+// Exige o modulo "ordens-servico" habilitado e valida que cada id recebido
+// pertence a organizacao da requisicao. `id` aponta para a OS por padrao; nas
+// rotas de cadastro auxiliar aponta para categoria/prioridade/status/setor.
+// Rotas de registro filho (responsavel, material, orcamento, imagem) ja recebem
+// `ordemServicoId`, entao ficam cobertas pelo padrao.
+const osProcedure = moduloUserProcedure(
+  "ordens-servico",
+  escopoPorRegistro(
+    {
+      id: direto(ordensServico),
+      ordemServicoId: direto(ordensServico),
+      osId: direto(ordensServico),
+      categoriaId: direto(osCategorias),
+      prioridadeId: direto(osPrioridades),
+      statusId: direto(osStatus),
+      setorId: direto(osSetores),
+      // Impede vincular a OS a registros de outra organizacao
+      manutencaoId: direto(manutencoes),
+      funcionarioId: direto(funcionarios),
+    },
+    {
+      updateCategoria: { id: direto(osCategorias) },
+      deleteCategoria: { id: direto(osCategorias) },
+      updatePrioridade: { id: direto(osPrioridades) },
+      deletePrioridade: { id: direto(osPrioridades) },
+      updateOsStatus: { id: direto(osStatus) },
+      deleteStatus: { id: direto(osStatus) },
+      updateSetor: { id: direto(osSetores) },
+      deleteSetor: { id: direto(osSetores) },
+      deletarImagem: { imagemId: via(osImagens, "ordemServicoId", ordensServico) },
+      deletarAnexo: { anexoId: via(osAnexos, "ordemServicoId", ordensServico) },
+      // Nestas, `id` e o registro filho e `ordemServicoId` ja garante o escopo.
+      removeResponsavel: { id: via(osResponsaveis, "ordemServicoId", ordensServico) },
+      removeMaterial: { id: via(osMateriais, "ordemServicoId", ordensServico) },
+      removeOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+      aprovarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+      rejeitarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+      removeImagem: { id: via(osImagens, "ordemServicoId", ordensServico) },
+    },
+  ),
+);
+
 export const osRouter = router({
     // ========== CONFIGURAÇÕES ==========
-    getConfiguracoes: protectedProcedure
+    getConfiguracoes: osProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -58,7 +103,7 @@ export const osRouter = router({
         return config;
       }),
     
-    updateConfiguracoes: protectedProcedure
+    updateConfiguracoes: osProcedure
       .input(z.object({
         condominioId: z.number(),
         habilitarOrcamentos: z.boolean().optional(),
@@ -81,7 +126,7 @@ export const osRouter = router({
       }),
 
     // ========== CATEGORIAS ==========
-    getCategorias: protectedProcedure
+    getCategorias: osProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -127,7 +172,7 @@ export const osRouter = router({
         return categorias;
       }),
     
-    createCategoria: protectedProcedure
+    createCategoria: osProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -151,7 +196,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateCategoria: protectedProcedure
+    updateCategoria: osProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -174,7 +219,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteCategoria: protectedProcedure
+    deleteCategoria: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -188,7 +233,7 @@ export const osRouter = router({
       }),
 
     // ========== PRIORIDADES ==========
-    getPrioridades: protectedProcedure
+    getPrioridades: osProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -231,7 +276,7 @@ export const osRouter = router({
         return prioridades;
       }),
     
-    createPrioridade: protectedProcedure
+    createPrioridade: osProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -259,7 +304,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updatePrioridade: protectedProcedure
+    updatePrioridade: osProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -284,7 +329,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deletePrioridade: protectedProcedure
+    deletePrioridade: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -298,7 +343,7 @@ export const osRouter = router({
       }),
 
     // ========== STATUS ==========
-    getStatus: protectedProcedure
+    getStatus: osProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -345,7 +390,7 @@ export const osRouter = router({
         return statusList;
       }),
     
-    createStatus: protectedProcedure
+    createStatus: osProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -374,7 +419,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateOsStatus: protectedProcedure
+    updateOsStatus: osProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -401,7 +446,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteStatus: protectedProcedure
+    deleteStatus: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -415,7 +460,7 @@ export const osRouter = router({
       }),
 
     // ========== SETORES ==========
-    getSetores: protectedProcedure
+    getSetores: osProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -429,7 +474,7 @@ export const osRouter = router({
           .orderBy(asc(osSetores.nome));
       }),
     
-    createSetor: protectedProcedure
+    createSetor: osProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -448,7 +493,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateSetor: protectedProcedure
+    updateSetor: osProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -469,7 +514,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteSetor: protectedProcedure
+    deleteSetor: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -483,7 +528,7 @@ export const osRouter = router({
       }),
 
     // ========== ORDENS DE SERVIÇO CRUD ==========
-    list: protectedProcedure
+    list: osProcedure
       .input(z.object({
         condominioId: z.number(),
         statusId: z.number().optional(),
@@ -542,7 +587,7 @@ export const osRouter = router({
         };
       }),
     
-    getById: protectedProcedure
+    getById: osProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -587,7 +632,7 @@ export const osRouter = router({
         };
       }),
     
-    create: protectedProcedure
+    create: osProcedure
       .input(z.object({
         condominioId: z.number(),
         titulo: z.string().min(1),
@@ -674,7 +719,7 @@ export const osRouter = router({
         return { id: result.id, protocolo, success: true };
       }),
     
-    update: protectedProcedure
+    update: osProcedure
       .input(z.object({
         id: z.number(),
         titulo: z.string().optional(),
@@ -744,7 +789,7 @@ export const osRouter = router({
         return { success: true };
       }),
     
-    delete: protectedProcedure
+    delete: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -764,7 +809,7 @@ export const osRouter = router({
       }),
 
     // ========== INÍCIO/FIM DO SERVIÇO ==========
-    iniciarServico: protectedProcedure
+    iniciarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -791,7 +836,7 @@ export const osRouter = router({
         return { success: true };
       }),
     
-    finalizarServico: protectedProcedure
+    finalizarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -826,7 +871,7 @@ export const osRouter = router({
       }),
 
     // ========== RESPONSÁVEIS ==========
-    addResponsavel: protectedProcedure
+    addResponsavel: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         nome: z.string().min(1),
@@ -853,7 +898,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    removeResponsavel: protectedProcedure
+    removeResponsavel: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -876,7 +921,7 @@ export const osRouter = router({
       }),
 
     // ========== MATERIAIS ==========
-    addMaterial: protectedProcedure
+    addMaterial: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         nome: z.string().min(1),
@@ -912,7 +957,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    removeMaterial: protectedProcedure
+    removeMaterial: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -935,7 +980,7 @@ export const osRouter = router({
       }),
 
     // ========== ORÇAMENTOS ==========
-    addOrcamento: protectedProcedure
+    addOrcamento: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         fornecedor: z.string().optional(),
@@ -968,7 +1013,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    aprovarOrcamento: protectedProcedure
+    aprovarOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -996,7 +1041,7 @@ export const osRouter = router({
         return { success: true };
       }),
     
-    rejeitarOrcamento: protectedProcedure
+    rejeitarOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number(), motivo: z.string().optional() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1020,7 +1065,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    removeOrcamento: protectedProcedure
+    removeOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1040,7 +1085,7 @@ export const osRouter = router({
       }),
 
     // ========== IMAGENS ==========
-    addImagem: protectedProcedure
+    addImagem: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         url: z.string(),
@@ -1090,7 +1135,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    removeImagem: protectedProcedure
+    removeImagem: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number().optional() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1116,7 +1161,7 @@ export const osRouter = router({
       }),
 
     // ========== CHAT ==========
-    getChat: protectedProcedure
+    getChat: osProcedure
       .input(z.object({ ordemServicoId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1127,7 +1172,7 @@ export const osRouter = router({
           .orderBy(asc(osChat.createdAt));
       }),
     
-    sendMessage: protectedProcedure
+    sendMessage: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         mensagem: z.string().optional(),
@@ -1221,7 +1266,7 @@ export const osRouter = router({
       }),
 
     // ========== TIMELINE ==========
-    addComentario: protectedProcedure
+    addComentario: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         descricao: z.string().min(1),
@@ -1242,7 +1287,7 @@ export const osRouter = router({
       }),
 
     // ========== ESTATÍSTICAS ==========
-    getEstatisticas: protectedProcedure
+    getEstatisticas: osProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1368,7 +1413,7 @@ export const osRouter = router({
       }),
 
     // ========== LOCALIZAÇÃO ==========
-    updateLocalizacao: protectedProcedure
+    updateLocalizacao: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         latitude: z.number().nullable(),
@@ -1399,7 +1444,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    uploadImagem: protectedProcedure
+    uploadImagem: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         fileName: z.string(),
@@ -1447,7 +1492,7 @@ export const osRouter = router({
         return { success: true, id: result.id, url };
       }),
 
-    listarImagens: protectedProcedure
+    listarImagens: osProcedure
       .input(z.object({ ordemServicoId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1460,7 +1505,7 @@ export const osRouter = router({
         return imagens;
       }),
 
-    deletarImagem: protectedProcedure
+    deletarImagem: osProcedure
       .input(z.object({ imagemId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1486,7 +1531,7 @@ export const osRouter = router({
       }),
 
     // Gerar PDF da ordem de serviço
-    generatePDF: protectedProcedure
+    generatePDF: osProcedure
       .input(z.object({ osId: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -1616,7 +1661,7 @@ export const osRouter = router({
       }),
 
     // ========== ANEXOS (PDF e Documentos) ==========
-    uploadAnexo: protectedProcedure
+    uploadAnexo: osProcedure
       .input(z.object({
         ordemServicoId: z.number(),
         fileName: z.string(),
@@ -1690,7 +1735,7 @@ export const osRouter = router({
         return { success: true, id: result.id, url };
       }),
 
-    listarAnexos: protectedProcedure
+    listarAnexos: osProcedure
       .input(z.object({ ordemServicoId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1703,7 +1748,7 @@ export const osRouter = router({
         return anexos;
       }),
 
-    deletarAnexo: protectedProcedure
+    deletarAnexo: osProcedure
       .input(z.object({ anexoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1729,7 +1774,7 @@ export const osRouter = router({
       }),
 
     // ==================== ESTATÍSTICAS ====================
-    estatisticas: protectedProcedure
+    estatisticas: osProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();

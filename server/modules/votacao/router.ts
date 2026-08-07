@@ -1,11 +1,29 @@
-import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { publicProcedure, moduloUserProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
 import { votacoes, opcoesVotacao, revistas, moradores, notificacoes, votos, users } from "../../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 
+// Exige o modulo "votacoes" habilitado. Estas entidades pendem da revista,
+// entao o tenant e resolvido pela revista dona do registro.
+const votacaoProcedure = moduloUserProcedure(
+  "votacoes",
+  escopoPorRegistro(
+    {
+      revistaId: direto(revistas),
+      id: via(votacoes, "revistaId", revistas),
+      votacaoId: via(votacoes, "revistaId", revistas),
+    },
+    // `opcaoId` não é escopado aqui: `opcoes_votacao` pende de `votacoes`, que
+    // por sua vez pende da revista — dois saltos. O `votacaoId` do mesmo input
+    // já garante que a votação é da organização.
+    {},
+  ),
+);
+
 export const votacaoRouter = router({
-  list: protectedProcedure
+  list: votacaoProcedure
     .input(z.object({ revistaId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -26,7 +44,7 @@ export const votacaoRouter = router({
       return { ...votacao[0], opcoes };
     }),
 
-  create: protectedProcedure
+  create: votacaoProcedure
     .input(z.object({
       revistaId: z.number(),
       titulo: z.string().min(1),
@@ -79,7 +97,7 @@ export const votacaoRouter = router({
       return { id: votacaoId };
     }),
 
-  votar: protectedProcedure
+  votar: votacaoProcedure
     .input(z.object({
       votacaoId: z.number(),
       opcaoId: z.number(),
@@ -116,7 +134,7 @@ export const votacaoRouter = router({
       return { success: true };
     }),
 
-  verificarVoto: protectedProcedure
+  verificarVoto: votacaoProcedure
     .input(z.object({ votacaoId: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
@@ -132,7 +150,7 @@ export const votacaoRouter = router({
       return { jaVotou: existingVote.length > 0 };
     }),
 
-  delete: protectedProcedure
+  delete: votacaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -146,7 +164,7 @@ export const votacaoRouter = router({
       return { success: true };
     }),
 
-  encerrar: protectedProcedure
+  encerrar: votacaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -158,7 +176,7 @@ export const votacaoRouter = router({
     }),
 
   // Listar votantes de uma votação (para admin)
-  listarVotantes: protectedProcedure
+  listarVotantes: votacaoProcedure
     .input(z.object({ votacaoId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -184,7 +202,7 @@ export const votacaoRouter = router({
     }),
 
   // Obter estatísticas detalhadas da votação
-  estatisticas: protectedProcedure
+  estatisticas: votacaoProcedure
     .input(z.object({ votacaoId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();

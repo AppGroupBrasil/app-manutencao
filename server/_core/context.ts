@@ -4,12 +4,18 @@ import { sdk } from "./sdk";
 import { ENV } from "./env";
 import { getDb } from "../db";
 import { findFuncionarioById } from "./funcionarioCompat";
+import { createTenantAccess, lerTenantSelecionado, type TenantAccess } from "./tenant";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
   user: User | null;
   funcionario: Funcionario | null;
+  /**
+   * Tenants acessíveis pela identidade autenticada.
+   * Resolvido sob demanda e memoizado por requisição.
+   */
+  tenant: TenantAccess;
 };
 
 export async function createContext(
@@ -56,5 +62,8 @@ export async function createContext(
     res: opts.res,
     user,
     funcionario,
+    tenant: createTenantAccess(user, funcionario, {
+      selecionado: lerTenantSelecionado(opts.req),
+    }),
   };
 }
