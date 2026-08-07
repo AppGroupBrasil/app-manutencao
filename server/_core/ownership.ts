@@ -1,16 +1,17 @@
 /**
- * Verificação de ownership: garante que o usuário logado
- * é o síndico do condomínio sendo acessado.
- * 
+ * Verificação de ownership: garante que o usuário logado responde pela
+ * organização sendo acessada — como dono (`sindicoId`) ou por vínculo
+ * explícito (`usuario_condominios`).
+ *
  * Uso nos routers:
  *   await verifyCondominioOwnership(db, ctx.user.id, input.condominioId);
  */
-import { eq } from "drizzle-orm";
-import { condominios } from "../../drizzle/schema";
+import { and, eq } from "drizzle-orm";
+import { condominios, usuarioCondominios } from "../../drizzle/schema";
 
 /**
- * Verifica se o userId é o síndico do condomínio.
- * Lança erro se não for (previne acesso cross-condomínio).
+ * Verifica se o userId responde pela organização.
+ * Lança erro se não responder (previne acesso cross-organização).
  */
 export async function verifyCondominioOwnership(
   db: any,
@@ -24,10 +25,25 @@ export async function verifyCondominioOwnership(
     .limit(1);
 
   if (!condominio) {
-    throw new Error("Condomínio não encontrado");
+    throw new Error("Organização não encontrada");
   }
 
-  if (condominio.sindicoId !== userId) {
-    throw new Error("Sem permissão para acessar dados deste condomínio");
+  if (condominio.sindicoId === userId) return;
+
+  // Gestor de unidade não é dono da organização: o acesso dele vem do vínculo.
+  const [vinculo] = await db
+    .select({ id: usuarioCondominios.id })
+    .from(usuarioCondominios)
+    .where(
+      and(
+        eq(usuarioCondominios.userId, userId),
+        eq(usuarioCondominios.condominioId, condominioId),
+        eq(usuarioCondominios.ativo, true),
+      ),
+    )
+    .limit(1);
+
+  if (!vinculo) {
+    throw new Error("Sem permissão para acessar dados desta organização");
   }
 }

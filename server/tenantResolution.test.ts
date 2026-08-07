@@ -56,6 +56,30 @@ describe("Resolução de tenant sem condominioId no input", () => {
     await expect(acesso.require()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  // Hierarquia gestor-chefe > gestor de unidade: o acesso do gestor não vem de
+  // `condominios.sindicoId` (o dono é o chefe), e sim de `usuario_condominios`.
+  it("gestor de unidade opera na unidade vinculada e só nela", async () => {
+    const acesso = createTenantAccess(usuario("responsavel"), null, {
+      idsFornecidos: [7],
+    });
+
+    expect(await acesso.require()).toBe(7);
+    expect(await acesso.require(7)).toBe(7);
+    await expect(acesso.require(8)).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("gestor-chefe alterna entre as unidades sob ele", async () => {
+    const unidades = [11, 12, 13, 14, 15];
+    const acesso = createTenantAccess(usuario("admin"), null, {
+      idsFornecidos: unidades,
+      selecionado: 14,
+    });
+
+    expect(await acesso.require()).toBe(14);
+    await expect(acesso.assert(11)).resolves.toBeUndefined();
+    await expect(acesso.assert(99)).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("admin_master não faz varredura de tenants para validar acesso", async () => {
     let consultou = false;
     const acesso = createTenantAccess(usuario("admin_master"), null, {

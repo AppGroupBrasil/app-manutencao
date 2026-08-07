@@ -32,7 +32,9 @@ export type Segmento =
   | 'metalurgia'
   | 'oficina'
   | 'academia'
-  | 'facilities';
+  | 'facilities'
+  /** Rede de unidades educacionais/socioassistenciais sob um gestor-chefe. */
+  | 'educacional';
 
 export type ModuloVisibilidade = 'publico' | 'restrito';
 
@@ -56,6 +58,7 @@ const TODOS_SEGMENTOS: Segmento[] = [
   'oficina',
   'academia',
   'facilities',
+  'educacional',
 ];
 
 /** Núcleo operacional: serve a qualquer segmento. */
@@ -177,14 +180,15 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Controle de Pragas',
     categoria: 'operacional',
     descricao: 'Registros de dedetização e controle de pragas',
-    segmentos: ['condominio', 'facilities'],
+    // Educacional entra aqui: dedetização é exigência sanitária em creche/escola.
+    segmentos: ['condominio', 'facilities', 'educacional'],
   },
   {
     id: 'jardinagem',
     nome: 'Jardinagem',
     categoria: 'operacional',
     descricao: 'Serviços de jardinagem e áreas verdes',
-    segmentos: ['condominio', 'facilities'],
+    segmentos: ['condominio', 'facilities', 'educacional'],
   },
 
   // ==================== INTERATIVO ====================

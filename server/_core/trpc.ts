@@ -1,4 +1,4 @@
-import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
+import { NOT_ADMIN_ERR_MSG, SENHA_PROVISORIA_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
@@ -33,12 +33,37 @@ export const publicProcedure = t.procedure;
 /** Chamadas server-side e testes de composição de middleware. */
 export const createCallerFactory = t.createCallerFactory;
 
+/**
+ * Rotas liberadas enquanto a conta ainda está com a senha padrão.
+ * O suficiente para o client se montar, trocar a senha e sair — nada além.
+ */
+const ROTAS_SEM_SENHA_DEFINIDA = new Set([
+  'auth.me',
+  'auth.logout',
+  'auth.getPerfil',
+  'auth.alterarSenha',
+  'auth.definirSenhaProvisoria',
+  'system.bootstrap',
+]);
+
+/**
+ * Contas criadas em lote nascem com senha padrão. Barrar no middleware, e não
+ * só na tela, é o que impede seguir usando o sistema com a senha de implantação.
+ */
+function assegurarSenhaDefinida(user: TrpcContext['user'], path: string): void {
+  if (user?.senhaProvisoria && !ROTAS_SEM_SENHA_DEFINIDA.has(path)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: SENHA_PROVISORIA_ERR_MSG });
+  }
+}
+
 const requireUser = t.middleware(async opts => {
-  const { ctx, next } = opts;
+  const { ctx, next, path } = opts;
 
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
+
+  assegurarSenhaDefinida(ctx.user, path);
 
   return next({
     ctx: {
@@ -52,11 +77,13 @@ export const protectedProcedure = t.procedure.use(requireUser);
 
 // Middleware que aceita user OU funcionário autenticado
 const requireUserOrFuncionario = t.middleware(async opts => {
-  const { ctx, next } = opts;
+  const { ctx, next, path } = opts;
 
   if (!ctx.user && !ctx.funcionario) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
+
+  assegurarSenhaDefinida(ctx.user, path);
 
   return next({ ctx });
 });
@@ -83,11 +110,15 @@ export const funcionarioProcedure = t.procedure.use(requireFuncionario);
 
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
-    const { ctx, next } = opts;
+    const { ctx, next, path } = opts;
 
     if (!ctx.user || getUserHierarquiaNivel(ctx.user) < HIERARQUIA_NIVEL.admin) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
+
+    // Não deriva de `requireUser`: sem isto, conta admin criada em lote
+    // escaparia do bloqueio de senha provisória.
+    assegurarSenhaDefinida(ctx.user, path);
 
     return next({
       ctx: {
@@ -101,11 +132,13 @@ export const adminProcedure = t.procedure.use(
 // Apenas admin_master pode acessar
 export const adminMasterProcedure = t.procedure.use(
   t.middleware(async opts => {
-    const { ctx, next } = opts;
+    const { ctx, next, path } = opts;
 
     if (!ctx.user || getUserHierarquiaNivel(ctx.user) < HIERARQUIA_NIVEL.admin_master) {
       throw new TRPCError({ code: "FORBIDDEN", message: "Acesso exclusivo para Admin Master." });
     }
+
+    assegurarSenhaDefinida(ctx.user, path);
 
     return next({
       ctx: {

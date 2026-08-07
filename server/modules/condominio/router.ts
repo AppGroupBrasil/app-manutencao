@@ -2,7 +2,7 @@ import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
 import { z } from "zod";
 import { getDb } from "../../db";
 import { condominios } from "../../../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { seedModulosDoTenant } from "../../_core/modules";
 import type { Segmento } from "../../../shared/modules/registry";
@@ -14,13 +14,21 @@ const SEGMENTOS = [
   "oficina",
   "academia",
   "facilities",
+  "educacional",
 ] as const;
 
 export const condominioRouter = router({
+    // Lista todas as organizações que o usuário alcança — as próprias e as que
+    // chegam por vínculo (`usuario_condominios`), não só as de que ele é dono.
     list: protectedProcedure.query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(condominios).where(eq(condominios.sindicoId, ctx.user.id));
+      // Master enxerga a base inteira: montar um IN com todos os ids seria só
+      // uma forma cara de escrever "sem filtro".
+      if (ctx.tenant.isMaster()) return db.select().from(condominios);
+      const ids = await ctx.tenant.ids();
+      if (ids.length === 0) return [];
+      return db.select().from(condominios).where(inArray(condominios.id, ids));
     }),
 
     get: protectedProcedure

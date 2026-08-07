@@ -7,9 +7,9 @@
  * autenticada e o input passa a ser apenas uma *seleção* dentro desse conjunto.
  */
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Funcionario, User } from '../../drizzle/schema';
-import { condominios } from '../../drizzle/schema';
+import { condominios, usuarioCondominios } from '../../drizzle/schema';
 import { getDb } from '../db';
 import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from './trpc.types';
 
@@ -95,7 +95,19 @@ export function createTenantAccess(
       .from(condominios)
       .where(eq(condominios.sindicoId, user.id));
 
-    cache = proprios.map((c) => c.id);
+    // Vínculos explícitos (`usuario_condominios`): é o que permite gestor-chefe
+    // e gestor de unidade coexistirem, já que `sindicoId` comporta um só dono.
+    const vinculados = await db
+      .select({ id: usuarioCondominios.condominioId })
+      .from(usuarioCondominios)
+      .where(
+        and(
+          eq(usuarioCondominios.userId, user.id),
+          eq(usuarioCondominios.ativo, true),
+        ),
+      );
+
+    cache = [...new Set([...proprios, ...vinculados].map((c) => c.id))];
     return cache;
   }
 

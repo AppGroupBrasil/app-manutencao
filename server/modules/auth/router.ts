@@ -147,8 +147,9 @@ export const authRouter = router({
             return {
               success: true as const,
               tipo: "sindico" as const,
-              redirect: "/admin",
+              redirect: user.senhaProvisoria ? "/definir-senha" : "/admin",
               token: sessionToken,
+              senhaProvisoria: user.senhaProvisoria,
               user: { id: user.id, nome: user.name, email: user.email, role: user.role, tipoConta: user.tipoConta },
             };
           }
@@ -256,6 +257,9 @@ export const authRouter = router({
           message: "Login realizado com sucesso!",
           // Token retornado no body para WebViews que não persistem cookies
           token: sessionToken,
+          // Conta ainda com a senha de implantação: o client tem de mandar
+          // trocar antes de qualquer outra tela.
+          senhaProvisoria: user.senhaProvisoria,
           user: {
             id: user.id,
             nome: user.name,
@@ -263,7 +267,7 @@ export const authRouter = router({
           },
         };
       }),
-    
+
     // Solicitar recuperação de senha
     solicitarRecuperacao: publicProcedure
       .input(z.object({
@@ -379,6 +383,8 @@ export const authRouter = router({
           resetToken: null,
           resetTokenExpira: null,
           lastSignedIn: new Date(),
+          // Definir senha pelo link de recuperação também encerra a provisória.
+          senhaProvisoria: false,
         }).where(eq(users.id, user.id));
         
         // Criar sessão (cookie + token) para login automático
@@ -415,6 +421,7 @@ export const authRouter = router({
         avatarUrl: users.avatarUrl,
         tipoConta: users.tipoConta,
         role: users.role,
+        senhaProvisoria: users.senhaProvisoria,
         createdAt: users.createdAt,
         lastSignedIn: users.lastSignedIn,
       }).from(users)
@@ -495,14 +502,60 @@ export const authRouter = router({
         // Atualizar senha
         await db.update(users).set({
           senha: novaSenhaHash,
+          senhaProvisoria: false,
         }).where(eq(users.id, ctx.user.id));
-        
+
         return {
           success: true,
           message: "Senha alterada com sucesso!",
         };
       }),
-    
+
+    /**
+     * Primeira troca de senha de uma conta criada em lote.
+     *
+     * Diferente de `alterarSenha` por não pedir a senha atual: quem chega aqui
+     * acabou de entrar com a senha padrão de implantação, que é conhecida por
+     * quem fez a carga. Só funciona enquanto a conta está marcada como
+     * provisória — depois disso, a troca volta a exigir a senha atual.
+     */
+    definirSenhaProvisoria: protectedProcedure
+      .input(z.object({
+        novaSenha: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user.senhaProvisoria) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Esta conta já tem senha definida. Use a alteração de senha comum.",
+          });
+        }
+
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const bcrypt = await import('bcryptjs');
+
+        // Impede "trocar" a senha padrão por ela mesma.
+        const [atual] = await db.select({ senha: users.senha }).from(users)
+          .where(eq(users.id, ctx.user.id))
+          .limit(1);
+        if (atual?.senha && await bcrypt.compare(input.novaSenha, atual.senha)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A nova senha precisa ser diferente da senha provisória.",
+          });
+        }
+
+        await db.update(users).set({
+          senha: await bcrypt.hash(input.novaSenha, 10),
+          senhaProvisoria: false,
+        }).where(eq(users.id, ctx.user.id));
+
+        return { success: true, message: "Senha definida com sucesso!" };
+      }),
+
+
     // Atualizar email (com verificação de duplicidade)
     atualizarEmail: protectedProcedure
       .input(z.object({

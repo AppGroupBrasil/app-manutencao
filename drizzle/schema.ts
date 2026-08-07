@@ -124,6 +124,8 @@ export const users = pgTable("users", {
   // Hierarquia do sistema: admin_master > admin > responsavel > funcionario
   hierarquia: hierarquiaEnum("hierarquia").default("funcionario"),
   criadoPorUserId: integer("criadoPorUserId"),
+  // Conta criada com senha padrão: bloqueia o uso do sistema até a troca.
+  senhaProvisoria: boolean("senhaProvisoria").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -162,6 +164,9 @@ export const condominios = pgTable("condominios", {
   // Segmento de mercado — define o pacote de módulos padrão e o vocabulário.
   // Valores em shared/modules/registry.ts (Segmento).
   segmento: varchar("segmento", { length: 50 }).default("condominio"),
+  // Modalidade da unidade dentro do cliente (ex.: CEI, CCA, CDI). Rótulo livre:
+  // cada cliente usa a própria classificação, por isso não é enum.
+  tipoUnidade: varchar("tipoUnidade", { length: 20 }),
   // Sobrescrita de vocabulário por tenant: { "menu.inspections": "Inspeções de Solda" }
   labels: json("labels").$type<Record<string, string>>(),
   // Tema padrão da organização
@@ -175,6 +180,32 @@ export const condominios = pgTable("condominios", {
 
 export type Condominio = typeof condominios.$inferSelect;
 export type InsertCondominio = typeof condominios.$inferInsert;
+
+// ==================== VÍNCULO USUÁRIO <-> ORGANIZAÇÃO ====================
+/**
+ * Acesso de um usuário a uma organização, além do dono (`condominios.sindicoId`).
+ *
+ * Existe porque `sindicoId` é uma coluna só: sem esta tabela, um cliente com
+ * gestor-chefe sobre várias unidades não consegue ter também um gestor por
+ * unidade — só um dos dois seria dono. O papel distingue quem responde por todas
+ * as unidades (`chefe`) de quem responde pela sua (`gestor`).
+ *
+ * `server/_core/tenant.ts` soma estes vínculos aos condomínios de que o usuário
+ * é `sindicoId` para formar o conjunto de tenants acessíveis.
+ */
+export const usuarioCondominios = pgTable("usuario_condominios", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").references(() => users.id).notNull(),
+  condominioId: integer("condominioId").references(() => condominios.id).notNull(),
+  // 'chefe' | 'gestor' — validado em shared/const.ts (PAPEIS_UNIDADE).
+  papel: varchar("papel", { length: 20 }).default("gestor").notNull(),
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type UsuarioCondominio = typeof usuarioCondominios.$inferSelect;
+export type InsertUsuarioCondominio = typeof usuarioCondominios.$inferInsert;
 
 // ==================== REVISTAS ====================
 export const revistas = pgTable("revistas", {

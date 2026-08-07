@@ -6,6 +6,7 @@ import { lazy, Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import WhatsAppButton from "./components/WhatsAppButton";
+import { trpc } from "@/lib/trpc";
 
 // Lightweight pages – loaded eagerly (Home, Login, public routes)
 import Home from "./pages/Home";
@@ -13,6 +14,7 @@ import Home from "./pages/Home";
 // Portal pages (promoted from /funcionario/*)
 const FuncionarioLogin = lazy(() => import("./pages/FuncionarioLogin"));
 const SindicoLogin = lazy(() => import("./pages/SindicoLogin"));
+const DefinirSenha = lazy(() => import("./pages/DefinirSenha"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminModulos = lazy(() => import("./pages/AdminModulos"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
@@ -59,6 +61,19 @@ function PageLoader() {
   );
 }
 
+/**
+ * Manda a conta trocar a senha de implantação antes de qualquer tela.
+ * O bloqueio real é do servidor (`SENHA_PROVISORIA`); aqui é só evitar que o
+ * usuário caia num painel que responderia erro em toda chamada.
+ */
+function ExigeSenhaDefinida({ children }: { children: React.ReactNode }) {
+  const { data: usuario, isLoading } = trpc.auth.me.useQuery();
+
+  if (isLoading) return <PageLoader />;
+  if (usuario?.senhaProvisoria) return <Redirect to="/definir-senha" />;
+  return <>{children}</>;
+}
+
 function Router() {
   return (
     <Switch>
@@ -67,9 +82,16 @@ function Router() {
       <Route path="/login" component={FuncionarioLogin} />
       <Route path="/admin/login" component={SindicoLogin} />
       <Route path="/sindico/login" component={SindicoLogin} />
-      <Route path="/admin" component={AdminDashboard} />
-      <Route path="/admin/dashboard" component={AdminDashboard} />
-      <Route path="/admin/modulos" component={AdminModulos} />
+      <Route path="/definir-senha" component={DefinirSenha} />
+      <Route path="/admin">
+        <ExigeSenhaDefinida><AdminDashboard /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/admin/dashboard">
+        <ExigeSenhaDefinida><AdminDashboard /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/admin/modulos">
+        <ExigeSenhaDefinida><AdminModulos /></ExigeSenhaDefinida>
+      </Route>
       <Route path="/recuperar-senha" component={FuncionarioRecuperarSenha} />
       <Route path="/redefinir-senha/:token" component={FuncionarioRedefinirSenha} />
       <Route path="/dashboard" component={FuncionarioDashboard} />

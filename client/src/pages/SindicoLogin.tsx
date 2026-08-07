@@ -22,7 +22,8 @@ export default function SindicoLogin() {
       if (data.token) localStorage.setItem(SESSION_TOKEN_KEY, data.token);
       await utils.auth.me.invalidate();
       toast.success(`Bem-vindo, ${data.user.nome || data.user.email}!`);
-      setLocation("/dashboard");
+      // Conta criada em lote: o servidor recusa tudo até a senha ser trocada.
+      setLocation(data.senhaProvisoria ? "/definir-senha" : "/dashboard");
     },
     onError: (error) => toast.error(error.message),
   });

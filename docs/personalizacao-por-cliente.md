@@ -82,6 +82,26 @@ Tabelas que pendem do pai em **dois** saltos (`opcoes_votacao` → `votacoes` �
 `revistas`) não são suportadas por `via`, que faz um salto só. Nesses casos o
 escopo vem de outro campo do mesmo input — em `votacao.votar`, o `votacaoId`.
 
+## Hierarquia de acesso do cliente
+
+`condominios.sindicoId` guarda **um** dono por organização. Isso basta para
+"administradora com várias organizações", mas não para um cliente que precisa de
+um gestor-chefe sobre todas as unidades **e** um gestor por unidade — só um dos
+dois caberia na coluna.
+
+`usuario_condominios` (`userId`, `condominioId`, `papel`) acrescenta o segundo
+caminho de acesso. `server/_core/tenant.ts` soma dono ∪ vínculos ativos, e
+`ownership.ts` aceita as duas origens. Papéis em `shared/const.ts`:
+
+- `chefe` — vinculado a todas as unidades do cliente; alterna entre elas pelo
+  seletor (`x-condominio-id`), uma por vez.
+- `gestor` — vinculado só à sua unidade.
+
+Abaixo dos dois continuam os `funcionarios`, que já eram por unidade.
+
+Vínculo com `ativo: false` não concede acesso: é a forma de desligar um gestor
+sem apagar o histórico dele.
+
 ## Quem acessa o quê
 
 `vistorias`, `manutencoes`, `ocorrencias` e `checklists` aceitam usuário
@@ -215,6 +235,7 @@ primeira organização.
 | `shared/modules/registry.ts` | Catálogo: quais módulos existem e para quem |
 | `server/_core/modules.ts` | Habilitação por tenant, cache, seed |
 | `server/_core/tenant.ts` | Quais tenants a identidade autenticada acessa |
+| `usuario_condominios` | Vínculo gestor-chefe / gestor de unidade |
 | `server/_core/escopoRegistro.ts` | Valida que o id recebido é da organização |
 | `server/_core/autor.ts` | Autoria de usuário ou funcionário em timelines |
 | `server/_core/trpc.ts` | `tenantProcedure`, `moduloProcedure`, `moduloUserProcedure` |
