@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import { SENHA_DIGITOS, SENHA_ERR_MSG, SENHA_REGEX } from "@shared/const";
 import { AlertCircle, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldCheck } from "lucide-react";
 
 /**
@@ -42,8 +43,8 @@ export default function DefinirSenhaPage() {
     e.preventDefault();
     setErro("");
 
-    if (novaSenha.length < 8) {
-      setErro("A senha deve ter no mínimo 8 caracteres");
+    if (!SENHA_REGEX.test(novaSenha)) {
+      setErro(SENHA_ERR_MSG);
       return;
     }
     if (novaSenha !== confirmarSenha) {
@@ -112,10 +113,14 @@ export default function DefinirSenhaPage() {
                   <Input
                     id="novaSenha"
                     type={mostrarSenha ? "text" : "password"}
-                    placeholder="Mínimo 8 caracteres"
+                    // Teclado numérico no celular; o filtro impede colar letras.
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    maxLength={SENHA_DIGITOS}
+                    placeholder={`${SENHA_DIGITOS} dígitos numéricos`}
                     value={novaSenha}
-                    onChange={(e) => setNovaSenha(e.target.value)}
-                    className="pl-10 pr-10 h-12 rounded-xl border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+                    onChange={(e) => setNovaSenha(e.target.value.replace(/\D/g, ""))}
+                    className="pl-10 pr-10 h-12 rounded-xl border-gray-200 focus:border-orange-500 focus:ring-orange-500 tracking-widest"
                     disabled={emProgresso}
                     autoFocus
                   />
@@ -138,10 +143,13 @@ export default function DefinirSenhaPage() {
                   <Input
                     id="confirmarSenha"
                     type={mostrarSenha ? "text" : "password"}
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    maxLength={SENHA_DIGITOS}
                     placeholder="Repita a nova senha"
                     value={confirmarSenha}
-                    onChange={(e) => setConfirmarSenha(e.target.value)}
-                    className="pl-10 pr-10 h-12 rounded-xl border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+                    onChange={(e) => setConfirmarSenha(e.target.value.replace(/\D/g, ""))}
+                    className="pl-10 pr-10 h-12 rounded-xl border-gray-200 focus:border-orange-500 focus:ring-orange-500 tracking-widest"
                     disabled={emProgresso}
                   />
                 </div>

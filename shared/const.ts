@@ -17,3 +17,12 @@ export type PapelUnidade = (typeof PAPEIS_UNIDADE)[number];
  * O client reconhece este código para abrir a troca obrigatória de senha.
  */
 export const SENHA_PROVISORIA_ERR_MSG = 'SENHA_PROVISORIA';
+
+/**
+ * Senha do sistema: exatamente 6 dígitos numéricos.
+ * Escolha de produto — o público digita no celular, e o teclado numérico com
+ * tamanho fixo é mais rápido que uma senha livre. Vale para servidor e tela.
+ */
+export const SENHA_DIGITOS = 6;
+export const SENHA_REGEX = /^\d{6}$/;
+export const SENHA_ERR_MSG = 'A senha deve ter exatamente 6 dígitos numéricos';

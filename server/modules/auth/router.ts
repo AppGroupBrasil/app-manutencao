@@ -5,7 +5,7 @@ import { getDb } from "../../db";
 import { users } from "../../../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getSessionCookieOptions } from "../../_core/cookies";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, SENHA_ERR_MSG, SENHA_REGEX } from "@shared/const";
 import { rateLimiter, RATE_LIMIT_CONFIGS, getClientIp } from "../../_core/rateLimit";
 import { ENV } from "../../_core/env";
 import { sendEmail, isEmailConfigured } from "../../_core/email";
@@ -29,7 +29,7 @@ export const authRouter = router({
       .input(z.object({
         nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
         email: z.string().email("Email inválido"),
-        senha: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+        senha: z.string().regex(SENHA_REGEX, SENHA_ERR_MSG),
         tipoConta: z.enum(["sindico", "administradora"]).default("sindico"),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -355,7 +355,7 @@ export const authRouter = router({
     redefinirSenha: publicProcedure
       .input(z.object({
         token: z.string(),
-        novaSenha: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+        novaSenha: z.string().regex(SENHA_REGEX, SENHA_ERR_MSG),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -468,7 +468,7 @@ export const authRouter = router({
     alterarSenha: protectedProcedure
       .input(z.object({
         senhaAtual: z.string().min(1, "Senha atual é obrigatória"),
-        novaSenha: z.string().min(6, "Nova senha deve ter pelo menos 6 caracteres"),
+        novaSenha: z.string().regex(SENHA_REGEX, SENHA_ERR_MSG),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -521,7 +521,7 @@ export const authRouter = router({
      */
     definirSenhaProvisoria: protectedProcedure
       .input(z.object({
-        novaSenha: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres"),
+        novaSenha: z.string().regex(SENHA_REGEX, SENHA_ERR_MSG),
       }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user.senhaProvisoria) {
