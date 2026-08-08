@@ -150,7 +150,7 @@ export const manutencaoRouter = router({
       await db.insert(manutencaoTimeline).values({
         manutencaoId: result.id,
         tipo: "abertura",
-        descricao: `ManutenÃ§Ã£o criada: ${input.titulo}`,
+        descricao: `Manutenção criada: ${input.titulo}`,
         statusNovo: "pendente",
         userId: autorDaRequisicao(ctx).userId,
         userNome: autorDaRequisicao(ctx).nome,
@@ -371,7 +371,7 @@ export const manutencaoRouter = router({
       if (!db) throw new Error("Database not available");
       
       const [manutencao] = await db.select().from(manutencoes).where(eq(manutencoes.id, input.id));
-      if (!manutencao) throw new Error("ManutenÃ§Ã£o nÃ£o encontrada");
+      if (!manutencao) throw new Error("Manutenção não encontrada");
       
       const [condominio] = await db.select().from(condominios).where(eq(condominios.id, manutencao.condominioId));
       const imagens = await db.select().from(manutencaoImagens).where(eq(manutencaoImagens.manutencaoId, input.id));
@@ -399,7 +399,7 @@ export const manutencaoRouter = router({
         tempoEstimadoMinutos: manutencao.tempoEstimadoMinutos,
         fornecedor: manutencao.fornecedor,
         imagens: imagens.map(img => ({ url: img.url, legenda: img.legenda })),
-        condominioNome: condominio?.nome || "CondomÃ­nio",
+        condominioNome: condominio?.nome || "Organização",
         condominioLogo: condominio?.logoUrl,
         // CabeÃ§alho e RodapÃ© personalizados
         cabecalhoLogoUrl: condominio?.cabecalhoLogoUrl,
@@ -422,7 +422,7 @@ export const manutencaoRouter = router({
       if (!db) throw new Error("Database not available");
       
       const [manutencao] = await db.select().from(manutencoes).where(eq(manutencoes.id, input.id));
-      if (!manutencao) throw new Error("ManutenÃ§Ã£o nÃ£o encontrada");
+      if (!manutencao) throw new Error("Manutenção não encontrada");
       
       const [condominio] = await db.select().from(condominios).where(eq(condominios.id, manutencao.condominioId));
       const imagens = await db.select().from(manutencaoImagens).where(eq(manutencaoImagens.manutencaoId, input.id));
@@ -433,7 +433,7 @@ export const manutencaoRouter = router({
         tipo: "manutencao",
         manutencao: {
           ...manutencao,
-          organizacao: condominio?.nome || "OrganizaÃ§Ã£o",
+          organizacao: condominio?.nome || "Organização",
         },
         imagens,
         timeline,
@@ -459,7 +459,7 @@ export const manutencaoRouter = router({
       return {
         exportDate: new Date().toISOString(),
         tipo: "manutencoes",
-        organizacao: condominio?.nome || "OrganizaÃ§Ã£o",
+        organizacao: condominio?.nome || "Organização",
         total: manutencoesComDetalhes.length,
         manutencoes: manutencoesComDetalhes,
       };

@@ -1,7 +1,8 @@
 import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../../db";
-import { condominios } from "../../../drizzle/schema";
+import { condominios, condominioFuncoes, usuarioCondominios } from "../../../drizzle/schema";
 import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { seedModulosDoTenant } from "../../_core/modules";
@@ -109,6 +110,45 @@ export const condominioRouter = router({
         if (!db) throw new Error("Database not available");
         const { id, ...data } = input;
         await db.update(condominios).set(data).where(eq(condominios.id, id));
+        return { success: true };
+      }),
+
+    /**
+     * Exclui a organização. Módulos e vínculos de gestor são configuração e
+     * saem junto; qualquer registro operacional (OS, manutenção, funcionário…)
+     * barra a exclusão pela FK — apagar em cascata seria perder histórico sem
+     * o usuário perceber.
+     */
+    remove: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        try {
+          // Tudo numa transação: sem ela, a organização que a FK recusa apagar
+          // ficaria de pé só que sem módulos e sem gestor vinculado.
+          await db.transaction(async (tx) => {
+            await tx.delete(condominioFuncoes).where(eq(condominioFuncoes.condominioId, input.id));
+            await tx.delete(usuarioCondominios).where(eq(usuarioCondominios.condominioId, input.id));
+            await tx.delete(condominios).where(eq(condominios.id, input.id));
+          });
+        } catch (erro) {
+          // Drizzle embrulha o erro do driver: o código do Postgres fica no `cause`.
+          const codigo =
+            (erro as { code?: string }).code ??
+            (erro as { cause?: { code?: string } }).cause?.code;
+          if (codigo === "23503") {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message:
+                "Esta organização tem registros vinculados (funcionários, manutenções, ordens de serviço…). Remova-os antes de excluí-la.",
+            });
+          }
+          throw erro;
+        }
+
         return { success: true };
       }),
 

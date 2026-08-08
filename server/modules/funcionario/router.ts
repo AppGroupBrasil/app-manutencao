@@ -11,7 +11,7 @@ import {
   apps,
   revistas
 } from "../../../drizzle/schema";
-import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
+import { eq, and, desc, gte, inArray, lte, sql } from "drizzle-orm";
 import { rateLimiter, RATE_LIMIT_CONFIGS, getClientIp } from "../../_core/rateLimit";
 import { verifyCondominioOwnership } from "../../_core/ownership";
 import { ENV } from "../../_core/env";
@@ -22,13 +22,41 @@ import {
   findFuncionarioForLogin,
 } from "../../_core/funcionarioCompat";
 
+type CtxTenant = { tenant: { assert: (id: number) => Promise<void> } };
+
+/**
+ * `funcionarios.condominioId` chega cru no input. Sem conferir contra o tenant
+ * da sessão, qualquer conta autenticada lê, cria e apaga funcionário de
+ * organização alheia — as rotas de módulo (`manutencao.*`, `vistoria.*`) já
+ * fazem isso pelo `moduloProcedure`; estas aqui ficaram de fora.
+ */
+async function assertOrganizacao(ctx: CtxTenant, condominioId: number) {
+  await ctx.tenant.assert(condominioId);
+}
+
+/** Resolve a organização pelo próprio registro quando o input só traz o id. */
+async function assertFuncionario(ctx: CtxTenant, funcionarioId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [registro] = await db
+    .select({ condominioId: funcionarios.condominioId })
+    .from(funcionarios)
+    .where(eq(funcionarios.id, funcionarioId))
+    .limit(1);
+
+  if (!registro) throw new Error("Funcionário não encontrado");
+  await ctx.tenant.assert(registro.condominioId);
+}
+
 export const funcionarioRouter = router({
     list: protectedProcedure
       .input(z.object({ condominioId: z.number().optional(), revistaId: z.number().optional() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) return [];
         if (input.condominioId) {
+          await assertOrganizacao(ctx, input.condominioId);
           return db.select().from(funcionarios)
             .where(eq(funcionarios.condominioId, input.condominioId));
         }
@@ -36,6 +64,7 @@ export const funcionarioRouter = router({
           // Buscar o condomínio da revista e depois os funcionários
           const revista = await db.select().from(revistas).where(eq(revistas.id, input.revistaId));
           if (revista.length === 0) return [];
+          await assertOrganizacao(ctx, revista[0].condominioId);
           return db.select().from(funcionarios)
             .where(eq(funcionarios.condominioId, revista[0].condominioId));
         }
@@ -57,7 +86,7 @@ export const funcionarioRouter = router({
         condominiosIds: z.array(z.number()).optional(),
         appsIds: z.array(z.number()).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         let condominioId = input.condominioId;
@@ -66,6 +95,8 @@ export const funcionarioRouter = router({
           if (revista.length > 0) condominioId = revista[0].condominioId;
         }
         if (!condominioId) throw new Error("Condomínio não encontrado");
+        await assertOrganizacao(ctx, condominioId);
+        for (const extra of input.condominiosIds ?? []) await assertOrganizacao(ctx, extra);
         const { revistaId: _, condominiosIds, appsIds, ...data } = input;
         
         // Usar transação para garantir atomicidade
@@ -119,9 +150,11 @@ export const funcionarioRouter = router({
         condominiosIds: z.array(z.number()).optional(),
         appsIds: z.array(z.number()).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
+        await assertFuncionario(ctx, input.id);
+        for (const extra of input.condominiosIds ?? []) await assertOrganizacao(ctx, extra);
         const { id, senha, condominiosIds, appsIds, ...data } = input;
         // Se senha foi fornecida, fazer hash
         const updateData: Record<string, unknown> = { ...data };
@@ -164,9 +197,10 @@ export const funcionarioRouter = router({
 
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
+        await assertFuncionario(ctx, input.id);
         // Deletar vínculos e histórico em transação atômica
         await db.transaction(async (tx) => {
           await tx.delete(funcionarioFuncoes).where(eq(funcionarioFuncoes.funcionarioId, input.id));
@@ -186,9 +220,10 @@ export const funcionarioRouter = router({
         senha: z.string().regex(/^\d{6}$/, "Senha deve ter exatamente 6 dígitos numéricos"),
         loginAtivo: z.boolean().default(true),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
+        await assertFuncionario(ctx, input.funcionarioId);
 
         // Buscar funcionário para gerar loginUsuario a partir do nome
         const [func] = await db.select().from(funcionarios)
@@ -215,7 +250,8 @@ export const funcionarioRouter = router({
     // Listar funções do funcionário
     listFuncoes: protectedProcedure
       .input(z.object({ funcionarioId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertFuncionario(ctx, input.funcionarioId);
         const db = await getDb();
         if (!db) return [];
         const funcoes = await db.select().from(funcionarioFuncoes)
@@ -232,7 +268,8 @@ export const funcionarioRouter = router({
           habilitada: z.boolean(),
         })),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertFuncionario(ctx, input.funcionarioId);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -683,7 +720,8 @@ export const funcionarioRouter = router({
         sucesso: z.boolean().default(true),
         motivoFalha: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertOrganizacao(ctx, input.condominioId);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -714,16 +752,24 @@ export const funcionarioRouter = router({
         dataInicio: z.date().optional(),
         dataFim: z.date().optional(),
       }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) return { acessos: [], total: 0 };
-        
+
         const conditions = [];
         if (input.funcionarioId) {
+          await assertFuncionario(ctx, input.funcionarioId);
           conditions.push(eq(funcionarioAcessos.funcionarioId, input.funcionarioId));
         }
         if (input.condominioId) {
+          await assertOrganizacao(ctx, input.condominioId);
           conditions.push(eq(funcionarioAcessos.condominioId, input.condominioId));
+        }
+        // Sem filtro, a consulta varreria o histórico da base inteira.
+        if (!input.funcionarioId && !input.condominioId && !ctx.tenant.isMaster()) {
+          const permitidos = await ctx.tenant.ids();
+          if (permitidos.length === 0) return { acessos: [], total: 0 };
+          conditions.push(inArray(funcionarioAcessos.condominioId, permitidos));
         }
         if (input.dataInicio) {
           conditions.push(gte(funcionarioAcessos.dataHora, input.dataInicio));
@@ -778,7 +824,8 @@ export const funcionarioRouter = router({
         condominioId: z.number(),
         dias: z.number().default(30),
       }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertOrganizacao(ctx, input.condominioId);
         const db = await getDb();
         if (!db) return null;
         
@@ -838,7 +885,8 @@ export const funcionarioRouter = router({
     // Listar condomínios vinculados ao funcionário
     listCondominios: protectedProcedure
       .input(z.object({ funcionarioId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertFuncionario(ctx, input.funcionarioId);
         const db = await getDb();
         if (!db) return [];
         return db.select({
@@ -856,7 +904,8 @@ export const funcionarioRouter = router({
     // Listar apps vinculados ao funcionário
     listApps: protectedProcedure
       .input(z.object({ funcionarioId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertFuncionario(ctx, input.funcionarioId);
         const db = await getDb();
         if (!db) return [];
         return db.select({
@@ -879,7 +928,9 @@ export const funcionarioRouter = router({
         funcionarioId: z.number(),
         condominiosIds: z.array(z.number()),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertFuncionario(ctx, input.funcionarioId);
+        for (const alvo of input.condominiosIds) await assertOrganizacao(ctx, alvo);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -907,7 +958,8 @@ export const funcionarioRouter = router({
         funcionarioId: z.number(),
         appsIds: z.array(z.number()),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertFuncionario(ctx, input.funcionarioId);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         

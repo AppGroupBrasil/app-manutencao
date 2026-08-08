@@ -1,16 +1,67 @@
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, Building2, Users, Wrench, SlidersHorizontal } from "lucide-react";
+import { Loader2, LogOut, Building2, Users, UserCog, Wrench, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+
+/** Card quadrado: dois por linha em qualquer largura, do celular ao desktop. */
+function CardQuadrado({
+  icone,
+  titulo,
+  valor,
+  descricao,
+  onClick,
+}: {
+  icone: React.ReactNode;
+  titulo: string;
+  valor?: number | string;
+  descricao: string;
+  onClick: () => void;
+}) {
+  return (
+    <Card
+      onClick={onClick}
+      className="aspect-square cursor-pointer hover:border-blue-300 hover:shadow-md transition-all"
+    >
+      <CardContent className="h-full p-4 flex flex-col">
+        {icone}
+        <p className="font-semibold text-slate-800 mt-2">{titulo}</p>
+        {valor !== undefined && (
+          <p className="text-3xl font-bold text-slate-900 mt-auto">{valor}</p>
+        )}
+        <p className={`text-xs text-slate-500 ${valor === undefined ? "mt-auto" : "mt-1"}`}>
+          {descricao}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const utils = trpc.useContext();
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: condominios } = trpc.condominio.list.useQuery(undefined, { enabled: !!user });
+
+  // A hierarquia já vem resolvida do servidor: `condominio.list` devolve as 15
+  // unidades para o gestor-chefe e só a dele para o gestor de unidade.
+  const salvo = Number(localStorage.getItem("condominio_ativo"));
+  const organizacaoAtiva =
+    condominios?.find((c) => c.id === salvo) ?? condominios?.[0] ?? null;
+  const escopo = (condominios?.length ?? 0) > 1 ? "todas" : "unidade";
+
+  // Não existe visão somada das unidades: o número é o da organização ativa.
+  const { data: manutencoes } = trpc.manutencao.getStats.useQuery(
+    { condominioId: organizacaoAtiva?.id ?? 0 },
+    { enabled: !!organizacaoAtiva },
+  );
+  const { data: funcionarios } = trpc.funcionario.list.useQuery(
+    { condominioId: organizacaoAtiva?.id ?? 0 },
+    { enabled: !!organizacaoAtiva },
+  );
+  const { data: gestores } = trpc.gestores.listar.useQuery(undefined, { enabled: !!user });
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: async () => {
@@ -49,72 +100,60 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Bem-vindo, {user.name?.split(" ")[0] || "Admin"}</CardTitle>
-            <CardDescription>
-              Você está logado como <strong>{user.role}</strong> ({user.tipoConta}).
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-600">
-              Painel inicial. As páginas de gestão completas serão habilitadas conforme demanda.
-            </p>
-          </CardContent>
-        </Card>
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">
+            Olá, {user.name?.split(" ")[0] || "Admin"}
+          </h2>
+          <p className="text-sm text-slate-500">
+            {escopo === "todas"
+              ? `${condominios?.length ?? 0} organizações sob sua gestão`
+              : organizacaoAtiva
+                ? organizacaoAtiva.nome
+                : "Sem organização vinculada"}
+          </p>
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-blue-500" />
-                <CardTitle className="text-base">Condomínios</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{condominios?.length ?? "—"}</p>
-              <p className="text-xs text-slate-500 mt-1">cadastrados</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-green-500" />
-                <CardTitle className="text-base">Funcionários</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-500">Disponível em breve</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-orange-500" />
-                <CardTitle className="text-base">Ordens de Serviço</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-500">Disponível em breve</p>
-            </CardContent>
-          </Card>
-          <Card
-            className="cursor-pointer hover:border-slate-300 transition-colors"
+        {/* Quadrados, dois por linha: o mesmo desenho vale no celular. */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <CardQuadrado
+            icone={<Building2 className="w-6 h-6 text-blue-500" />}
+            titulo="Organizações"
+            valor={condominios?.length ?? "—"}
+            descricao="cadastradas · abrir, editar, excluir"
+            onClick={() => setLocation("/admin/organizacoes")}
+          />
+          <CardQuadrado
+            icone={<UserCog className="w-6 h-6 text-indigo-500" />}
+            titulo="Gestores"
+            valor={gestores?.length ?? "—"}
+            descricao="responsáveis pelas unidades"
+            onClick={() => setLocation("/admin/gestores")}
+          />
+          <CardQuadrado
+            icone={<Users className="w-6 h-6 text-emerald-500" />}
+            titulo="Funcionários"
+            valor={funcionarios?.length ?? "—"}
+            descricao={organizacaoAtiva ? `em ${organizacaoAtiva.nome}` : "cadastrados"}
+            onClick={() => setLocation("/admin/funcionarios")}
+          />
+          <CardQuadrado
+            icone={<Wrench className="w-6 h-6 text-orange-500" />}
+            titulo="Manutenções"
+            valor={manutencoes?.total ?? "—"}
+            descricao={
+              manutencoes
+                ? `${manutencoes.pendentes} pendentes · ${manutencoes.requerAcao} requerem ação`
+                : "registradas"
+            }
+            onClick={() => setLocation("/manutencoes")}
+          />
+          <CardQuadrado
+            icone={<SlidersHorizontal className="w-6 h-6 text-purple-500" />}
+            titulo="Módulos"
+            descricao="o que cada organização enxerga"
             onClick={() => setLocation("/admin/modulos")}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-5 h-5 text-purple-500" />
-                <CardTitle className="text-base">Módulos</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-500">
-                Definir o que cada organização enxerga
-              </p>
-            </CardContent>
-          </Card>
+          />
         </div>
       </main>
     </div>

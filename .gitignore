@@ -130,3 +130,6 @@ add-*.mjs
 manutencao.tar
 *.tar
 *.aab
+
+# Arquivos enviados pelo sistema: volume Docker em producao, nunca versionados
+uploads/

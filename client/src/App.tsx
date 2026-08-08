@@ -17,6 +17,10 @@ const SindicoLogin = lazy(() => import("./pages/SindicoLogin"));
 const DefinirSenha = lazy(() => import("./pages/DefinirSenha"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminModulos = lazy(() => import("./pages/AdminModulos"));
+const Manutencoes = lazy(() => import("./pages/Manutencoes"));
+const AdminOrganizacoes = lazy(() => import("./pages/AdminOrganizacoes"));
+const AdminFuncionarios = lazy(() => import("./pages/AdminFuncionarios"));
+const AdminGestores = lazy(() => import("./pages/AdminGestores"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
 const FuncionarioRecuperarSenha = lazy(() => import("./pages/FuncionarioRecuperarSenha"));
 const FuncionarioRedefinirSenha = lazy(() => import("./pages/FuncionarioRedefinirSenha"));
@@ -91,6 +95,18 @@ function Router() {
       </Route>
       <Route path="/admin/modulos">
         <ExigeSenhaDefinida><AdminModulos /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/admin/organizacoes">
+        <ExigeSenhaDefinida><AdminOrganizacoes /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/admin/funcionarios">
+        <ExigeSenhaDefinida><AdminFuncionarios /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/admin/gestores">
+        <ExigeSenhaDefinida><AdminGestores /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/manutencoes">
+        <ExigeSenhaDefinida><Manutencoes /></ExigeSenhaDefinida>
       </Route>
       <Route path="/recuperar-senha" component={FuncionarioRecuperarSenha} />
       <Route path="/redefinir-senha/:token" component={FuncionarioRedefinirSenha} />

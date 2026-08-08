@@ -76,6 +76,7 @@ import { registrosPersonalizadosRouter } from "./modules/funcoesPersonalizadas/r
 import { permissoesRouter } from "./modules/funcionario/permissoesRouter";
 import { templatesCategoriasRouter } from "./modules/configuracao/templatesRouter";
 import { hierarquiaRouter } from "./modules/hierarquia/router";
+import { gestoresRouter } from "./modules/gestores/router";
 
 
 
@@ -360,6 +361,9 @@ export const appRouter = router({
 
   // ==================== HIERARQUIA DE USUÁRIOS ====================
   hierarquia: hierarquiaRouter,
+
+  // Gestores das unidades (users + usuario_condominios), com escopo de tenant.
+  gestores: gestoresRouter,
 });
 
 export type AppRouter = typeof appRouter;

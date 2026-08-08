@@ -5,18 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/sonner";
+import { useCredenciaisLembradas } from "@/hooks/useCredenciaisLembradas";
 import { Building2, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
 
 export default function FuncionarioLogin() {
   const [, setLocation] = useLocation();
-  const [identificador, setIdentificador] = useState("");
-  const [senha, setSenha] = useState("");
+  const { salvas, lembrar, alternarLembrar, persistir } = useCredenciaisLembradas("app_login_lembrado");
+  const [identificador, setIdentificador] = useState(salvas.identificador);
+  const [senha, setSenha] = useState(salvas.senha);
   const [showSenha, setShowSenha] = useState(false);
 
   const utils = trpc.useContext();
   const loginMutation = trpc.auth.loginUnificado.useMutation({
-    onSuccess: async (data) => {
+    onSuccess: async (data, variables) => {
+      persistir({ identificador: variables.email, senha: variables.senha });
       if (data.token) {
         localStorage.setItem("app_session_token", data.token);
       }
@@ -98,6 +102,18 @@ export default function FuncionarioLogin() {
                     {showSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="lembrar"
+                  checked={lembrar}
+                  onCheckedChange={(valor) => alternarLembrar(valor === true)}
+                  disabled={loginMutation.isPending}
+                />
+                <Label htmlFor="lembrar" className="text-sm font-normal text-slate-600 cursor-pointer">
+                  Lembrar e-mail e senha neste dispositivo
+                </Label>
               </div>
 
               <Button
