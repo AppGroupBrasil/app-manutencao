@@ -64,6 +64,13 @@ const TODOS_SEGMENTOS: Segmento[] = [
 /** Núcleo operacional: serve a qualquer segmento. */
 const OPERACIONAL_BASE: Segmento[] = TODOS_SEGMENTOS;
 
+/**
+ * Todos menos rede educacional. O módulo continua existindo e disponível para
+ * condomínio — só não entra no pacote padrão de escola/creche, que trabalha
+ * comunicação e revista por fora do sistema.
+ */
+const EXCETO_EDUCACIONAL: Segmento[] = TODOS_SEGMENTOS.filter((s) => s !== 'educacional');
+
 export const MODULOS: readonly ModuloManifest[] = [
   // ==================== COMUNICAÇÃO ====================
   {
@@ -71,7 +78,7 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Avisos',
     categoria: 'comunicacao',
     descricao: 'Publicar avisos e comunicados',
-    segmentos: TODOS_SEGMENTOS,
+    segmentos: EXCETO_EDUCACIONAL,
   },
   {
     id: 'comunicados',
@@ -85,7 +92,7 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Notificações',
     categoria: 'comunicacao',
     descricao: 'Sistema de notificações',
-    segmentos: TODOS_SEGMENTOS,
+    segmentos: EXCETO_EDUCACIONAL,
   },
   {
     id: 'notificar-morador',
@@ -180,15 +187,16 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Controle de Pragas',
     categoria: 'operacional',
     descricao: 'Registros de dedetização e controle de pragas',
-    // Educacional entra aqui: dedetização é exigência sanitária em creche/escola.
-    segmentos: ['condominio', 'facilities', 'educacional'],
+    // Fora do pacote da ASA por decisão do cliente, apesar da exigência
+    // sanitária em creche/escola: eles controlam dedetização por fora.
+    segmentos: ['condominio', 'facilities'],
   },
   {
     id: 'jardinagem',
     nome: 'Jardinagem',
     categoria: 'operacional',
     descricao: 'Serviços de jardinagem e áreas verdes',
-    segmentos: ['condominio', 'facilities', 'educacional'],
+    segmentos: ['condominio', 'facilities'],
   },
 
   // ==================== INTERATIVO ====================
@@ -296,7 +304,7 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Meus Projetos',
     categoria: 'projetos',
     descricao: 'Apps, revistas e relatórios',
-    segmentos: TODOS_SEGMENTOS,
+    segmentos: EXCETO_EDUCACIONAL,
   },
 
   // ==================== GESTÃO ====================
