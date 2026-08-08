@@ -8,6 +8,8 @@ import {
   setModuloHabilitado,
 } from "../../_core/modules";
 import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from "../../_core/trpc.types";
+import { getDb } from "../../db";
+import { podeAdministrarOrganizacao } from "../../_core/ownership";
 import type { Segmento } from "../../../shared/modules/registry";
 
 /**
@@ -20,16 +22,41 @@ import type { Segmento } from "../../../shared/modules/registry";
  *    padrão do segmento. Sem isso, todo módulo novo vazava para todos.
  */
 
-function exigirAdmin(ctx: { user: { hierarquia?: string | null; role?: string | null } | null }) {
-  if (!ctx.user || getUserHierarquiaNivel(ctx.user) < HIERARQUIA_NIVEL.admin) {
+/**
+ * Admin interno (hierarquia) OU quem responde pela organização: dono ou gestor
+ * `chefe`. Só a hierarquia não serve — conta de cliente fica no nível 1 de
+ * propósito, e a regra antiga travava o gestor-chefe nos próprios módulos.
+ */
+async function podeConfigurarModulos(ctx: {
+  user: { id: number; hierarquia?: string | null; role?: string | null } | null;
+  condominioId: number;
+}): Promise<boolean> {
+  if (!ctx.user) return false;
+  if (getUserHierarquiaNivel(ctx.user) >= HIERARQUIA_NIVEL.admin) return true;
+
+  const db = await getDb();
+  if (!db) return false;
+  return podeAdministrarOrganizacao(db, ctx.user.id, ctx.condominioId);
+}
+
+async function exigirAdmin(ctx: {
+  user: { id: number; hierarquia?: string | null; role?: string | null } | null;
+  condominioId: number;
+}) {
+  if (!(await podeConfigurarModulos(ctx))) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar módulos.",
+      message: "Apenas o gestor-chefe ou o dono da organização altera módulos.",
     });
   }
 }
 
 export const funcoesCondominioRouter = router({
+  /** A tela pergunta antes de mostrar os controles de ligar/desligar. */
+  podeConfigurar: tenantProcedure
+    .input(z.object({ condominioId: z.number().optional() }).optional())
+    .query(({ ctx }) => podeConfigurarModulos(ctx)),
+
   // Catálogo visível para ESTE tenant
   listarDisponiveis: tenantProcedure
     .input(z.object({ condominioId: z.number().optional() }).optional())
@@ -70,7 +97,7 @@ export const funcoesCondominioRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      exigirAdmin(ctx);
+      await exigirAdmin(ctx);
       await setModuloHabilitado(ctx.condominioId, input.funcaoId, input.habilitada);
       return { success: true, condominioId: ctx.condominioId, funcaoId: input.funcaoId, habilitada: input.habilitada };
     }),
@@ -88,7 +115,7 @@ export const funcoesCondominioRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      exigirAdmin(ctx);
+      await exigirAdmin(ctx);
       for (const funcao of input.funcoes) {
         await setModuloHabilitado(ctx.condominioId, funcao.funcaoId, funcao.habilitada);
       }
@@ -104,7 +131,7 @@ export const funcoesCondominioRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      exigirAdmin(ctx);
+      await exigirAdmin(ctx);
       const criados = await seedModulosDoTenant(
         ctx.condominioId,
         (input.segmento as Segmento) || undefined,

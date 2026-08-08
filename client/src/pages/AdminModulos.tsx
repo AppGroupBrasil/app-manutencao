@@ -6,19 +6,14 @@ import { ModulosConfig } from "@/components/ModulosConfig";
 import { toast } from "@/components/ui/sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
-// O servidor recusa quem não for admin; aqui é só para não mostrar uma tela
-// que só produziria erro ao salvar.
-const HIERARQUIAS_ADMIN = new Set(["admin", "admin_master"]);
-const ROLES_ADMIN = new Set(["admin", "master", "sindico"]);
-
-function podeConfigurar(user: { hierarquia?: string | null; role?: string | null }): boolean {
-  if (user.hierarquia) return HIERARQUIAS_ADMIN.has(user.hierarquia);
-  return ROLES_ADMIN.has(user.role ?? "");
-}
-
 export default function AdminModulos() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading } = trpc.auth.me.useQuery();
+  // Quem decide é o servidor: dono da organização ou gestor-chefe. A regra
+  // antiga olhava `users.hierarquia`, que fica no default para toda conta de
+  // cliente — na prática ninguém do cliente conseguia abrir esta tela.
+  const { data: podeConfigurar, isLoading: carregandoPermissao } =
+    trpc.funcoesCondominio.podeConfigurar.useQuery(undefined, { enabled: !!user });
 
   useEffect(() => {
     if (isLoading) return;
@@ -27,13 +22,13 @@ export default function AdminModulos() {
       setLocation("/login");
       return;
     }
-    if (!podeConfigurar(user)) {
-      toast.error("Apenas administradores podem configurar módulos.");
+    if (!carregandoPermissao && podeConfigurar === false) {
+      toast.error("Apenas o gestor-chefe ou o dono da organização configura módulos.");
       setLocation("/admin");
     }
-  }, [isLoading, user, setLocation]);
+  }, [isLoading, user, carregandoPermissao, podeConfigurar, setLocation]);
 
-  if (isLoading || !user || !podeConfigurar(user)) {
+  if (isLoading || carregandoPermissao || !user || !podeConfigurar) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
