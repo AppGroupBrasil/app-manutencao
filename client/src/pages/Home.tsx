@@ -220,6 +220,11 @@ export default function Home() {
             </span>
           </h1>
 
+          {/* Complemento da chamada: a adaptação está incluída. */}
+          <p className="text-base md:text-lg font-medium text-slate-700 mt-3">
+            Sem nenhum custo adicional para você.
+          </p>
+
           <p className="text-lg text-slate-600 max-w-2xl mx-auto mt-5">
             Ordens de serviço, vistorias, checklists e tarefas da equipe num sistema só — com
             protocolo, foto e histórico de tudo o que foi feito.
