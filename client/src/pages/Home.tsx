@@ -213,8 +213,11 @@ export default function Home() {
           </span>
 
           <h1 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight mt-5">
-            A manutenção da sua operação
-            <span className="block text-blue-600">registrada e sob controle</span>
+            App Manutenção
+            {/* A frase é longa para um título: entra menor, sem virar parede de texto. */}
+            <span className="block text-blue-600 text-xl md:text-3xl mt-3">
+              Manutenção feita sob medida para a sua empresa, de acordo com a sua necessidade
+            </span>
           </h1>
 
           <p className="text-lg text-slate-600 max-w-2xl mx-auto mt-5">
