@@ -1,10 +1,23 @@
-import { protectedProcedure, router } from "../../_core/trpc";
+import { protectedOrFuncionarioProcedure, router } from "../../_core/trpc";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 
+/**
+ * Pasta de quem enviou. Funcionário não tem linha em `users`, então entra com
+ * prefixo próprio para não cair na pasta de um usuário qualquer.
+ */
+function pastaDoAutor(ctx: {
+  user: { id: number } | null;
+  funcionario: { id: number } | null;
+}): string {
+  if (ctx.user) return String(ctx.user.id);
+  if (ctx.funcionario) return `func-${ctx.funcionario.id}`;
+  return "anonimo";
+}
+
 export const uploadRouter = router({
-  image: protectedProcedure
+  image: protectedOrFuncionarioProcedure
     .input(z.object({
       fileName: z.string(),
       fileType: z.string(),
@@ -54,7 +67,7 @@ export const uploadRouter = router({
       const originalExt = fileName.split(".").pop() || "jpg";
       const finalExt = finalContentType === "image/jpeg" ? "jpg" : originalExt;
       const uniqueId = nanoid(10);
-      const fileKey = `${folder}/${ctx.user.id}/${uniqueId}.${finalExt}`;
+      const fileKey = `${folder}/${pastaDoAutor(ctx)}/${uniqueId}.${finalExt}`;
       
       // Upload to storage
       try {
@@ -68,7 +81,7 @@ export const uploadRouter = router({
     }),
 
   // Upload de arquivos genéricos (PDF, DOC, etc.)
-  file: protectedProcedure
+  file: protectedOrFuncionarioProcedure
     .input(z.object({
       fileName: z.string(),
       fileType: z.string(),
@@ -104,7 +117,7 @@ export const uploadRouter = router({
       // Generate unique file key
       const ext = fileName.split(".").pop() || "bin";
       const uniqueId = nanoid(10);
-      const fileKey = `${folder}/${ctx.user.id}/${uniqueId}.${ext}`;
+      const fileKey = `${folder}/${pastaDoAutor(ctx)}/${uniqueId}.${ext}`;
       
       // Upload to S3
       const { url } = await storagePut(fileKey, buffer, fileType);

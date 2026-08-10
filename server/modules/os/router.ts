@@ -1,4 +1,4 @@
-import { publicProcedure, moduloProcedure, router } from "../../_core/trpc";
+import { publicProcedure, moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
@@ -22,7 +22,7 @@ import {
   condominios,
   users
 } from "../../../drizzle/schema"; // Adjusted path
-import { eq, and, desc, like, or, sql, gte, inArray, asc, not } from "drizzle-orm";
+import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
@@ -32,44 +32,53 @@ import { autorDaRequisicao } from "../../_core/autor";
 // rotas de cadastro auxiliar aponta para categoria/prioridade/status/setor.
 // Rotas de registro filho (responsavel, material, orcamento, imagem) ja recebem
 // `ordemServicoId`, entao ficam cobertas pelo padrao.
+const escopoOs = escopoPorRegistro(
+  {
+    id: direto(ordensServico),
+    ordemServicoId: direto(ordensServico),
+    osId: direto(ordensServico),
+    categoriaId: direto(osCategorias),
+    prioridadeId: direto(osPrioridades),
+    statusId: direto(osStatus),
+    setorId: direto(osSetores),
+    // Impede vincular a OS a registros de outra organizacao
+    manutencaoId: direto(manutencoes),
+    funcionarioId: direto(funcionarios),
+  },
+  {
+    updateCategoria: { id: direto(osCategorias) },
+    deleteCategoria: { id: direto(osCategorias) },
+    updatePrioridade: { id: direto(osPrioridades) },
+    deletePrioridade: { id: direto(osPrioridades) },
+    updateOsStatus: { id: direto(osStatus) },
+    deleteStatus: { id: direto(osStatus) },
+    updateSetor: { id: direto(osSetores) },
+    deleteSetor: { id: direto(osSetores) },
+    deletarImagem: { imagemId: via(osImagens, "ordemServicoId", ordensServico) },
+    deletarAnexo: { anexoId: via(osAnexos, "ordemServicoId", ordensServico) },
+    // Nestas, `id` e o registro filho e `ordemServicoId` ja garante o escopo.
+    removeResponsavel: { id: via(osResponsaveis, "ordemServicoId", ordensServico) },
+    removeMaterial: { id: via(osMateriais, "ordemServicoId", ordensServico) },
+    removeOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+    aprovarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+    rejeitarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+    removeImagem: { id: via(osImagens, "ordemServicoId", ordensServico) },
+  },
+);
+
 const osProcedure = moduloProcedure(
   "ordens-servico",
-  escopoPorRegistro(
-    {
-      id: direto(ordensServico),
-      ordemServicoId: direto(ordensServico),
-      osId: direto(ordensServico),
-      categoriaId: direto(osCategorias),
-      prioridadeId: direto(osPrioridades),
-      statusId: direto(osStatus),
-      setorId: direto(osSetores),
-      // Impede vincular a OS a registros de outra organizacao
-      manutencaoId: direto(manutencoes),
-      funcionarioId: direto(funcionarios),
-    },
-    {
-      updateCategoria: { id: direto(osCategorias) },
-      deleteCategoria: { id: direto(osCategorias) },
-      updatePrioridade: { id: direto(osPrioridades) },
-      deletePrioridade: { id: direto(osPrioridades) },
-      updateOsStatus: { id: direto(osStatus) },
-      deleteStatus: { id: direto(osStatus) },
-      updateSetor: { id: direto(osSetores) },
-      deleteSetor: { id: direto(osSetores) },
-      deletarImagem: { imagemId: via(osImagens, "ordemServicoId", ordensServico) },
-      deletarAnexo: { anexoId: via(osAnexos, "ordemServicoId", ordensServico) },
-      // Nestas, `id` e o registro filho e `ordemServicoId` ja garante o escopo.
-      removeResponsavel: { id: via(osResponsaveis, "ordemServicoId", ordensServico) },
-      removeMaterial: { id: via(osMateriais, "ordemServicoId", ordensServico) },
-      removeOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-      aprovarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-      rejeitarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-      removeImagem: { id: via(osImagens, "ordemServicoId", ordensServico) },
-    },
-  ),
+  escopoOs,
   // Permissao individual do funcionario vale aqui, nao so na tela.
   "ordens",
 );
+
+/**
+ * Cadastros e configuracao da unidade: categoria, prioridade, status, setor e
+ * avisos de abertura. Sao decisao do gestor, entao ficam fora do alcance do
+ * funcionario mesmo quando ele tem permissao de criar O.S.
+ */
+const osConfigProcedure = moduloUserProcedure("ordens-servico", escopoOs);
 
 /**
  * Aviso de abertura de O.S. aos funcionários da unidade.
@@ -187,7 +196,7 @@ export const osRouter = router({
         return config;
       }),
     
-    updateConfiguracoes: osProcedure
+    updateConfiguracoes: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         habilitarOrcamentos: z.boolean().optional(),
@@ -256,7 +265,7 @@ export const osRouter = router({
         return categorias;
       }),
     
-    createCategoria: osProcedure
+    createCategoria: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -280,7 +289,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateCategoria: osProcedure
+    updateCategoria: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -303,7 +312,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteCategoria: osProcedure
+    deleteCategoria: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -360,7 +369,7 @@ export const osRouter = router({
         return prioridades;
       }),
     
-    createPrioridade: osProcedure
+    createPrioridade: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -388,7 +397,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updatePrioridade: osProcedure
+    updatePrioridade: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -413,7 +422,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deletePrioridade: osProcedure
+    deletePrioridade: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -474,7 +483,7 @@ export const osRouter = router({
         return statusList;
       }),
     
-    createStatus: osProcedure
+    createStatus: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -503,7 +512,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateOsStatus: osProcedure
+    updateOsStatus: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -530,7 +539,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteStatus: osProcedure
+    deleteStatus: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -558,7 +567,7 @@ export const osRouter = router({
           .orderBy(asc(osSetores.nome));
       }),
     
-    createSetor: osProcedure
+    createSetor: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -577,7 +586,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateSetor: osProcedure
+    updateSetor: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -598,7 +607,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteSetor: osProcedure
+    deleteSetor: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -1943,9 +1952,14 @@ export const osRouter = router({
           .from(ordensServico)
           .where(and(
             eq(ordensServico.condominioId, input.condominioId),
-            sql`DATEDIFF(NOW(), createdAt) > COALESCE(tempoEstimadoDias, 30)`,
-            statusConcluidoIds.length > 0 
-              ? not(inArray(ordensServico.statusId, statusConcluidoIds))
+            sql`(CURRENT_DATE - ${ordensServico.createdAt}::date) > COALESCE(${ordensServico.tempoEstimadoDias}, 30)`,
+            // O.S. sem status também conta: `NOT IN` sobre NULL devolve NULL e
+            // sumiria com ela da contagem.
+            statusConcluidoIds.length > 0
+              ? or(
+                  isNull(ordensServico.statusId),
+                  not(inArray(ordensServico.statusId, statusConcluidoIds)),
+                )
               : sql`1=1`
           ));
         const atrasadas = Number(atrasadasResult[0]?.count || 0);
@@ -1973,8 +1987,8 @@ export const osRouter = router({
         
         // Por Mês (últimos 12 meses)
         const porMesResult = await db.select({
-          mes: sql<number>`MONTH(createdAt)`,
-          ano: sql<number>`YEAR(createdAt)`,
+          mes: sql<number>`EXTRACT(MONTH FROM ${ordensServico.createdAt})::int`,
+          ano: sql<number>`EXTRACT(YEAR FROM ${ordensServico.createdAt})::int`,
           count: sql<number>`count(*)`
         })
           .from(ordensServico)
@@ -1982,7 +1996,10 @@ export const osRouter = router({
             eq(ordensServico.condominioId, input.condominioId),
             gte(ordensServico.createdAt, new Date(Date.now() - 365 * 24 * 60 * 60 * 1000))
           ))
-          .groupBy(sql`MONTH(createdAt), YEAR(createdAt)`);
+          .groupBy(
+            sql`EXTRACT(MONTH FROM ${ordensServico.createdAt})`,
+            sql`EXTRACT(YEAR FROM ${ordensServico.createdAt})`,
+          );
         
         const porMes = porMesResult.map(item => ({
           mes: Number(item.mes),
@@ -2024,7 +2041,7 @@ export const osRouter = router({
       }),
 
     /** Liga/desliga o aviso no aplicativo para toda a equipe da unidade. */
-    setAutoNotificar: osProcedure
+    setAutoNotificar: osConfigProcedure
       .input(z.object({ condominioId: z.number(), ativo: z.boolean() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -2039,7 +2056,7 @@ export const osRouter = router({
       }),
 
     /** Marca/desmarca um funcionário para receber o e-mail de abertura. */
-    setNotificarEmail: osProcedure
+    setNotificarEmail: osConfigProcedure
       .input(z.object({ funcionarioId: z.number(), ativo: z.boolean() }))
       .mutation(async ({ input }) => {
         const db = await getDb();

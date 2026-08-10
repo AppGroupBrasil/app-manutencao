@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { moduloProcedure, publicProcedure, router } from "../../_core/trpc";
@@ -191,7 +192,14 @@ export const qrcodeRouter = router({
         .where(eq(qrcodes.token, input.token))
         .limit(1);
 
-      if (!ponto || !ponto.ativo) throw new Error("QR Code inválido ou desativado");
+      // Código errado ou ponto desligado é situação normal de quem escaneia:
+      // responde 404 em vez de 500, que na tela pública vira "erro do sistema".
+      if (!ponto || !ponto.ativo) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "QR Code inválido ou desativado",
+        });
+      }
 
       const urls: string[] = [];
       for (const imagem of input.imagens ?? []) {

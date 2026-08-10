@@ -100,6 +100,19 @@ describe("Acesso a tenant", () => {
     expect(await acesso.require(5)).toBe(5);
   });
 
+  it("funcionário de várias unidades trabalha na que selecionou", async () => {
+    // Supervisor de rota: o portal dele mostra o seletor de unidade, então a
+    // unidade escolhida tem de valer também nas rotas que não recebem o id.
+    const acesso = createTenantAccess(null, funcionarioDoTenant(5), {
+      idsFornecidos: [5, 8],
+      selecionado: 8,
+    });
+
+    expect(await acesso.require()).toBe(8);
+    expect(await acesso.require(8)).toBe(8);
+    await expect(acesso.require(9)).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("identidade sem tenant é rejeitada", async () => {
     const acesso = createTenantAccess(null, null);
     expect(await acesso.ids()).toEqual([]);

@@ -9,7 +9,7 @@
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import type { Funcionario, User } from '../../drizzle/schema';
-import { condominios, usuarioCondominios } from '../../drizzle/schema';
+import { condominios, funcionarioCondominios, usuarioCondominios } from '../../drizzle/schema';
 import { getDb } from '../db';
 import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from './trpc.types';
 
@@ -66,19 +66,39 @@ export function createTenantAccess(
       return cache;
     }
 
-    // Funcionário pertence a exatamente um tenant — não precisa consultar.
-    if (funcionario) {
-      cache = [funcionario.condominioId];
-      return cache;
-    }
-
-    if (!user) {
+    if (!user && !funcionario) {
       cache = [];
       return cache;
     }
 
     const db = await getDb();
-    if (!db) {
+
+    /**
+     * Funcionário: a unidade do cadastro mais as que o gestor vinculou.
+     *
+     * O vínculo múltiplo existe para supervisor de rota, e o portal dele já
+     * oferece o seletor de unidade — sem ler `funcionario_condominios` aqui, a
+     * unidade escolhida no seletor voltaria FORBIDDEN em toda chamada. Sem
+     * banco, resta a unidade do cadastro, que já vem na sessão.
+     */
+    if (funcionario) {
+      const vinculos = db
+        ? await db
+            .select({ id: funcionarioCondominios.condominioId })
+            .from(funcionarioCondominios)
+            .where(
+              and(
+                eq(funcionarioCondominios.funcionarioId, funcionario.id),
+                eq(funcionarioCondominios.ativo, true),
+              ),
+            )
+        : [];
+
+      cache = [...new Set([funcionario.condominioId, ...vinculos.map((v) => v.id)])];
+      return cache;
+    }
+
+    if (!user || !db) {
       cache = [];
       return cache;
     }
@@ -129,18 +149,19 @@ export function createTenantAccess(
    * Organização ativa quando a rota não informa `condominioId`.
    *
    * Não pode lançar por ambiguidade: existem muitas rotas legítimas que operam
-   * por `id` do registro e nunca receberam o tenant. Ordem: funcionário sempre
-   * usa o próprio; depois a seleção explícita do client; senão a primeira.
+   * por `id` do registro e nunca receberam o tenant. Ordem: a seleção explícita
+   * do client, quando permitida; senão a primeira unidade do conjunto — que
+   * para o funcionário de uma unidade só é sempre a dele.
    */
   async function ativo(): Promise<number> {
-    if (funcionario) return funcionario.condominioId;
-
     const permitidos = await ids();
 
     const selecionado = options.selecionado;
     if (selecionado != null && (isMaster() || permitidos.includes(selecionado))) {
       return selecionado;
     }
+
+    if (funcionario) return funcionario.condominioId;
 
     if (permitidos.length === 0) throw semTenant();
     return permitidos[0];

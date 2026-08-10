@@ -1,6 +1,7 @@
 ﻿import { z } from "zod";
 import { eq, desc, and, like, or, sql, isNotNull } from "drizzle-orm";
-import { moduloProcedure, router } from "../../_core/trpc";
+import { TRPCError } from "@trpc/server";
+import { moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
@@ -34,6 +35,9 @@ import {
 
 // Exige o modulo "checklists" habilitado e valida que cada id recebido pertence
 // a organizacao da requisicao.
+/** `id` aqui é sempre o modelo, nunca um checklist. */
+const escopoTemplates = escopoPorRegistro({ id: direto(checklistTemplates) });
+
 const checklistProcedure = moduloProcedure(
   "checklists",
   escopoPorRegistro(
@@ -55,11 +59,45 @@ const checklistProcedure = moduloProcedure(
       // é escopável, e a exclusão casa os dois.
       removerAnexoItem: { itemId: via(checklistItens, "checklistId", checklists) },
       atualizarReporte: { id: direto(reportes) },
+      // Sem isto o `id` do template cairia no mapa padrao e seria conferido
+      // contra `checklists`, deixando template de outro cliente passar.
+      getTemplate: { id: direto(checklistTemplates) },
     },
   ),
   // Permissao individual do funcionario vale aqui, nao so na tela.
   "checklists",
 );
+
+/**
+ * Modelos de checklist: catalogo da unidade, decisao do gestor. O funcionario
+ * usa o modelo para preencher, mas nao cria nem apaga modelo.
+ */
+const checklistTemplateProcedure = moduloUserProcedure("checklists", escopoTemplates);
+
+/**
+ * Modelo de checklist que o cliente pode alterar.
+ *
+ * O escopo por registro cobre o template de outra organização, mas não o
+ * `isPadrao`, que é do catálogo da plataforma e vem sem `condominioId` — sem
+ * esta trava, um cliente apagaria o modelo que todos usam.
+ */
+async function assegurarTemplateDoCliente(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  templateId: number,
+): Promise<void> {
+  const [template] = await db
+    .select({ isPadrao: checklistTemplates.isPadrao })
+    .from(checklistTemplates)
+    .where(eq(checklistTemplates.id, templateId))
+    .limit(1);
+
+  if (template?.isPadrao) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Modelo padrão do sistema não pode ser alterado nem removido.",
+    });
+  }
+}
 
 /** Protocolo do reporte no formato do Manutenção X: RPT-AAMMDD-9999. */
 function gerarProtocoloReporte(): string {
@@ -651,7 +689,7 @@ export const checklistRouter = router({
       return { ...template, itens };
     }),
 
-  createTemplate: checklistProcedure
+  createTemplate: checklistTemplateProcedure
     .input(z.object({
       condominioId: z.number().optional(),
       nome: z.string(),
@@ -684,7 +722,7 @@ export const checklistRouter = router({
       return { id: templateId };
     }),
 
-  updateTemplate: checklistProcedure
+  updateTemplate: checklistTemplateProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().optional(),
@@ -697,9 +735,11 @@ export const checklistRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      
+
       const { id, itens, ...updateData } = input;
-      
+
+      await assegurarTemplateDoCliente(db, id);
+
       if (Object.keys(updateData).length > 0) {
         await db.update(checklistTemplates)
           .set(updateData)
@@ -725,12 +765,14 @@ export const checklistRouter = router({
       return { success: true };
     }),
 
-  deleteTemplate: checklistProcedure
+  deleteTemplate: checklistTemplateProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      
+
+      await assegurarTemplateDoCliente(db, input.id);
+
       // Deletar itens primeiro
       await db.delete(checklistTemplateItens)
         .where(eq(checklistTemplateItens.templateId, input.id));
