@@ -1,0 +1,35 @@
+name: Testar envio de e-mail
+
+# Dispara um alerta de vencimento de mentira, pelo mesmo caminho do alerta real,
+# para conferir se o envio de e-mail está funcionando em produção.
+on:
+  workflow_dispatch:
+    inputs:
+      destinatario:
+        description: "Para qual e-mail enviar o teste"
+        required: true
+        type: string
+
+env:
+  APP_PATH: /opt/app-manutencao
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Enviar
+        env:
+          DESTINATARIO: ${{ inputs.destinatario }}
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose run --rm --no-deps app \
+               node dist/testar-email.js '$DESTINATARIO'"
