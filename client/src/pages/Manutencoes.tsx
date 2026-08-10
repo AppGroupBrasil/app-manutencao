@@ -23,6 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
+import { BotaoQrCode } from "@/components/BotaoQrCode";
 import {
   ArrowLeft,
   CalendarDays,
@@ -31,6 +33,7 @@ import {
   Loader2,
   MapPin,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Trash2,
@@ -41,6 +44,39 @@ import {
 // O header `x-condominio-id` é lido em main.tsx: rotas que recebem só `id`
 // (timeline, imagens, update) resolvem o tenant por ele, não pelo input.
 const TENANT_ATIVO_KEY = "condominio_ativo";
+
+/** Baixa o base64 devolvido pelo servidor como arquivo. */
+function baixarPdfBase64(base64: string, nome: string) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nome;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Texto do compartilhamento, no mesmo formato das outras funções. */
+function mensagemDaManutencao(m: {
+  protocolo: string;
+  titulo: string;
+  status: string;
+  prioridade?: string | null;
+  localizacao?: string | null;
+  responsavelNome?: string | null;
+}): string {
+  return [
+    "*Manutenção*",
+    `*Protocolo:* ${m.protocolo}`,
+    `*Título:* ${m.titulo}`,
+    `*Status:* ${m.status}`,
+    m.prioridade ? `*Prioridade:* ${m.prioridade}` : "",
+    m.localizacao ? `*Local:* ${m.localizacao}` : "",
+    m.responsavelNome ? `*Responsável:* ${m.responsavelNome}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 const STATUS = ["pendente", "acao_necessaria", "realizada", "finalizada", "reaberta", "rascunho"] as const;
 const PRIORIDADES = ["baixa", "media", "alta", "urgente"] as const;
@@ -169,6 +205,11 @@ export default function Manutencoes() {
     { condominioId: orgId ?? 0 },
     { enabled: habilitado },
   );
+
+  // O detalhe tem o PDF dele; este é o do cartão da lista, sem abrir o registro.
+  const gerarPdfDaLista = trpc.manutencao.generatePdf.useMutation({
+    onError: (e) => toast.error(e.message || "Erro ao gerar o PDF"),
+  });
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -317,6 +358,41 @@ export default function Manutencoes() {
                       <CalendarDays className="w-3 h-3" /> aberta em {formatarData(m.createdAt)}
                     </span>
                     {m.responsavelNome && <span>resp. {m.responsavelNome}</span>}
+                  </div>
+
+                  {/* Mesmo rodapé das outras funções. O clique aqui não pode
+                      abrir o detalhe junto, por isso o stopPropagation. */}
+                  <div
+                    className="w-full flex flex-wrap items-center gap-2 mt-2 pt-2 border-t"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {m.shareToken ? (
+                      <BotaoQrCode
+                        titulo={m.titulo}
+                        url={`${typeof window !== "undefined" ? window.location.origin : ""}/registro/manutencao/${m.shareToken}`}
+                      />
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={gerarPdfDaLista.isPending}
+                      onClick={async () => {
+                        const res = await gerarPdfDaLista.mutateAsync({ id: m.id });
+                        baixarPdfBase64(res.pdf, `manutencao-${m.id}.pdf`);
+                      }}
+                    >
+                      {gerarPdfDaLista.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Printer className="w-4 h-4 mr-2" />
+                      )}
+                      PDF
+                    </Button>
+                    <BotaoCompartilhar
+                      condominioId={orgId ?? 0}
+                      mensagem={mensagemDaManutencao(m)}
+                      rotulo="Compartilhar"
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -608,7 +684,6 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
     observacoes: string;
     localizacao: string;
     responsavelNome: string;
-    fornecedor: string;
     status: Status;
     prioridade: Prioridade;
     tipo: Tipo;
@@ -624,7 +699,6 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
       observacoes: item.observacoes ?? "",
       localizacao: item.localizacao ?? "",
       responsavelNome: item.responsavelNome ?? "",
-      fornecedor: item.fornecedor ?? "",
       status: (item.status ?? "pendente") as Status,
       prioridade: (item.prioridade ?? "media") as Prioridade,
       tipo: (item.tipo ?? "corretiva") as Tipo,
@@ -708,7 +782,6 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
       observacoes: rascunho.observacoes,
       localizacao: rascunho.localizacao,
       responsavelNome: rascunho.responsavelNome,
-      fornecedor: rascunho.fornecedor,
       status: rascunho.status,
       prioridade: rascunho.prioridade,
       tipo: rascunho.tipo,
@@ -798,10 +871,6 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                 <div className="space-y-1.5">
                   <Label>Responsável</Label>
                   <Input value={rascunho.responsavelNome} onChange={(e) => setRascunho({ ...rascunho, responsavelNome: e.target.value })} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Fornecedor</Label>
-                  <Input value={rascunho.fornecedor} onChange={(e) => setRascunho({ ...rascunho, fornecedor: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Data agendada</Label>
