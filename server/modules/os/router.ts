@@ -1,7 +1,8 @@
-import { publicProcedure, moduloUserProcedure, router } from "../../_core/trpc";
+import { publicProcedure, moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
+import { proximoProtocoloComData } from "../../_core/protocolo";
 import { 
   osCategorias,
   osPrioridades,
@@ -19,53 +20,156 @@ import {
   notificacoes,
   manutencoes,
   funcionarios,
-  condominios
+  condominios,
+  users
 } from "../../../drizzle/schema"; // Adjusted path
-import { eq, and, desc, like, or, sql, gte, inArray, asc, not } from "drizzle-orm";
+import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
+import { autorDaRequisicao } from "../../_core/autor";
+import { assegurarExclusaoFuncionario } from "../../_core/permissaoFuncionario";
 
 // Exige o modulo "ordens-servico" habilitado e valida que cada id recebido
 // pertence a organizacao da requisicao. `id` aponta para a OS por padrao; nas
 // rotas de cadastro auxiliar aponta para categoria/prioridade/status/setor.
 // Rotas de registro filho (responsavel, material, orcamento, imagem) ja recebem
 // `ordemServicoId`, entao ficam cobertas pelo padrao.
-const osProcedure = moduloUserProcedure(
-  "ordens-servico",
-  escopoPorRegistro(
-    {
-      id: direto(ordensServico),
-      ordemServicoId: direto(ordensServico),
-      osId: direto(ordensServico),
-      categoriaId: direto(osCategorias),
-      prioridadeId: direto(osPrioridades),
-      statusId: direto(osStatus),
-      setorId: direto(osSetores),
-      // Impede vincular a OS a registros de outra organizacao
-      manutencaoId: direto(manutencoes),
-      funcionarioId: direto(funcionarios),
-    },
-    {
-      updateCategoria: { id: direto(osCategorias) },
-      deleteCategoria: { id: direto(osCategorias) },
-      updatePrioridade: { id: direto(osPrioridades) },
-      deletePrioridade: { id: direto(osPrioridades) },
-      updateOsStatus: { id: direto(osStatus) },
-      deleteStatus: { id: direto(osStatus) },
-      updateSetor: { id: direto(osSetores) },
-      deleteSetor: { id: direto(osSetores) },
-      deletarImagem: { imagemId: via(osImagens, "ordemServicoId", ordensServico) },
-      deletarAnexo: { anexoId: via(osAnexos, "ordemServicoId", ordensServico) },
-      // Nestas, `id` e o registro filho e `ordemServicoId` ja garante o escopo.
-      removeResponsavel: { id: via(osResponsaveis, "ordemServicoId", ordensServico) },
-      removeMaterial: { id: via(osMateriais, "ordemServicoId", ordensServico) },
-      removeOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-      aprovarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-      rejeitarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-      removeImagem: { id: via(osImagens, "ordemServicoId", ordensServico) },
-    },
-  ),
+const escopoOs = escopoPorRegistro(
+  {
+    id: direto(ordensServico),
+    ordemServicoId: direto(ordensServico),
+    osId: direto(ordensServico),
+    categoriaId: direto(osCategorias),
+    prioridadeId: direto(osPrioridades),
+    statusId: direto(osStatus),
+    setorId: direto(osSetores),
+    // Impede vincular a OS a registros de outra organizacao
+    manutencaoId: direto(manutencoes),
+    funcionarioId: direto(funcionarios),
+  },
+  {
+    updateCategoria: { id: direto(osCategorias) },
+    deleteCategoria: { id: direto(osCategorias) },
+    updatePrioridade: { id: direto(osPrioridades) },
+    deletePrioridade: { id: direto(osPrioridades) },
+    updateOsStatus: { id: direto(osStatus) },
+    deleteStatus: { id: direto(osStatus) },
+    updateSetor: { id: direto(osSetores) },
+    deleteSetor: { id: direto(osSetores) },
+    deletarImagem: { imagemId: via(osImagens, "ordemServicoId", ordensServico) },
+    deletarAnexo: { anexoId: via(osAnexos, "ordemServicoId", ordensServico) },
+    // Nestas, `id` e o registro filho e `ordemServicoId` ja garante o escopo.
+    removeResponsavel: { id: via(osResponsaveis, "ordemServicoId", ordensServico) },
+    removeMaterial: { id: via(osMateriais, "ordemServicoId", ordensServico) },
+    removeOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+    aprovarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+    rejeitarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
+    removeImagem: { id: via(osImagens, "ordemServicoId", ordensServico) },
+  },
 );
+
+const osProcedure = moduloProcedure(
+  "ordens-servico",
+  escopoOs,
+  // Permissao individual do funcionario vale aqui, nao so na tela.
+  "ordens",
+);
+
+/**
+ * Cadastros e configuracao da unidade: categoria, prioridade, status, setor e
+ * avisos de abertura. Sao decisao do gestor, entao ficam fora do alcance do
+ * funcionario mesmo quando ele tem permissao de criar O.S.
+ */
+const osConfigProcedure = moduloUserProcedure("ordens-servico", escopoOs);
+
+/**
+ * Excluir O.S. leva junto fotos, anexos, orçamentos, chat e histórico. Para o
+ * funcionário, depende de o gestor ter ligado a chave de exclusão dele.
+ */
+const osExclusaoProcedure = osProcedure.use(async ({ ctx, next }) => {
+  await assegurarExclusaoFuncionario(ctx, "ordens");
+  return next({ ctx });
+});
+
+/**
+ * Aviso de abertura de O.S. aos funcionários da unidade.
+ *
+ * Dois canais, como no Manutenção X: notificação no aplicativo — só quando a
+ * organização liga `osAutoNotificar`, porque avisa todo mundo — e e-mail para
+ * quem tem `notificarOsEmail`, que é o padrão e a tela permite desmarcar.
+ */
+async function notificarAberturaDeOS(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  os: { condominioId: number; protocolo: string; titulo: string; descricao?: string },
+): Promise<void> {
+  const [organizacao] = await db
+    .select({ nome: condominios.nome, autoNotificar: condominios.osAutoNotificar })
+    .from(condominios)
+    .where(eq(condominios.id, os.condominioId))
+    .limit(1);
+
+  const equipe = await db
+    .select({
+      nome: funcionarios.nome,
+      email: funcionarios.email,
+      loginEmail: funcionarios.loginEmail,
+      notificarEmail: funcionarios.notificarOsEmail,
+    })
+    .from(funcionarios)
+    .where(and(eq(funcionarios.condominioId, os.condominioId), eq(funcionarios.ativo, true)));
+
+  if (organizacao?.autoNotificar) {
+    // `funcionarios` não tem coluna de usuário e `notificacoes` exige uma:
+    // o vínculo possível é o e-mail. Quem não tem conta recebe só o e-mail.
+    const enderecos = equipe
+      .flatMap((f) => [f.loginEmail, f.email])
+      .filter((e): e is string => !!e)
+      .map((e) => e.toLowerCase());
+
+    if (enderecos.length > 0) {
+      const contas = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(inArray(sql`lower(${users.email})`, enderecos));
+
+      if (contas.length > 0) {
+        await db.insert(notificacoes).values(
+          contas.map((conta) => ({
+            userId: conta.id,
+            condominioId: os.condominioId,
+            tipo: "geral" as const,
+            titulo: `Nova O.S. ${os.protocolo}`,
+            mensagem: os.titulo,
+            link: `/manutencoes/ordens-servico`,
+          })),
+        );
+      }
+    }
+  }
+
+  const emails = equipe
+    .filter((f) => f.notificarEmail && f.email)
+    .map((f) => f.email as string);
+
+  if (emails.length === 0) return;
+
+  const { isEmailConfigured, sendEmail } = await import("../../_core/email");
+  if (!isEmailConfigured()) return;
+
+  await sendEmail({
+    to: emails,
+    subject: `Nova ordem de serviço ${os.protocolo}`,
+    text: [
+      `Foi aberta uma ordem de serviço em ${organizacao?.nome ?? "sua unidade"}.`,
+      ``,
+      `Protocolo: ${os.protocolo}`,
+      `Título: ${os.titulo}`,
+      os.descricao ? `Descrição: ${os.descricao}` : ``,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  });
+}
 
 export const osRouter = router({
     // ========== CONFIGURAÇÕES ==========
@@ -103,7 +207,7 @@ export const osRouter = router({
         return config;
       }),
     
-    updateConfiguracoes: osProcedure
+    updateConfiguracoes: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         habilitarOrcamentos: z.boolean().optional(),
@@ -172,7 +276,7 @@ export const osRouter = router({
         return categorias;
       }),
     
-    createCategoria: osProcedure
+    createCategoria: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -196,7 +300,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateCategoria: osProcedure
+    updateCategoria: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -219,7 +323,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteCategoria: osProcedure
+    deleteCategoria: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -276,7 +380,7 @@ export const osRouter = router({
         return prioridades;
       }),
     
-    createPrioridade: osProcedure
+    createPrioridade: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -304,7 +408,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updatePrioridade: osProcedure
+    updatePrioridade: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -329,7 +433,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deletePrioridade: osProcedure
+    deletePrioridade: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -390,7 +494,7 @@ export const osRouter = router({
         return statusList;
       }),
     
-    createStatus: osProcedure
+    createStatus: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -419,7 +523,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateOsStatus: osProcedure
+    updateOsStatus: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -446,7 +550,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteStatus: osProcedure
+    deleteStatus: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -474,7 +578,7 @@ export const osRouter = router({
           .orderBy(asc(osSetores.nome));
       }),
     
-    createSetor: osProcedure
+    createSetor: osConfigProcedure
       .input(z.object({
         condominioId: z.number(),
         nome: z.string().min(1),
@@ -493,7 +597,7 @@ export const osRouter = router({
         return { id: result.id, success: true };
       }),
     
-    updateSetor: osProcedure
+    updateSetor: osConfigProcedure
       .input(z.object({
         id: z.number(),
         nome: z.string().min(1).optional(),
@@ -514,7 +618,7 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    deleteSetor: osProcedure
+    deleteSetor: osConfigProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -654,16 +758,13 @@ export const osRouter = router({
         solicitanteTipo: z.enum(["sindico", "morador", "funcionario", "administradora"]).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        // Gerar protocolo baseado em timestamp (à prova de colisão)
-        const now = new Date();
-        const yy = String(now.getFullYear()).slice(-2);
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const dd = String(now.getDate()).padStart(2, '0');
-        const rand = String(Math.floor(1000 + Math.random() * 9000));
-        const protocolo = `OS-${yy}${mm}${dd}-${rand}`;
+        // O numero vem da sequence do banco: dois pedidos simultaneos nunca
+        // recebem o mesmo protocolo.
+        const protocolo = await proximoProtocoloComData(db, "os", "OS-");
         
         // Gerar tokens
         const chatToken = nanoid(32);
@@ -702,9 +803,9 @@ export const osRouter = router({
           manutencaoId: input.manutencaoId,
           chatToken,
           shareToken,
-          solicitanteId: ctx.user?.id,
-          solicitanteNome: input.solicitanteNome || ctx.user?.name,
-          solicitanteTipo: input.solicitanteTipo || "sindico",
+          solicitanteId: autor.userId,
+          solicitanteNome: input.solicitanteNome || autor.nome,
+          solicitanteTipo: input.solicitanteTipo || (ctx.user ? "sindico" : "funcionario"),
         }).returning();
         
         // Adicionar evento na timeline
@@ -712,10 +813,23 @@ export const osRouter = router({
           ordemServicoId: result.id,
           tipo: "criacao",
           descricao: "Ordem de serviço criada",
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
-        
+
+        // Aviso de abertura aos funcionários da unidade. Falha aqui não desfaz
+        // a O.S.: ela já existe e o aviso é acessório.
+        try {
+          await notificarAberturaDeOS(db, {
+            condominioId: input.condominioId,
+            protocolo,
+            titulo: input.titulo,
+            descricao: input.descricao,
+          });
+        } catch (erro) {
+          console.error("[os] falha ao notificar abertura:", erro);
+        }
+
         return { id: result.id, protocolo, success: true };
       }),
     
@@ -740,6 +854,7 @@ export const osRouter = router({
         manutencaoId: z.number().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -764,8 +879,8 @@ export const osRouter = router({
             ordemServicoId: id,
             tipo: "status_alterado",
             descricao: `Status alterado para: ${novoStatus?.nome || "Desconhecido"}`,
-            usuarioId: ctx.user?.id,
-            usuarioNome: ctx.user?.name,
+            usuarioId: autor.userId,
+            usuarioNome: autor.nome,
             dadosAnteriores: { statusId: osAtual.statusId },
             dadosNovos: { statusId: input.statusId },
           }).returning();
@@ -789,7 +904,7 @@ export const osRouter = router({
         return { success: true };
       }),
     
-    delete: osProcedure
+    delete: osExclusaoProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -812,6 +927,7 @@ export const osRouter = router({
     iniciarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -829,8 +945,8 @@ export const osRouter = router({
           ordemServicoId: input.id,
           tipo: "inicio_servico",
           descricao: "Serviço iniciado",
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -839,6 +955,7 @@ export const osRouter = router({
     finalizarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -863,8 +980,8 @@ export const osRouter = router({
           ordemServicoId: input.id,
           tipo: "fim_servico",
           descricao: `Serviço finalizado. Tempo total: ${Math.floor(tempoDecorridoMinutos / 60)}h ${tempoDecorridoMinutos % 60}min`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true, tempoDecorridoMinutos };
@@ -882,6 +999,7 @@ export const osRouter = router({
         principal: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -891,8 +1009,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "responsavel_adicionado",
           descricao: `Responsável adicionado: ${input.nome}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -901,6 +1019,7 @@ export const osRouter = router({
     removeResponsavel: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -913,8 +1032,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "responsavel_removido",
           descricao: `Responsável removido: ${resp?.nome || "Desconhecido"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -934,6 +1053,7 @@ export const osRouter = router({
         valorUnitario: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -950,8 +1070,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "material_adicionado",
           descricao: `Material adicionado: ${input.nome} (${input.quantidade || 1} ${input.unidade || "un"})`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -960,6 +1080,7 @@ export const osRouter = router({
     removeMaterial: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -972,8 +1093,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "material_removido",
           descricao: `Material removido: ${mat?.nome || "Desconhecido"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -990,6 +1111,7 @@ export const osRouter = router({
         anexoUrl: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1006,8 +1128,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_adicionado",
           descricao: `Orçamento adicionado: R$ ${input.valor} - ${input.fornecedor || "Sem fornecedor"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { id: result.id, success: true };
@@ -1016,13 +1138,14 @@ export const osRouter = router({
     aprovarOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
         await db.update(osOrcamentos)
           .set({
             aprovado: true,
-            aprovadoPor: ctx.user?.id,
+            aprovadoPor: autor.userId,
             dataAprovacao: new Date(),
           })
           .where(eq(osOrcamentos.id, input.id));
@@ -1034,8 +1157,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_aprovado",
           descricao: `Orçamento aprovado: R$ ${orc?.valor} - ${orc?.fornecedor || "Sem fornecedor"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1044,6 +1167,7 @@ export const osRouter = router({
     rejeitarOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number(), motivo: z.string().optional() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1058,8 +1182,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_rejeitado",
           descricao: `Orçamento rejeitado${input.motivo ? `: ${input.motivo}` : ""}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -1068,6 +1192,7 @@ export const osRouter = router({
     removeOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1077,8 +1202,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_removido",
           descricao: "Orçamento removido",
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1093,6 +1218,7 @@ export const osRouter = router({
         descricao: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1128,8 +1254,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "foto_adicionada",
           descricao: `Foto adicionada: ${input.tipo || "outro"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -1138,6 +1264,7 @@ export const osRouter = router({
     removeImagem: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number().optional() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1153,8 +1280,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId || imagem.ordemServicoId,
           tipo: "foto_removida",
           descricao: `Foto removida`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1182,6 +1309,7 @@ export const osRouter = router({
         anexoTamanho: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1193,9 +1321,9 @@ export const osRouter = router({
         const roleMap: Record<string, string> = { admin: "sindico", user: "sindico", sindico: "sindico", morador: "morador", funcionario: "funcionario", visitante: "visitante" };
         const [result] = await db.insert(osChat).values({
           ordemServicoId: input.ordemServicoId,
-          remetenteId: ctx.user?.id,
-          remetenteNome: ctx.user?.name || "Usuário",
-          remetenteTipo: (roleMap[ctx.user?.role || ""] || "sindico") as any,
+          remetenteId: autor.userId,
+          remetenteNome: autor.nome,
+          remetenteTipo: (ctx.user ? roleMap[ctx.user.role || ""] || "sindico" : "funcionario") as any,
           mensagem: input.mensagem || null,
           anexoUrl: input.anexoUrl || null,
           anexoNome: input.anexoNome || null,
@@ -1272,6 +1400,7 @@ export const osRouter = router({
         descricao: z.string().min(1),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1279,8 +1408,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "comentario",
           descricao: input.descricao,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -1421,6 +1550,7 @@ export const osRouter = router({
         endereco: z.string().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1437,8 +1567,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "localizacao_atualizada",
           descricao: `Localização atualizada: ${input.endereco || 'Coordenadas atualizadas'}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -1451,8 +1581,12 @@ export const osRouter = router({
         fileType: z.string(),
         fileData: z.string(),
         descricao: z.string().optional(),
+        // Fase da foto. Sem isto a imagem cai em "outro" e some das galerias
+        // de antes e depois.
+        tipo: z.enum(["antes", "durante", "depois", "orcamento", "outro"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1478,15 +1612,16 @@ export const osRouter = router({
         const [result] = await db.insert(osImagens).values({
           ordemServicoId: input.ordemServicoId,
           url,
+          tipo: input.tipo ?? "outro",
           descricao: input.descricao,
         }).returning();
-        
+
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
           tipo: "foto_adicionada",
           descricao: `Imagem adicionada: ${input.fileName}`,
-          usuarioId: ctx.user.id,
-          usuarioNome: ctx.user.name || "Usuario",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true, id: result.id, url };
@@ -1508,6 +1643,7 @@ export const osRouter = router({
     deletarImagem: osProcedure
       .input(z.object({ imagemId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1523,8 +1659,8 @@ export const osRouter = router({
           ordemServicoId: imagem.ordemServicoId,
           tipo: "foto_removida",
           descricao: `Foto removida`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -1670,6 +1806,7 @@ export const osRouter = router({
         descricao: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1719,8 +1856,8 @@ export const osRouter = router({
           mimeType: input.fileType,
           tamanho: buffer.length,
           descricao: input.descricao,
-          uploadPor: ctx.user.id,
-          uploadPorNome: ctx.user.name || "Usuário",
+          uploadPor: autor.userId,
+          uploadPorNome: autor.nome,
         }).returning();
         
         // Registrar na timeline
@@ -1728,8 +1865,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "anexo_adicionado",
           descricao: `Anexo adicionado: ${input.fileName}`,
-          usuarioId: ctx.user.id,
-          usuarioNome: ctx.user.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true, id: result.id, url };
@@ -1751,6 +1888,7 @@ export const osRouter = router({
     deletarAnexo: osProcedure
       .input(z.object({ anexoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1766,8 +1904,8 @@ export const osRouter = router({
           ordemServicoId: anexo.ordemServicoId,
           tipo: "anexo_removido",
           descricao: `Anexo removido: ${anexo.nomeOriginal}`,
-          usuarioId: ctx.user.id,
-          usuarioNome: ctx.user.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -1821,9 +1959,14 @@ export const osRouter = router({
           .from(ordensServico)
           .where(and(
             eq(ordensServico.condominioId, input.condominioId),
-            sql`DATEDIFF(NOW(), createdAt) > COALESCE(tempoEstimadoDias, 30)`,
-            statusConcluidoIds.length > 0 
-              ? not(inArray(ordensServico.statusId, statusConcluidoIds))
+            sql`(CURRENT_DATE - ${ordensServico.createdAt}::date) > COALESCE(${ordensServico.tempoEstimadoDias}, 30)`,
+            // O.S. sem status também conta: `NOT IN` sobre NULL devolve NULL e
+            // sumiria com ela da contagem.
+            statusConcluidoIds.length > 0
+              ? or(
+                  isNull(ordensServico.statusId),
+                  not(inArray(ordensServico.statusId, statusConcluidoIds)),
+                )
               : sql`1=1`
           ));
         const atrasadas = Number(atrasadasResult[0]?.count || 0);
@@ -1851,8 +1994,8 @@ export const osRouter = router({
         
         // Por Mês (últimos 12 meses)
         const porMesResult = await db.select({
-          mes: sql<number>`MONTH(createdAt)`,
-          ano: sql<number>`YEAR(createdAt)`,
+          mes: sql<number>`EXTRACT(MONTH FROM ${ordensServico.createdAt})::int`,
+          ano: sql<number>`EXTRACT(YEAR FROM ${ordensServico.createdAt})::int`,
           count: sql<number>`count(*)`
         })
           .from(ordensServico)
@@ -1860,7 +2003,10 @@ export const osRouter = router({
             eq(ordensServico.condominioId, input.condominioId),
             gte(ordensServico.createdAt, new Date(Date.now() - 365 * 24 * 60 * 60 * 1000))
           ))
-          .groupBy(sql`MONTH(createdAt), YEAR(createdAt)`);
+          .groupBy(
+            sql`EXTRACT(MONTH FROM ${ordensServico.createdAt})`,
+            sql`EXTRACT(YEAR FROM ${ordensServico.createdAt})`,
+          );
         
         const porMes = porMesResult.map(item => ({
           mes: Number(item.mes),
@@ -1876,5 +2022,87 @@ export const osRouter = router({
           porStatus,
           porMes,
         };
+      }),
+
+    // ========== RESPONSÁVEIS, AVISOS E AVALIAÇÃO ==========
+
+    /** Quem pode ser marcado como responsável: a equipe ativa da unidade. */
+    listarCandidatos: osProcedure
+      .input(z.object({ condominioId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+
+        return db
+          .select({
+            id: funcionarios.id,
+            nome: funcionarios.nome,
+            cargo: funcionarios.cargo,
+            email: funcionarios.email,
+            telefone: funcionarios.telefone,
+            notificarOsEmail: funcionarios.notificarOsEmail,
+          })
+          .from(funcionarios)
+          .where(and(eq(funcionarios.condominioId, input.condominioId), eq(funcionarios.ativo, true)))
+          .orderBy(asc(funcionarios.nome));
+      }),
+
+    /** Liga/desliga o aviso no aplicativo para toda a equipe da unidade. */
+    setAutoNotificar: osConfigProcedure
+      .input(z.object({ condominioId: z.number(), ativo: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db
+          .update(condominios)
+          .set({ osAutoNotificar: input.ativo })
+          .where(eq(condominios.id, input.condominioId));
+
+        return { success: true };
+      }),
+
+    /** Marca/desmarca um funcionário para receber o e-mail de abertura. */
+    setNotificarEmail: osConfigProcedure
+      .input(z.object({ funcionarioId: z.number(), ativo: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db
+          .update(funcionarios)
+          .set({ notificarOsEmail: input.ativo })
+          .where(eq(funcionarios.id, input.funcionarioId));
+
+        return { success: true };
+      }),
+
+    avaliar: osProcedure
+      .input(z.object({
+        id: z.number(),
+        nota: z.number().int().min(1).max(5),
+        comentario: z.string().max(1000).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db
+          .update(ordensServico)
+          .set({ avaliacaoNota: input.nota, avaliacaoComentario: input.comentario ?? null })
+          .where(eq(ordensServico.id, input.id));
+
+        // O enum da timeline não tem "avaliacao"; entra como comentário para
+        // não exigir migration de tipo só por causa do rótulo.
+        await db.insert(osTimeline).values({
+          ordemServicoId: input.id,
+          tipo: "comentario",
+          descricao: `Serviço avaliado com ${input.nota} estrela(s)`,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
+        });
+
+        return { success: true };
       }),
 });

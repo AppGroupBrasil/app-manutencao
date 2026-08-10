@@ -4,6 +4,7 @@ import { moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { proximoProtocolo } from "../../_core/protocolo";
 import { generateFuncaoRapidaPDF } from "../../pdfFuncoesRapidas";
 import {
   manutencoes,
@@ -27,6 +28,8 @@ const manutencaoProcedure = moduloProcedure(
       removeAnexo: { id: via(manutencaoAnexos, "manutencaoId", manutencoes) },
     },
   ),
+  // Permissao individual do funcionario vale aqui, nao so na tela.
+  "manutencoes",
 );
 
 export const manutencaoRouter = router({
@@ -112,16 +115,8 @@ export const manutencaoRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       
-      // Gerar protocolo único com retry para evitar colisão
-      let protocolo: string;
-      let tentativas = 0;
-      do {
-        protocolo = String(Math.floor(100000 + Math.random() * 900000));
-        const [existing] = await db.select({ id: manutencoes.id }).from(manutencoes).where(eq(manutencoes.protocolo, protocolo)).limit(1);
-        if (!existing) break;
-        tentativas++;
-      } while (tentativas < 10);
-      if (tentativas >= 10) throw new Error("Não foi possível gerar protocolo único");
+      // O banco emite o protocolo: sem sorteio, sem retry, sem colisão.
+      const protocolo = await proximoProtocolo(db, "manutencao");
       
       const [result] = await db.insert(manutencoes).values({
         condominioId: input.condominioId,
@@ -273,6 +268,7 @@ export const manutencaoRouter = router({
       manutencaoId: z.number(),
       url: z.string(),
       legenda: z.string().optional(),
+      fase: z.enum(["antes", "depois"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();

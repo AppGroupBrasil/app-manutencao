@@ -28,15 +28,66 @@ jobs:
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
             "cd ${{ env.APP_PATH }} && git fetch origin main && git reset --hard origin/main"
 
-      - name: Build and restart
+      # Guarda a imagem que está no ar. É para ela que o deploy volta se a
+      # versão nova não ficar saudável.
+      - name: Save current image
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "docker image inspect app-manutencao:latest >/dev/null 2>&1 \
+               && docker tag app-manutencao:latest app-manutencao:anterior \
+               && echo 'imagem anterior guardada' \
+               || echo 'sem imagem anterior (primeiro deploy)'"
+
+      # Build antes da troca: erro de compilação para o deploy aqui, com a
+      # versão antiga ainda servindo.
+      - name: Build image
         run: |
           ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "cd ${{ env.APP_PATH }} && docker compose up -d --build --remove-orphans"
+            "cd ${{ env.APP_PATH }} && docker compose build app"
 
-      - name: Health check
+      # Pré-voo num container descartável, com o site ainda servindo a versão
+      # anterior: confere variáveis de ambiente, confere que o banco está na
+      # altura do baseline e aplica as migrações pendentes. Falha aqui não
+      # derruba nada.
+      - name: Preflight and migrate
         run: |
-          sleep 15
-          ssh -o ServerAliveInterval=30 \
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "docker ps --filter name=app-manutencao --format '{{.Names}}: {{.Status}}'"
+            "cd ${{ env.APP_PATH }} && docker compose run --rm --no-deps app node dist/migrar.js"
+
+      - name: Restart with the new image
+        run: |
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose up -d --no-build --remove-orphans"
+
+      # Espera o container ficar `healthy` (o healthcheck bate em /api/saude).
+      # Se não ficar, volta para a imagem anterior e falha o deploy. As
+      # migrações já aplicadas continuam de pé — todas são aditivas, então a
+      # versão antiga roda sobre o schema novo sem problema.
+      - name: Health check with rollback
+        run: |
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && \
+             saudavel=nao; \
+             for i in \$(seq 1 24); do \
+               estado=\$(docker inspect -f '{{.State.Health.Status}}' app-manutencao 2>/dev/null || echo ausente); \
+               echo \"tentativa \$i: \$estado\"; \
+               if [ \"\$estado\" = healthy ]; then saudavel=sim; break; fi; \
+               if [ \"\$estado\" = unhealthy ]; then break; fi; \
+               sleep 5; \
+             done; \
+             if [ \"\$saudavel\" = sim ]; then echo 'app saudavel'; exit 0; fi; \
+             echo '--- logs da versao nova ---'; docker logs --tail 80 app-manutencao; \
+             if docker image inspect app-manutencao:anterior >/dev/null 2>&1; then \
+               echo '--- voltando para a imagem anterior ---'; \
+               docker tag app-manutencao:anterior app-manutencao:latest && \
+               docker compose up -d --no-build --force-recreate app && \
+               echo 'rollback concluido'; \
+             else \
+               echo 'sem imagem anterior para voltar'; \
+             fi; \
+             exit 1"

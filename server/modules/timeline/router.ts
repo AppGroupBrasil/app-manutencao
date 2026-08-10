@@ -2,6 +2,7 @@ import { z } from "zod";
 import { router, moduloUserProcedure, publicProcedure } from "../../_core/trpc";
 import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
+import { proximoProtocoloComData } from "../../_core/protocolo";
 import { 
     timelines, 
     timelineResponsaveis, 
@@ -802,17 +803,14 @@ export const timelineRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        // Gerar protocolo único
-        const now = new Date();
-        const ano = now.getFullYear();
-        const mes = String(now.getMonth() + 1).padStart(2, "0");
-        const dia = String(now.getDate()).padStart(2, "0");
-        const hora = String(now.getHours()).padStart(2, "0");
-        const min = String(now.getMinutes()).padStart(2, "0");
-        const seg = String(now.getSeconds()).padStart(2, "0");
-        const random = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-        const protocolo = `TL-${ano}${mes}${dia}-${hora}${min}${seg}-${random}`;
-        
+        // Protocolo emitido pela sequence do banco: sem sorteio, sem colisão.
+        const protocolo = await proximoProtocoloComData(db, "timeline", "TL-");
+
+        const agora = new Date();
+        const horaRegistro = [agora.getHours(), agora.getMinutes(), agora.getSeconds()]
+          .map((n) => String(n).padStart(2, "0"))
+          .join(":");
+
         // Gerar token público
         const tokenPublico = nanoid(32);
         
@@ -822,7 +820,7 @@ export const timelineRouter = router({
           ...timelineData,
           protocolo,
           tokenPublico,
-          horaRegistro: `${hora}:${min}:${seg}`,
+          horaRegistro,
           criadoPor: ctx.user?.id,
           criadoPorNome: ctx.user?.name || "Sistema",
         }).returning();

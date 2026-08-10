@@ -18,6 +18,16 @@ const DefinirSenha = lazy(() => import("./pages/DefinirSenha"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminModulos = lazy(() => import("./pages/AdminModulos"));
 const Manutencoes = lazy(() => import("./pages/Manutencoes"));
+const AdminManutencoes = lazy(() => import("./pages/AdminManutencoes"));
+const OrdensServico = lazy(() => import("./pages/OrdensServico"));
+const AgendaVencimentos = lazy(() => import("./pages/AgendaVencimentos"));
+const Checklists = lazy(() => import("./pages/Checklists"));
+const ListaTarefas = lazy(() => import("./pages/ListaTarefas"));
+const Vistorias = lazy(() => import("./pages/Vistorias"));
+const QuadroAtividades = lazy(() => import("./pages/QuadroAtividades"));
+const QrCodes = lazy(() => import("./pages/QrCodes"));
+const Ocorrencias = lazy(() => import("./pages/Ocorrencias"));
+const QrCodePublico = lazy(() => import("./pages/QrCodePublico"));
 const AdminOrganizacoes = lazy(() => import("./pages/AdminOrganizacoes"));
 const AdminFuncionarios = lazy(() => import("./pages/AdminFuncionarios"));
 const AdminGestores = lazy(() => import("./pages/AdminGestores"));
@@ -104,6 +114,43 @@ function Router() {
       </Route>
       <Route path="/admin/gestores">
         <ExigeSenhaDefinida><AdminGestores /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/admin/manutencoes">
+        <ExigeSenhaDefinida><AdminManutencoes /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/manutencoes/ordens-servico">
+        <ExigeSenhaDefinida><OrdensServico /></ExigeSenhaDefinida>
+      </Route>
+      {/* Destino do QR Code impresso: abre a O.S. já na tela de edição. */}
+      <Route path="/manutencoes/ordens-servico/:id">
+        {(params) => (
+          <ExigeSenhaDefinida><OrdensServico osInicial={Number(params.id)} /></ExigeSenhaDefinida>
+        )}
+      </Route>
+      <Route path="/manutencoes/vencimentos">
+        <ExigeSenhaDefinida><AgendaVencimentos /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/manutencoes/checklists">
+        <ExigeSenhaDefinida><Checklists /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/manutencoes/tarefas">
+        <ExigeSenhaDefinida><ListaTarefas /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/manutencoes/vistorias">
+        <ExigeSenhaDefinida><Vistorias /></ExigeSenhaDefinida>
+      </Route>
+      {/* Formulário aberto pelo QR impresso: público, sem login. */}
+      <Route path="/qr/:token">
+        {(params) => <QrCodePublico token={params.token} />}
+      </Route>
+      <Route path="/manutencoes/qrcode">
+        <ExigeSenhaDefinida><QrCodes /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/ocorrencias">
+        <ExigeSenhaDefinida><Ocorrencias /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/manutencoes/quadro">
+        <ExigeSenhaDefinida><QuadroAtividades /></ExigeSenhaDefinida>
       </Route>
       <Route path="/manutencoes">
         <ExigeSenhaDefinida><Manutencoes /></ExigeSenhaDefinida>

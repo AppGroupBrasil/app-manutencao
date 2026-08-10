@@ -1,43 +1,11 @@
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, Building2, Users, UserCog, Wrench, SlidersHorizontal } from "lucide-react";
+import { CardQuadrado } from "@/components/CardQuadrado";
+import { PainelPendencias } from "@/components/PainelPendencias";
+import { Loader2, LogOut, Building2, Users, UserCog, Wrench, AlertTriangle } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
-
-/** Card quadrado: dois por linha em qualquer largura, do celular ao desktop. */
-function CardQuadrado({
-  icone,
-  titulo,
-  valor,
-  descricao,
-  onClick,
-}: {
-  icone: React.ReactNode;
-  titulo: string;
-  valor?: number | string;
-  descricao: string;
-  onClick: () => void;
-}) {
-  return (
-    <Card
-      onClick={onClick}
-      className="aspect-square cursor-pointer hover:border-blue-300 hover:shadow-md transition-all"
-    >
-      <CardContent className="h-full p-4 flex flex-col">
-        {icone}
-        <p className="font-semibold text-slate-800 mt-2">{titulo}</p>
-        {valor !== undefined && (
-          <p className="text-3xl font-bold text-slate-900 mt-auto">{valor}</p>
-        )}
-        <p className={`text-xs text-slate-500 ${valor === undefined ? "mt-auto" : "mt-1"}`}>
-          {descricao}
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
@@ -114,6 +82,9 @@ export default function AdminDashboard() {
           </p>
         </div>
 
+        {/* Atalho único para o que espera resposta, de todas as funções. */}
+        <PainelPendencias condominioId={organizacaoAtiva?.id ?? 0} />
+
         {/* Quadrados, dois por linha: o mesmo desenho vale no celular. */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <CardQuadrado
@@ -138,21 +109,21 @@ export default function AdminDashboard() {
             onClick={() => setLocation("/admin/funcionarios")}
           />
           <CardQuadrado
+            icone={<AlertTriangle className="w-6 h-6 text-red-500" />}
+            titulo="Ocorrências"
+            descricao="incidentes com foto e prioridade"
+            onClick={() => setLocation("/ocorrencias")}
+          />
+          <CardQuadrado
             icone={<Wrench className="w-6 h-6 text-orange-500" />}
             titulo="Manutenções"
             valor={manutencoes?.total ?? "—"}
             descricao={
               manutencoes
                 ? `${manutencoes.pendentes} pendentes · ${manutencoes.requerAcao} requerem ação`
-                : "registradas"
+                : "ordens de serviço, vencimentos e mais"
             }
-            onClick={() => setLocation("/manutencoes")}
-          />
-          <CardQuadrado
-            icone={<SlidersHorizontal className="w-6 h-6 text-purple-500" />}
-            titulo="Módulos"
-            descricao="o que cada organização enxerga"
-            onClick={() => setLocation("/admin/modulos")}
+            onClick={() => setLocation("/admin/manutencoes")}
           />
         </div>
       </main>

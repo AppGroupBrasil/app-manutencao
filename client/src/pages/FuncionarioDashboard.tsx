@@ -3,14 +3,22 @@ import { useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { CoreModulesPanel } from "@/components/funcionario/CoreModulesPanel";
+import { ConteudoListaTarefas } from "@/pages/ListaTarefas";
+import { ConteudoQuadroAtividades } from "@/pages/QuadroAtividades";
+import { ConteudoQrCodes } from "@/pages/QrCodes";
+import { ConteudoOrdensServico } from "@/pages/OrdensServico";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { 
-  Building2, 
-  LogOut, 
-  ClipboardCheck, 
-  Wrench, 
+  Building2,
+  LogOut,
+  ClipboardCheck,
+  Columns3,
+  ListChecks,
+  QrCode,
+  ClipboardList,
+  Wrench,
   AlertTriangle, 
   Search,
   Loader2,
@@ -55,6 +63,34 @@ const FUNCOES_CONFIG: Record<string, {
     description: "Inspeções e verificações",
     route: "/dashboard/vistorias",
     color: "from-purple-500 to-violet-600",
+  },
+  tarefas: {
+    icon: ListChecks,
+    label: "Lista de Tarefas",
+    description: "Tarefas atribuídas e registro de execução",
+    route: "/dashboard/tarefas",
+    color: "from-violet-500 to-purple-600",
+  },
+  quadro: {
+    icon: Columns3,
+    label: "Quadro de Atividades",
+    description: "Atividades da equipe por coluna",
+    route: "/dashboard/quadro",
+    color: "from-indigo-500 to-blue-600",
+  },
+  ordens: {
+    icon: ClipboardList,
+    label: "Ordens de Serviço",
+    description: "Abrir e acompanhar ordens de serviço",
+    route: "/dashboard/ordens",
+    color: "from-amber-500 to-orange-600",
+  },
+  qrcode: {
+    icon: QrCode,
+    label: "QR Code",
+    description: "Pontos e registros recebidos por leitura",
+    route: "/dashboard/qrcode",
+    color: "from-slate-600 to-slate-800",
   },
 };
 
@@ -103,6 +139,8 @@ export default function FuncionarioDashboard() {
   const [, setLocation] = useLocation();
   const [isSectionRoute, routeParams] = useRoute<{ section: string }>("/dashboard/:section");
   const [funcoesHabilitadas, setFuncoesHabilitadas] = useState<string[]>([]);
+  const [funcoesQueCria, setFuncoesQueCria] = useState<string[]>([]);
+  const [funcoesQueExclui, setFuncoesQueExclui] = useState<string[]>([]);
   const [selectedCondominio, setSelectedCondominio] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"condominios" | "apps" | "funcoes">("condominios");
 
@@ -156,11 +194,27 @@ export default function FuncionarioDashboard() {
       if (funcionario.hierarquia && HIERARQUIAS_ADMIN.has(funcionario.hierarquia)) {
         // Admin/gestor: libera todas as funções
         setFuncoesHabilitadas(Object.keys(FUNCOES_CONFIG));
+        setFuncoesQueCria(Object.keys(FUNCOES_CONFIG));
+        // Excluir não entra no pacote da hierarquia: o servidor só aceita com a
+        // chave ligada por pessoa, e mostrar o botão aqui daria erro no clique.
+        setFuncoesQueExclui([]);
       } else if (funcionario.funcoes) {
         const habilitadas = funcionario.funcoes
           .filter(f => f.habilitada)
           .map(f => f.funcaoKey);
         setFuncoesHabilitadas(habilitadas);
+        // Sem linha gravada o padrão é criar: só nega quem o gestor desmarcou.
+        setFuncoesQueCria(
+          funcionario.funcoes
+            .filter(f => f.habilitada && (f as { podeCriar?: boolean }).podeCriar !== false)
+            .map(f => f.funcaoKey),
+        );
+        // Excluir e o contrario: so entra quem o gestor marcou.
+        setFuncoesQueExclui(
+          funcionario.funcoes
+            .filter(f => f.habilitada && (f as { podeExcluir?: boolean }).podeExcluir === true)
+            .map(f => f.funcaoKey),
+        );
       }
     }
   }, [funcionario]);
@@ -258,10 +312,39 @@ export default function FuncionarioDashboard() {
   if (activeSection) {
     if (activeSectionConfig && activeCondominioId) {
       sectionContent = (
-        <CoreModulesPanel
-          section={activeSection as "checklists" | "manutencoes" | "ocorrencias" | "vistorias"}
-          condominioId={activeCondominioId}
-        />
+        activeSection === "ordens" ? (
+          <ConteudoOrdensServico
+            condominioId={activeCondominioId}
+            podeCriar={funcoesQueCria.includes(activeSection)}
+            podeExcluir={funcoesQueExclui.includes(activeSection)}
+          />
+        ) : activeSection === "qrcode" ? (
+          <ConteudoQrCodes
+            condominioId={activeCondominioId}
+            podeCriar={funcoesQueCria.includes(activeSection)}
+          />
+        ) : activeSection === "quadro" ? (
+          <ConteudoQuadroAtividades
+            condominioId={activeCondominioId}
+            podeCriar={funcoesQueCria.includes(activeSection)}
+          />
+        ) : activeSection === "tarefas" ? (
+          // A Lista de Tarefas é a tela nova, a mesma do gestor: aqui ela só
+          // recebe a unidade pronta, porque o funcionário não resolve tenant.
+          <ConteudoListaTarefas
+            condominioId={activeCondominioId}
+            organizacoes={
+              funcionario.condominiosVinculados?.map((c) => ({ id: c.id, nome: c.nome ?? "" })) ?? []
+            }
+            podeCriar={funcoesQueCria.includes(activeSection)}
+          />
+        ) : (
+          <CoreModulesPanel
+            section={activeSection as "checklists" | "manutencoes" | "ocorrencias" | "vistorias"}
+            condominioId={activeCondominioId}
+            podeCriar={funcoesQueCria.includes(activeSection)}
+          />
+        )
       );
     } else if (activeSectionConfig) {
       sectionContent = (

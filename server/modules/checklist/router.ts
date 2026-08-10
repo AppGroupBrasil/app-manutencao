@@ -1,9 +1,11 @@
 ﻿import { z } from "zod";
-import { eq, desc, and, like, or, sql } from "drizzle-orm";
-import { moduloProcedure, router } from "../../_core/trpc";
+import { eq, desc, and, like, or, sql, isNotNull } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { proximoProtocolo, proximoProtocoloComData } from "../../_core/protocolo";
 
 // Auto-criar colunas de assinatura se não existirem
 async function ensureSignatureColumns() {
@@ -25,13 +27,18 @@ import {
   checklistImagens, 
   checklistAnexos,
   checklistItens,
+  checklistItemAnexos,
+  reportes,
   checklistTemplates,
-  checklistTemplateItens, 
-  condominios 
+  checklistTemplateItens,
+  condominios
 } from "../../../drizzle/schema";
 
 // Exige o modulo "checklists" habilitado e valida que cada id recebido pertence
 // a organizacao da requisicao.
+/** `id` aqui é sempre o modelo, nunca um checklist. */
+const escopoTemplates = escopoPorRegistro({ id: direto(checklistTemplates) });
+
 const checklistProcedure = moduloProcedure(
   "checklists",
   escopoPorRegistro(
@@ -44,9 +51,54 @@ const checklistProcedure = moduloProcedure(
       removeItem: { id: via(checklistItens, "checklistId", checklists) },
       removeImagem: { id: via(checklistImagens, "checklistId", checklists) },
       removeAnexo: { id: via(checklistAnexos, "checklistId", checklists) },
+      // Registros por item: o pai é o item, que por sua vez pende do checklist.
+      salvarAntesDepois: { itemId: via(checklistItens, "checklistId", checklists) },
+      listarAnexosItem: { itemId: via(checklistItens, "checklistId", checklists) },
+      adicionarAnexoItem: { itemId: via(checklistItens, "checklistId", checklists) },
+      // O anexo fica a dois saltos do tenant (anexo → item → checklist) e o
+      // verificador só resolve um. Por isso a rota exige também o `itemId`, que
+      // é escopável, e a exclusão casa os dois.
+      removerAnexoItem: { itemId: via(checklistItens, "checklistId", checklists) },
+      atualizarReporte: { id: direto(reportes) },
+      // Sem isto o `id` do template cairia no mapa padrao e seria conferido
+      // contra `checklists`, deixando template de outro cliente passar.
+      getTemplate: { id: direto(checklistTemplates) },
     },
   ),
+  // Permissao individual do funcionario vale aqui, nao so na tela.
+  "checklists",
 );
+
+/**
+ * Modelos de checklist: catalogo da unidade, decisao do gestor. O funcionario
+ * usa o modelo para preencher, mas nao cria nem apaga modelo.
+ */
+const checklistTemplateProcedure = moduloUserProcedure("checklists", escopoTemplates);
+
+/**
+ * Modelo de checklist que o cliente pode alterar.
+ *
+ * O escopo por registro cobre o template de outra organização, mas não o
+ * `isPadrao`, que é do catálogo da plataforma e vem sem `condominioId` — sem
+ * esta trava, um cliente apagaria o modelo que todos usam.
+ */
+async function assegurarTemplateDoCliente(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  templateId: number,
+): Promise<void> {
+  const [template] = await db
+    .select({ isPadrao: checklistTemplates.isPadrao })
+    .from(checklistTemplates)
+    .where(eq(checklistTemplates.id, templateId))
+    .limit(1);
+
+  if (template?.isPadrao) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Modelo padrão do sistema não pode ser alterado nem removido.",
+    });
+  }
+}
 
 export const checklistRouter = router({
   list: checklistProcedure
@@ -123,16 +175,8 @@ export const checklistRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      // Gerar protocolo único com retry para evitar colisão
-      let protocolo: string;
-      let tentativas = 0;
-      do {
-        protocolo = String(Math.floor(100000 + Math.random() * 900000));
-        const [existing] = await db.select({ id: checklists.id }).from(checklists).where(eq(checklists.protocolo, protocolo)).limit(1);
-        if (!existing) break;
-        tentativas++;
-      } while (tentativas < 10);
-      if (tentativas >= 10) throw new Error("Não foi possível gerar protocolo único");
+      // O banco emite o protocolo: sem sorteio, sem retry, sem colisão.
+      const protocolo = await proximoProtocolo(db, "checklist");
       
       const { itens, imagens } = input;
       const [result] = await db.insert(checklists).values({
@@ -292,6 +336,10 @@ export const checklistRouter = router({
       descricao: z.string().optional(),
       completo: z.boolean().optional(),
       observacao: z.string().optional(),
+      fotoAntes: z.string().nullable().optional(),
+      descAntes: z.string().optional(),
+      fotoDepois: z.string().nullable().optional(),
+      descDepois: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -624,7 +672,7 @@ export const checklistRouter = router({
       return { ...template, itens };
     }),
 
-  createTemplate: checklistProcedure
+  createTemplate: checklistTemplateProcedure
     .input(z.object({
       condominioId: z.number().optional(),
       nome: z.string(),
@@ -657,7 +705,7 @@ export const checklistRouter = router({
       return { id: templateId };
     }),
 
-  updateTemplate: checklistProcedure
+  updateTemplate: checklistTemplateProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().optional(),
@@ -670,9 +718,11 @@ export const checklistRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      
+
       const { id, itens, ...updateData } = input;
-      
+
+      await assegurarTemplateDoCliente(db, id);
+
       if (Object.keys(updateData).length > 0) {
         await db.update(checklistTemplates)
           .set(updateData)
@@ -698,12 +748,14 @@ export const checklistRouter = router({
       return { success: true };
     }),
 
-  deleteTemplate: checklistProcedure
+  deleteTemplate: checklistTemplateProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      
+
+      await assegurarTemplateDoCliente(db, input.id);
+
       // Deletar itens primeiro
       await db.delete(checklistTemplateItens)
         .where(eq(checklistTemplateItens.templateId, input.id));
@@ -711,7 +763,170 @@ export const checklistRouter = router({
       // Deletar template
       await db.delete(checklistTemplates)
         .where(eq(checklistTemplates.id, input.id));
-      
+
+      return { success: true };
+    }),
+
+  // ========== ANTES E DEPOIS, ANEXOS E REPORTE POR ITEM ==========
+
+  salvarAntesDepois: checklistProcedure
+    .input(z.object({
+      itemId: z.number(),
+      fotoAntes: z.string().nullable().optional(),
+      descAntes: z.string().max(2000).optional(),
+      fotoDepois: z.string().nullable().optional(),
+      descDepois: z.string().max(2000).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const { itemId, ...campos } = input;
+      await db
+        .update(checklistItens)
+        .set({ ...campos, updatedAt: new Date() })
+        .where(eq(checklistItens.id, itemId));
+
+      return { success: true };
+    }),
+
+  listarAnexosItem: checklistProcedure
+    .input(z.object({ itemId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      return db
+        .select()
+        .from(checklistItemAnexos)
+        .where(eq(checklistItemAnexos.itemId, input.itemId))
+        .orderBy(checklistItemAnexos.createdAt);
+    }),
+
+  adicionarAnexoItem: checklistProcedure
+    .input(z.object({
+      itemId: z.number(),
+      url: z.string(),
+      nome: z.string().max(255).optional(),
+      tipo: z.enum(["imagem", "arquivo"]).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const autor = autorDaRequisicao(ctx);
+      const [criado] = await db
+        .insert(checklistItemAnexos)
+        .values({
+          itemId: input.itemId,
+          url: input.url,
+          nome: input.nome ?? null,
+          tipo: input.tipo ?? (/\.pdf$/i.test(input.url) ? "arquivo" : "imagem"),
+          autorId: autor.userId,
+          autorNome: autor.nome,
+        })
+        .returning();
+
+      return { id: criado.id };
+    }),
+
+  removerAnexoItem: checklistProcedure
+    .input(z.object({ itemId: z.number(), anexoId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      // O `itemId` é o que o verificador de escopo consegue conferir; casar os
+      // dois impede apagar anexo de outro item passando só o id do anexo.
+      await db
+        .delete(checklistItemAnexos)
+        .where(
+          and(
+            eq(checklistItemAnexos.id, input.anexoId),
+            eq(checklistItemAnexos.itemId, input.itemId),
+          ),
+        );
+
+      return { success: true };
+    }),
+
+  reportarProblema: checklistProcedure
+    .input(z.object({
+      condominioId: z.number(),
+      checklistId: z.number(),
+      itemId: z.number().optional(),
+      itemDesc: z.string().max(500).optional(),
+      descricao: z.string().min(3).max(2000),
+      status: z.enum(["aberto", "em_andamento", "resolvido"]).optional(),
+      prioridade: z.enum(["baixa", "media", "alta", "urgente"]).optional(),
+      imagens: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const autor = autorDaRequisicao(ctx);
+      const [criado] = await db
+        .insert(reportes)
+        .values({
+          condominioId: input.condominioId,
+          checklistId: input.checklistId,
+          itemId: input.itemId,
+          protocolo: await proximoProtocoloComData(db, "reporte", "RPT-"),
+          itemDesc: input.itemDesc ?? null,
+          descricao: input.descricao,
+          status: input.status ?? "aberto",
+          prioridade: input.prioridade ?? "media",
+          imagens: input.imagens ?? [],
+          criadoPorId: autor.userId,
+          criadoPorNome: autor.nome,
+        })
+        .returning();
+
+      return { id: criado.id, protocolo: criado.protocolo };
+    }),
+
+  listarReportes: checklistProcedure
+    .input(z.object({
+      condominioId: z.number(),
+      checklistId: z.number().optional(),
+      status: z.enum(["todos", "aberto", "em_andamento", "resolvido"]).optional().default("todos"),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      // A tabela `reportes` atende checklist e vistoria: sem este filtro a tela
+      // de checklist mostraria os problemas abertos na vistoria.
+      const condicoes = [
+        eq(reportes.condominioId, input.condominioId),
+        isNotNull(reportes.checklistId),
+      ];
+      if (input.checklistId) condicoes.push(eq(reportes.checklistId, input.checklistId));
+      if (input.status !== "todos") condicoes.push(eq(reportes.status, input.status));
+
+      return db
+        .select()
+        .from(reportes)
+        .where(and(...condicoes))
+        .orderBy(desc(reportes.createdAt));
+    }),
+
+  atualizarReporte: checklistProcedure
+    .input(z.object({
+      id: z.number(),
+      status: z.enum(["aberto", "em_andamento", "resolvido"]).optional(),
+      prioridade: z.enum(["baixa", "media", "alta", "urgente"]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const { id, ...campos } = input;
+      if (Object.keys(campos).length > 0) {
+        await db.update(reportes).set(campos).where(eq(reportes.id, id));
+      }
+
       return { success: true };
     }),
 });

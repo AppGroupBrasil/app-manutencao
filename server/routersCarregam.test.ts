@@ -9,10 +9,13 @@ import { describe, it, expect } from "vitest";
  * 500 na primeira chamada em produção.
  */
 describe("Carregamento dos routers", () => {
+  // Importar o router raiz arrasta todos os módulos do servidor: com a suíte
+  // inteira concorrendo, os 5s padrão do vitest estouram sem que nada esteja
+  // errado.
   it("monta o appRouter sem erro de configuração de escopo", async () => {
     const mod = await import("./routers");
     expect(mod.appRouter).toBeDefined();
-  });
+  }, 30_000);
 
   it("expõe as rotas dos módulos convertidos", async () => {
     const { appRouter } = await import("./routers");

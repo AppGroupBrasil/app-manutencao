@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, serial, text, varchar, timestamp, boolean, json, integer, decimal } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, serial, text, varchar, timestamp, boolean, json, integer, decimal, date } from "drizzle-orm/pg-core";
 
 
 // ==================== ENUMS (PostgreSQL) ====================
@@ -174,6 +174,8 @@ export const condominios = pgTable("condominios", {
   layoutPadrao: varchar("layoutPadrao", { length: 20 }).default("classico"),
   tamanhoFontePadrao: varchar("tamanhoFontePadrao", { length: 20 }).default("medio"),
   modoEscuroPadrao: boolean("modoEscuroPadrao").default(false),
+  // Ao abrir uma O.S., notifica todos os funcionários da unidade no aplicativo.
+  osAutoNotificar: boolean("osAutoNotificar").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -303,6 +305,8 @@ export const funcionarios = pgTable("funcionarios", {
   // Campos de recuperação de senha
   resetToken: varchar("resetToken", { length: 64 }),
   resetTokenExpira: timestamp("resetTokenExpira"),
+  // Recebe o e-mail de abertura de O.S. Ligado por padrão, como no Manutenção X.
+  notificarOsEmail: boolean("notificarOsEmail").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -337,7 +341,12 @@ export const funcionarioFuncoes = pgTable("funcionario_funcoes", {
   id: serial("id").primaryKey(),
   funcionarioId: integer("funcionarioId").references(() => funcionarios.id).notNull(),
   funcaoKey: varchar("funcaoKey", { length: 100 }).notNull(),
+  /** Vê a função na tela. */
   habilitada: boolean("habilitada").default(true),
+  /** Além de ver, pode registrar. */
+  podeCriar: boolean("podeCriar").default(true).notNull(),
+  /** Pode apagar registro da função. Padrão: não, o gestor libera. */
+  podeExcluir: boolean("podeExcluir").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -1044,6 +1053,8 @@ export const manutencaoImagens = pgTable("manutencao_imagens", {
   url: text("url").notNull(),
   legenda: varchar("legenda", { length: 255 }),
   ordem: integer("ordem").default(0),
+  /** Lado da galeria: "antes" ou "depois". */
+  fase: varchar("fase", { length: 10 }).default("antes").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -1192,12 +1203,203 @@ export const checklistItens = pgTable("checklist_itens", {
   completo: boolean("completo").default(false),
   observacao: text("observacao"),
   ordem: integer("ordem").default(0),
+  // Antes e depois do próprio item, como no Manutenção X
+  fotoAntes: text("fotoAntes"),
+  descAntes: text("descAntes"),
+  fotoDepois: text("fotoDepois"),
+  descDepois: text("descDepois"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type ChecklistItem = typeof checklistItens.$inferSelect;
 export type InsertChecklistItem = typeof checklistItens.$inferInsert;
+
+/** Anexos de um item do checklist — o botão de triângulo. */
+export const checklistItemAnexos = pgTable("checklist_item_anexos", {
+  id: serial("id").primaryKey(),
+  itemId: integer("itemId").references(() => checklistItens.id, { onDelete: "cascade" }).notNull(),
+  url: text("url").notNull(),
+  nome: varchar("nome", { length: 255 }),
+  tipo: varchar("tipo", { length: 20 }).default("imagem").notNull(),
+  autorId: integer("autorId"),
+  autorNome: varchar("autorNome", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChecklistItemAnexo = typeof checklistItemAnexos.$inferSelect;
+export type InsertChecklistItemAnexo = typeof checklistItemAnexos.$inferInsert;
+
+// ==================== LISTA DE TAREFAS (MODELO MANUTENÇÃO X) ====================
+export const tarefasAgendadas = pgTable("tarefas_agendadas", {
+  id: serial("id").primaryKey(),
+  condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
+  protocolo: varchar("protocolo", { length: 20 }).unique(),
+  titulo: varchar("titulo", { length: 255 }).notNull(),
+  descricao: text("descricao"),
+  funcionarioId: integer("funcionarioId"),
+  funcionarioNome: varchar("funcionarioNome", { length: 255 }),
+  bloco: varchar("bloco", { length: 50 }),
+  local: varchar("local", { length: 255 }),
+  recorrencia: varchar("recorrencia", { length: 20 }).default("unica").notNull(),
+  /** 0 = domingo … 6 = sábado. */
+  diasSemana: integer("diasSemana").array().default([]).notNull(),
+  dataEspecifica: date("dataEspecifica"),
+  diaMes: integer("diaMes"),
+  prioridade: varchar("prioridade", { length: 20 }).default("media").notNull(),
+  criadoPorId: integer("criadoPorId"),
+  criadoPorNome: varchar("criadoPorNome", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type TarefaAgendada = typeof tarefasAgendadas.$inferSelect;
+export type InsertTarefaAgendada = typeof tarefasAgendadas.$inferInsert;
+
+export const tarefasExecucoes = pgTable("tarefas_execucoes", {
+  id: serial("id").primaryKey(),
+  tarefaId: integer("tarefaId").references(() => tarefasAgendadas.id, { onDelete: "cascade" }).notNull(),
+  funcionarioId: integer("funcionarioId"),
+  funcionarioNome: varchar("funcionarioNome", { length: 255 }),
+  status: varchar("status", { length: 20 }).default("pendente").notNull(),
+  fotos: text("fotos").array().default([]).notNull(),
+  observacao: text("observacao"),
+  dataExecucao: date("dataExecucao").defaultNow().notNull(),
+  horaExecucao: varchar("horaExecucao", { length: 10 }),
+  latitude: varchar("latitude", { length: 20 }),
+  longitude: varchar("longitude", { length: 20 }),
+  audioUrl: text("audioUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TarefaExecucao = typeof tarefasExecucoes.$inferSelect;
+export type InsertTarefaExecucao = typeof tarefasExecucoes.$inferInsert;
+
+// ==================== QR CODE POR LOCAL OU ITEM ====================
+export const qrcodes = pgTable("qrcodes", {
+  id: serial("id").primaryKey(),
+  condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
+  protocolo: varchar("protocolo", { length: 20 }),
+  /** Vai impresso no código: é o que identifica o ponto na rota pública. */
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  tipo: varchar("tipo", { length: 20 }).default("local").notNull(),
+  titulo: varchar("titulo", { length: 255 }).notNull(),
+  descricao: text("descricao"),
+  ativo: boolean("ativo").default(true).notNull(),
+  criadoPorId: integer("criadoPorId"),
+  criadoPorNome: varchar("criadoPorNome", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Qrcode = typeof qrcodes.$inferSelect;
+export type InsertQrcode = typeof qrcodes.$inferInsert;
+
+export const qrcodeRespostas = pgTable("qrcode_respostas", {
+  id: serial("id").primaryKey(),
+  qrcodeId: integer("qrcodeId").references(() => qrcodes.id, { onDelete: "cascade" }).notNull(),
+  condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
+  protocolo: varchar("protocolo", { length: 20 }).unique(),
+  /** nova | em_andamento | resolvida */
+  status: varchar("status", { length: 20 }).default("nova").notNull(),
+  informanteNome: varchar("informanteNome", { length: 255 }).notNull(),
+  informanteContato: varchar("informanteContato", { length: 120 }),
+  descricao: text("descricao"),
+  imagens: text("imagens").array().default([]).notNull(),
+  latitude: varchar("latitude", { length: 20 }),
+  longitude: varchar("longitude", { length: 20 }),
+  enderecoGeo: text("enderecoGeo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type QrcodeResposta = typeof qrcodeRespostas.$inferSelect;
+export type InsertQrcodeResposta = typeof qrcodeRespostas.$inferInsert;
+
+// ==================== QUADRO DE ATIVIDADES ====================
+export const quadroAtividades = pgTable("quadro_atividades", {
+  id: serial("id").primaryKey(),
+  condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
+  protocolo: varchar("protocolo", { length: 20 }).unique(),
+  titulo: varchar("titulo", { length: 255 }).notNull(),
+  descricao: text("descricao"),
+  /** a_fazer | em_andamento | em_revisao | concluido */
+  status: varchar("status", { length: 20 }).default("a_fazer").notNull(),
+  prioridade: varchar("prioridade", { length: 20 }).default("media").notNull(),
+  /** diaria | semanal | mensal | anual | data_especifica */
+  rotina: varchar("rotina", { length: 20 }).default("diaria").notNull(),
+  dataEspecifica: date("dataEspecifica"),
+  responsavelId: integer("responsavelId"),
+  responsavelNome: varchar("responsavelNome", { length: 255 }),
+  /** Vínculo com um registro existente: os | vencimento | checklist | vistoria | manutencao */
+  origemTipo: varchar("origemTipo", { length: 20 }),
+  origemId: integer("origemId"),
+  ordem: integer("ordem").default(0).notNull(),
+  criadoPorId: integer("criadoPorId"),
+  criadoPorNome: varchar("criadoPorNome", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type QuadroAtividade = typeof quadroAtividades.$inferSelect;
+export type InsertQuadroAtividade = typeof quadroAtividades.$inferInsert;
+
+// ==================== ITENS DA VISTORIA (MODELO MANUTENÇÃO X) ====================
+export const vistoriaItens = pgTable("vistoria_itens", {
+  id: serial("id").primaryKey(),
+  vistoriaId: integer("vistoriaId").references(() => vistorias.id, { onDelete: "cascade" }).notNull(),
+  local: varchar("local", { length: 255 }),
+  descricao: varchar("descricao", { length: 500 }).notNull(),
+  /** pendente | conforme | nao_conforme | atencao */
+  status: varchar("status", { length: 20 }).default("pendente").notNull(),
+  prioridade: varchar("prioridade", { length: 20 }).default("media").notNull(),
+  observacao: text("observacao"),
+  ordem: integer("ordem").default(0).notNull(),
+  fotoAntes: text("fotoAntes"),
+  descAntes: text("descAntes"),
+  fotoDepois: text("fotoDepois"),
+  descDepois: text("descDepois"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type VistoriaItem = typeof vistoriaItens.$inferSelect;
+export type InsertVistoriaItem = typeof vistoriaItens.$inferInsert;
+
+export const vistoriaItemAnexos = pgTable("vistoria_item_anexos", {
+  id: serial("id").primaryKey(),
+  itemId: integer("itemId").references(() => vistoriaItens.id, { onDelete: "cascade" }).notNull(),
+  url: text("url").notNull(),
+  nome: varchar("nome", { length: 255 }),
+  tipo: varchar("tipo", { length: 20 }).default("imagem").notNull(),
+  autorId: integer("autorId"),
+  autorNome: varchar("autorNome", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VistoriaItemAnexo = typeof vistoriaItemAnexos.$inferSelect;
+export type InsertVistoriaItemAnexo = typeof vistoriaItemAnexos.$inferInsert;
+
+/** Problema reportado a partir de um item de checklist ou de vistoria. */
+export const reportes = pgTable("reportes", {
+  id: serial("id").primaryKey(),
+  condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
+  checklistId: integer("checklistId").references(() => checklists.id),
+  itemId: integer("itemId").references(() => checklistItens.id),
+  protocolo: varchar("protocolo", { length: 20 }).notNull().unique(),
+  // Copiado, não referenciado: o reporte sobrevive à edição do item.
+  itemDesc: text("itemDesc"),
+  descricao: text("descricao").notNull(),
+  status: varchar("status", { length: 20 }).default("aberto").notNull(),
+  prioridade: varchar("prioridade", { length: 20 }).default("media").notNull(),
+  imagens: text("imagens").array().default([]).notNull(),
+  vistoriaId: integer("vistoriaId"),
+  vistoriaItemId: integer("vistoriaItemId"),
+  criadoPorId: integer("criadoPorId"),
+  criadoPorNome: varchar("criadoPorNome", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Reporte = typeof reportes.$inferSelect;
+export type InsertReporte = typeof reportes.$inferInsert;
 
 // ==================== IMAGENS DE CHECKLISTS ====================
 export const checklistImagens = pgTable("checklist_imagens", {
@@ -1473,10 +1675,23 @@ export type InsertImagemCustom = typeof imagensCustom.$inferInsert;
 
 
 // ==================== AGENDA DE VENCIMENTOS ====================
+/** Aviso de vencimento no formato do Manutenção X: até três por registro. */
+export type AvisoVencimento = {
+  id: string;
+  tipo: "dias_antes" | "data_especifica";
+  valor: number;
+  dataEspecifica?: string;
+  descricao?: string;
+  imagens?: string[];
+};
+
 export const vencimentos = pgTable("vencimentos", {
   id: serial("id").primaryKey(),
   condominioId: integer("condominioId").references(() => condominios.id).notNull(),
-  tipo: vencimentosTipoEnum("tipo").notNull(),
+  protocolo: varchar("protocolo", { length: 20 }).unique(),
+  // Texto livre, não enum: os tipos de manutenção cadastrados pelo usuário
+  // entram como "manutencao:<slug>", igual ao Manutenção X.
+  tipo: varchar("tipo", { length: 100 }).notNull(),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   descricao: text("descricao"),
   fornecedor: varchar("fornecedor", { length: 255 }),
@@ -1494,12 +1709,48 @@ export const vencimentos = pgTable("vencimentos", {
   responsavel: varchar("responsavel", { length: 255 }),
   imagemUrl: text("imagemUrl"),
   emailsNotificacao: text("emailsNotificacao"),
+  // Modelo do Manutenção X
+  avisos: json("avisos").$type<AvisoVencimento[]>().default([]).notNull(),
+  emails: text("emails").array().default([]).notNull(),
+  qtdNotificacoes: integer("qtdNotificacoes").default(0).notNull(),
+  imagens: text("imagens").array().default([]).notNull(),
+  registroDescricao: text("registroDescricao"),
+  registroStatus: varchar("registroStatus", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type Vencimento = typeof vencimentos.$inferSelect;
 export type InsertVencimento = typeof vencimentos.$inferInsert;
+
+/** Fotos de antes e depois do registro de execução do vencimento. */
+export const vencimentoAnexos = pgTable("vencimento_anexos", {
+  id: serial("id").primaryKey(),
+  vencimentoId: integer("vencimentoId").references(() => vencimentos.id, { onDelete: "cascade" }).notNull(),
+  url: text("url").notNull(),
+  nome: varchar("nome", { length: 255 }),
+  tipo: varchar("tipo", { length: 20 }).default("imagem").notNull(),
+  fase: varchar("fase", { length: 10 }).default("antes").notNull(),
+  autorId: integer("autorId"),
+  autorNome: varchar("autorNome", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VencimentoAnexo = typeof vencimentoAnexos.$inferSelect;
+export type InsertVencimentoAnexo = typeof vencimentoAnexos.$inferInsert;
+
+/** Tipos de manutenção cadastráveis — no MX é global; aqui, por organização. */
+export const vencimentoTipos = pgTable("vencimento_tipos", {
+  id: serial("id").primaryKey(),
+  condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
+  slug: varchar("slug", { length: 120 }).notNull(),
+  nome: varchar("nome", { length: 120 }).notNull(),
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type VencimentoTipo = typeof vencimentoTipos.$inferSelect;
+export type InsertVencimentoTipo = typeof vencimentoTipos.$inferInsert;
 
 // ==================== CONFIGURAÇÃO DE ALERTAS DE VENCIMENTOS ====================
 export const vencimentoAlertas = pgTable("vencimento_alertas", {
@@ -1982,7 +2233,11 @@ export const ordensServico = pgTable("ordens_servico", {
   
   // Compartilhamento
   shareToken: varchar("shareToken", { length: 64 }).unique(),
-  
+
+  // Avaliação do serviço concluído, como no Manutenção X
+  avaliacaoNota: integer("avaliacaoNota"),
+  avaliacaoComentario: text("avaliacaoComentario"),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

@@ -1,6 +1,8 @@
-import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { publicProcedure, protectedProcedure, protectedOrFuncionarioProcedure, router } from "../../_core/trpc";
 import { z } from "zod";
 import { getDb } from "../../db";
+import { ehGestorMaster } from "../../_core/gestorMaster";
+import { CHAVES_FUNCOES_FUNCIONARIO } from "../../../shared/funcoesFuncionario";
 import { 
   funcionarios, 
   funcionarioCondominios, 
@@ -49,24 +51,69 @@ async function assertFuncionario(ctx: CtxTenant, funcionarioId: number) {
   await ctx.tenant.assert(registro.condominioId);
 }
 
+/**
+ * Permissões do funcionário com o padrão aplicado.
+ *
+ * Sem linha gravada a função é liberada — é o mesmo padrão que o servidor usa
+ * em `assegurarPermissaoFuncionario`. Sem este merge, função nova só apareceria
+ * para quem o gestor abrisse a tela de permissões e salvasse.
+ */
+function funcoesComPadrao(
+  linhas: {
+    funcaoKey: string;
+    habilitada: boolean | null;
+    podeCriar: boolean | null;
+    podeExcluir: boolean | null;
+  }[],
+) {
+  const gravadas = new Map(linhas.map((f) => [f.funcaoKey, f]));
+
+  return CHAVES_FUNCOES_FUNCIONARIO.map((chave) => {
+    const linha = gravadas.get(chave);
+    return {
+      funcaoKey: chave,
+      habilitada: linha ? linha.habilitada === true : true,
+      podeCriar: linha ? linha.podeCriar === true : true,
+      // Sem linha gravada nao ha autorizacao para apagar.
+      podeExcluir: linha ? linha.podeExcluir === true : false,
+    };
+  });
+}
+
 export const funcionarioRouter = router({
-    list: protectedProcedure
+    /**
+     * Master vê a equipe inteira da organização; gestor de unidade vê só quem
+     * ele mesmo cadastrou. Registros antigos, sem `criadoPorId`, continuam
+     * visíveis para o master — some-los seria perder gente já cadastrada.
+     */
+    list: protectedOrFuncionarioProcedure
       .input(z.object({ condominioId: z.number().optional(), revistaId: z.number().optional() }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) return [];
+
+        // O funcionário precisa da equipe da unidade para escolher responsável
+        // nas telas novas; o recorte por criador existe para separar gestores
+        // entre si, e não faz sentido aplicá-lo a quem executa.
+        const master = ctx.user ? await ehGestorMaster(ctx.user.id) : true;
+        const filtro = (condominioId: number) =>
+          master || !ctx.user
+            ? eq(funcionarios.condominioId, condominioId)
+            : and(
+                eq(funcionarios.condominioId, condominioId),
+                eq(funcionarios.criadoPorId, ctx.user.id),
+              );
+
         if (input.condominioId) {
           await assertOrganizacao(ctx, input.condominioId);
-          return db.select().from(funcionarios)
-            .where(eq(funcionarios.condominioId, input.condominioId));
+          return db.select().from(funcionarios).where(filtro(input.condominioId));
         }
         if (input.revistaId) {
           // Buscar o condomínio da revista e depois os funcionários
           const revista = await db.select().from(revistas).where(eq(revistas.id, input.revistaId));
           if (revista.length === 0) return [];
           await assertOrganizacao(ctx, revista[0].condominioId);
-          return db.select().from(funcionarios)
-            .where(eq(funcionarios.condominioId, revista[0].condominioId));
+          return db.select().from(funcionarios).where(filtro(revista[0].condominioId));
         }
         return [];
       }),
@@ -101,7 +148,11 @@ export const funcionarioRouter = router({
         
         // Usar transação para garantir atomicidade
         const funcionarioId = await db.transaction(async (tx) => {
-          const [result] = await tx.insert(funcionarios).values({ ...data, condominioId }).returning();
+          const [result] = await tx
+            .insert(funcionarios)
+            // `criadoPorId` é o que sustenta o recorte por gestor na listagem.
+            .values({ ...data, condominioId, criadoPorId: ctx.user.id })
+            .returning();
           const fId = Number(result.id);
           
           // Se for supervisor, vincular aos condomínios adicionais
@@ -256,7 +307,12 @@ export const funcionarioRouter = router({
         if (!db) return [];
         const funcoes = await db.select().from(funcionarioFuncoes)
           .where(eq(funcionarioFuncoes.funcionarioId, input.funcionarioId));
-        return funcoes.map(f => ({ ...f, habilitada: f.habilitada === true }));
+        return funcoes.map(f => ({
+          ...f,
+          habilitada: f.habilitada === true,
+          podeCriar: f.podeCriar === true,
+          podeExcluir: f.podeExcluir === true,
+        }));
       }),
 
     // Atualizar funções do funcionário
@@ -266,6 +322,8 @@ export const funcionarioRouter = router({
         funcoes: z.array(z.object({
           funcaoKey: z.string(),
           habilitada: z.boolean(),
+          podeCriar: z.boolean().optional(),
+          podeExcluir: z.boolean().optional(),
         })),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -285,6 +343,9 @@ export const funcionarioRouter = router({
                 funcionarioId: input.funcionarioId,
                 funcaoKey: f.funcaoKey,
                 habilitada: f.habilitada,
+                podeCriar: f.podeCriar ?? true,
+                // Exclusao nasce negada: so entra ligada se o gestor marcar.
+                podeExcluir: f.podeExcluir ?? false,
               }))
             ).returning();
           }
@@ -493,7 +554,7 @@ export const funcionarioRouter = router({
             condominioId: funcionario.condominioId,
             fotoUrl: funcionario.fotoUrl,
           },
-          funcoes: funcoes.map(f => ({ funcaoKey: f.funcaoKey, habilitada: f.habilitada === true })),
+          funcoes: funcoesComPadrao(funcoes),
           condominiosVinculados,
           appsVinculados,
         };
@@ -580,7 +641,7 @@ export const funcionarioRouter = router({
           condominioId: funcionario.condominioId,
           condominioPrincipal,
           fotoUrl: funcionario.fotoUrl,
-          funcoes: funcoes.map(f => ({ funcaoKey: f.funcaoKey, habilitada: f.habilitada === true })),
+          funcoes: funcoesComPadrao(funcoes),
           condominiosVinculados,
           appsVinculados,
         };
@@ -630,7 +691,7 @@ export const funcionarioRouter = router({
         // Enviar email de recuperação
         try {
           const { notifyOwner } = await import("../../_core/notification");
-          const baseUrl = process.env.VITE_APP_URL || "https://app-sindico.manus.space";
+          const baseUrl = process.env.VITE_APP_URL || "https://appmanutencao.com.br";
           const resetLink = `${baseUrl}/funcionario/redefinir-senha?token=${resetToken}`;
           
           await notifyOwner({

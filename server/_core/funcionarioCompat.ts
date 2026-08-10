@@ -134,6 +134,7 @@ function normalizeFuncionario(row: Record<string, unknown>): Funcionario {
     ultimoLogin: asNullableDate(row.ultimoLogin),
     resetToken: asNullableString(row.resetToken),
     resetTokenExpira: asNullableDate(row.resetTokenExpira),
+    notificarOsEmail: asBoolean(row.notificarOsEmail, true),
     createdAt: asNullableDate(row.createdAt) ?? new Date(0),
     updatedAt: asNullableDate(row.updatedAt) ?? new Date(0),
   };
