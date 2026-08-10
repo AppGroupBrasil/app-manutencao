@@ -36,6 +36,7 @@ import {
   RotateCcw,
   Share2,
   SlidersHorizontal,
+  Pencil,
   Trash2,
 } from "lucide-react";
 
@@ -50,6 +51,39 @@ const COLUNAS = [
 ] as const;
 
 type StatusQuadro = (typeof COLUNAS)[number]["valor"];
+
+/** Texto do compartilhamento, no mesmo formato das outras funções. */
+function mensagemDaAtividade(atividade: {
+  titulo: string;
+  descricao: string | null;
+  prioridade: string;
+  rotina: string;
+  responsavelNome: string | null;
+  protocolo?: string | null;
+}): string {
+  return [
+    "*Atividade*",
+    atividade.protocolo ? `*Protocolo:* ${atividade.protocolo}` : "",
+    `*Título:* ${atividade.titulo}`,
+    `*Prioridade:* ${atividade.prioridade}`,
+    `*Rotina:* ${atividade.rotina}`,
+    atividade.responsavelNome ? `*Responsável:* ${atividade.responsavelNome}` : "",
+    atividade.descricao ? `\n${atividade.descricao}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Baixa o base64 devolvido pelo servidor como arquivo. */
+function baixarPdfBase64(base64: string, nome: string) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nome;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 const ROTINAS = [
   { valor: "diaria", rotulo: "Diária" },
@@ -144,6 +178,15 @@ export function ConteudoQuadroAtividades({
   const [modalNova, setModalNova] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [arrastando, setArrastando] = useState<number | null>(null);
+  // Atividade aberta para edição; nulo com o modal fechado.
+  const [editando, setEditando] = useState<{
+    id: number;
+    titulo: string;
+    descricao: string | null;
+    prioridade: string;
+    rotina: string;
+    responsavelNome: string | null;
+  } | null>(null);
   const [protocolo, setProtocolo] = useState("");
   const [buscarProtocolo, setBuscarProtocolo] = useState("");
   const [colunaImportar, setColunaImportar] = useState<StatusQuadro>("a_fazer");
@@ -189,6 +232,11 @@ export function ConteudoQuadroAtividades({
   const atualizar = trpc.quadroAtividades.atualizar.useMutation({
     onSuccess: invalidar,
     onError: (e) => toast.error(e.message || "Erro ao atualizar"),
+  });
+
+  // Relatório de uma coluna: é o que se leva impresso para a reunião.
+  const gerarPdfColuna = trpc.quadroAtividades.generatePdfColuna.useMutation({
+    onError: (e) => toast.error(e.message || "Erro ao gerar o PDF"),
   });
 
   const deletar = trpc.quadroAtividades.deletar.useMutation({
@@ -510,9 +558,25 @@ export function ConteudoQuadroAtividades({
                         />
                         {coluna.rotulo}
                       </span>
-                      <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2.5 py-1">
-                        {itens.length}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {/* Relatório da coluna inteira, não de uma atividade. */}
+                        <button
+                          className="text-slate-300 hover:text-slate-600"
+                          aria-label={`Baixar PDF de ${coluna.rotulo}`}
+                          onClick={async () => {
+                            const res = await gerarPdfColuna.mutateAsync({
+                              condominioId,
+                              status: coluna.valor,
+                            });
+                            baixarPdfBase64(res.pdf, `quadro-${coluna.valor}.pdf`);
+                          }}
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                        <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2.5 py-1">
+                          {itens.length}
+                        </span>
+                      </div>
                     </div>
                     <div className="h-0.5" style={{ backgroundColor: coluna.cor }} />
 
@@ -538,6 +602,17 @@ export function ConteudoQuadroAtividades({
                                   deletar.mutate({ id: a.id });
                                 }
                               }}
+                              onEditar={() => setEditando(a)}
+                              onFinalizar={() =>
+                                atualizar.mutate({ id: a.id, status: "concluido" })
+                              }
+                              onPrioridade={(prioridade) =>
+                                atualizar.mutate({
+                                  id: a.id,
+                                  prioridade: prioridade as "baixa" | "media" | "alta" | "urgente",
+                                })
+                              }
+                              condominioId={condominioId}
                             />
                           ))}
                         </div>
@@ -588,6 +663,102 @@ export function ConteudoQuadroAtividades({
           </div>
         )}
       </main>
+
+      {/* Editar atividade */}
+      <Dialog open={editando !== null} onOpenChange={(aberto) => !aberto && setEditando(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar atividade</DialogTitle>
+          </DialogHeader>
+          {editando && (
+            <div className="space-y-3">
+              <div>
+                <Label>Título</Label>
+                <Input
+                  value={editando.titulo}
+                  onChange={(e) => setEditando({ ...editando, titulo: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Descrição</Label>
+                <Textarea
+                  rows={3}
+                  value={editando.descricao ?? ""}
+                  onChange={(e) => setEditando({ ...editando, descricao: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Responsável</Label>
+                <Input
+                  value={editando.responsavelNome ?? ""}
+                  onChange={(e) => setEditando({ ...editando, responsavelNome: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Prioridade</Label>
+                  <Select
+                    value={editando.prioridade}
+                    onValueChange={(v) => setEditando({ ...editando, prioridade: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRIORIDADES.map((p) => (
+                        <SelectItem key={p.valor} value={p.valor}>
+                          {p.rotulo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Rotina</Label>
+                  <Select
+                    value={editando.rotina}
+                    onValueChange={(v) => setEditando({ ...editando, rotina: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROTINAS.map((r) => (
+                        <SelectItem key={r.valor} value={r.valor}>
+                          {r.rotulo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Button
+                className="w-full"
+                disabled={atualizar.isPending || editando.titulo.trim().length < 3}
+                onClick={() => {
+                  atualizar.mutate({
+                    id: editando.id,
+                    titulo: editando.titulo.trim(),
+                    descricao: editando.descricao?.trim() || undefined,
+                    responsavelNome: editando.responsavelNome?.trim() || undefined,
+                    prioridade: editando.prioridade as "baixa" | "media" | "alta" | "urgente",
+                    rotina: editando.rotina as
+                      | "diaria"
+                      | "semanal"
+                      | "mensal"
+                      | "anual"
+                      | "data_especifica",
+                  });
+                  setEditando(null);
+                }}
+              >
+                Salvar
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Nova atividade */}
       <Dialog open={modalNova} onOpenChange={setModalNova}>
@@ -793,6 +964,10 @@ function CartaoAtividade({
   atividade,
   onArrastar,
   onExcluir,
+  onEditar,
+  onFinalizar,
+  onPrioridade,
+  condominioId,
 }: {
   atividade: {
     id: number;
@@ -802,9 +977,15 @@ function CartaoAtividade({
     rotina: string;
     responsavelNome: string | null;
     origemTipo: string | null;
+    status: string;
+    protocolo?: string | null;
   };
   onArrastar: () => void;
   onExcluir: () => void;
+  onEditar: () => void;
+  onFinalizar: () => void;
+  onPrioridade: (prioridade: string) => void;
+  condominioId: number;
 }) {
   const prioridade =
     PRIORIDADES.find((p) => p.valor === atividade.prioridade) ?? PRIORIDADES[1];
@@ -846,6 +1027,43 @@ function CartaoAtividade({
       {atividade.responsavelNome && (
         <p className="text-[11px] text-slate-500 mt-1.5">{atividade.responsavelNome}</p>
       )}
+
+      {/* Prioridade num toque: é o ajuste mais frequente no quadro. */}
+      <div className="flex flex-wrap gap-1 mt-2.5">
+        {PRIORIDADES.map((p) => {
+          const ativa = p.valor === atividade.prioridade;
+          return (
+            <button
+              key={p.valor}
+              onClick={() => onPrioridade(p.valor)}
+              className="text-[10px] px-1.5 py-0.5 rounded-full border transition-colors"
+              style={
+                ativa
+                  ? { color: p.cor, backgroundColor: p.fundo, borderColor: p.cor }
+                  : { color: "#94a3b8", borderColor: "#e2e8f0" }
+              }
+              aria-label={`Prioridade ${p.rotulo}`}
+            >
+              {p.rotulo}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t">
+        {atividade.status !== "concluido" && (
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onFinalizar}>
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Finalizar
+          </Button>
+        )}
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onEditar}>
+          <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
+        </Button>
+        <BotaoCompartilhar
+          condominioId={condominioId}
+          mensagem={mensagemDaAtividade(atividade)}
+        />
+      </div>
     </div>
   );
 }

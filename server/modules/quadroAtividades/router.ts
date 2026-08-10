@@ -13,6 +13,7 @@ import {
   vistorias,
   manutencoes,
   qrcodeRespostas,
+  condominios,
 } from "../../../drizzle/schema";
 
 const quadroProcedure = moduloProcedure(
@@ -270,6 +271,60 @@ export const quadroAtividadesRouter = router({
       }
 
       return { success: true };
+    }),
+
+  /**
+   * Relatório de uma coluna inteira.
+   *
+   * O que se leva para a reunião ou para o turno é a coluna, não a atividade
+   * solta — por isso o recorte aqui é por status.
+   */
+  generatePdfColuna: quadroProcedure
+    .input(z.object({ condominioId: z.number(), status: z.enum(STATUS) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const [organizacao] = await db
+        .select({ nome: condominios.nome })
+        .from(condominios)
+        .where(eq(condominios.id, input.condominioId))
+        .limit(1);
+
+      const atividades = await db
+        .select()
+        .from(quadroAtividades)
+        .where(
+          and(
+            eq(quadroAtividades.condominioId, input.condominioId),
+            eq(quadroAtividades.status, input.status),
+          ),
+        )
+        .orderBy(asc(quadroAtividades.ordem));
+
+      const rotulos: Record<string, string> = {
+        a_fazer: "A Fazer",
+        em_andamento: "Em Andamento",
+        em_revisao: "Em Revisão",
+        concluido: "Concluído",
+      };
+
+      const { gerarPdfColuna } = await import("../../pdfListaAtividades");
+
+      const pdf = await gerarPdfColuna({
+        organizacao: organizacao?.nome ?? "Organização",
+        coluna: rotulos[input.status] ?? input.status,
+        atividades: atividades.map((a) => ({
+          titulo: a.titulo,
+          descricao: a.descricao,
+          prioridade: a.prioridade,
+          rotina: a.rotina,
+          responsavelNome: a.responsavelNome,
+          protocolo: a.protocolo,
+        })),
+      });
+
+      return { pdf: pdf.toString("base64"), total: atividades.length };
     }),
 
   deletar: quadroProcedure
