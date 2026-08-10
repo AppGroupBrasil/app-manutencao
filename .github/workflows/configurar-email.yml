@@ -1,0 +1,78 @@
+name: Configurar envio de e-mail
+
+# Grava a chave do Resend no .env do servidor e sobe o app com ela.
+#
+# A chave vem do secret RESEND_API_KEY, nunca de um campo do formulário: valor
+# digitado em input aparece no log da execução. O passo final dispara um e-mail
+# de teste para confirmar que passou a sair de verdade.
+on:
+  workflow_dispatch:
+    inputs:
+      destinatario_teste:
+        description: "E-mail para receber o teste depois de configurar"
+        required: true
+        type: string
+
+env:
+  APP_PATH: /opt/app-manutencao
+
+jobs:
+  configurar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir o secret da chave
+        run: |
+          if [ -z "${{ secrets.RESEND_API_KEY }}" ]; then
+            echo "Defina o secret RESEND_API_KEY antes de rodar."
+            exit 1
+          fi
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      # Reescreve só a linha da chave, preservando o resto do arquivo. Uma cópia
+      # datada fica ao lado, para dar para voltar se algo sair errado.
+      - name: Gravar a chave no .env
+        env:
+          CHAVE: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && \
+             cp .env .env.bak-\$(date +%Y%m%d_%H%M%S) && \
+             grep -v '^RESEND_API_KEY=' .env > .env.novo || true; \
+             echo 'RESEND_API_KEY=$CHAVE' >> .env.novo && \
+             mv .env.novo .env && \
+             echo 'chave gravada'"
+
+      - name: Subir o app com a chave
+        run: |
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose up -d --no-build --force-recreate app"
+
+      - name: Esperar ficar saudável
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "for i in \$(seq 1 24); do \
+               estado=\$(docker inspect -f '{{.State.Health.Status}}' app-manutencao 2>/dev/null || echo ausente); \
+               echo \"tentativa \$i: \$estado\"; \
+               [ \"\$estado\" = healthy ] && exit 0; \
+               sleep 5; \
+             done; \
+             docker logs --tail 60 app-manutencao; exit 1"
+
+      - name: Enviar e-mail de teste
+        env:
+          DESTINATARIO: ${{ inputs.destinatario_teste }}
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose run --rm --no-deps app \
+               node dist/testar-email.js '$DESTINATARIO'"
