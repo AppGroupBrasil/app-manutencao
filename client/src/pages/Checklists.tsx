@@ -671,7 +671,7 @@ export default function Checklists() {
               <div>
                 <Label>Local</Label>
                 <Input
-                  placeholder="Ex: Bloco A"
+                  placeholder="Ex.: berçário, cozinha, pátio"
                   value={form.localizacao}
                   onChange={(e) => setForm({ ...form, localizacao: e.target.value })}
                 />

@@ -47,12 +47,6 @@ const DIAS = [
   { valor: 6, curto: "Sáb", nome: "Sábado" },
 ];
 
-/**
- * Setores continuam em lista fixa; o local passou a ser texto livre, porque
- * cada unidade nomeia os espaços do seu jeito e lista fechada só atrapalhava.
- */
-const SETORES = ["Bloco A", "Bloco B", "Bloco C", "Bloco D"];
-
 const RECORRENCIAS = [
   { valor: "unica", rotulo: "Data Específica" },
   { valor: "diaria", rotulo: "Diária" },
@@ -454,19 +448,14 @@ export function ConteudoListaTarefas({
 
               <div>
                 <Rotulo>Setor</Rotulo>
-                <Select value={form.bloco} onValueChange={(v) => setForm({ ...form, bloco: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {SETORES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Texto livre: cada unidade nomeia os setores do seu jeito
+                    (berçário, cozinha, secretaria), e a lista fixa de blocos
+                    era vocabulário de condomínio. */}
+                <Input
+                  placeholder="Ex.: berçário, cozinha, secretaria"
+                  value={form.bloco === "Todos" ? "" : form.bloco}
+                  onChange={(e) => setForm({ ...form, bloco: e.target.value || "Todos" })}
+                />
               </div>
 
               <div>
