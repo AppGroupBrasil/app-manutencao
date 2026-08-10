@@ -117,6 +117,10 @@ export function OsDetalhe({
   const inputFoto = useRef<HTMLInputElement>(null);
   const inputCamera = useRef<HTMLInputElement>(null);
   const inputAnexo = useRef<HTMLInputElement>(null);
+  // Quando foi a última gravação. Sem isto, quem mexe na O.S. não tem sinal
+  // nenhum de que o sistema guardou — e procura um botão de salvar que não
+  // existe, porque aqui tudo grava na hora.
+  const [salvoEm, setSalvoEm] = useState<Date | null>(null);
 
   const recarregar = async () => {
     await Promise.all([
@@ -124,6 +128,7 @@ export function OsDetalhe({
       utils.ordensServico.listarAnexos.invalidate({ ordemServicoId }),
       utils.ordensServico.list.invalidate(),
     ]);
+    setSalvoEm(new Date());
   };
 
   // Mesmo endereço que o QR do PDF: a folha impressa e a tela apontam para cá.
@@ -208,6 +213,7 @@ export function OsDetalhe({
         });
       }
       await recarregar();
+      toast.success(arquivos.length > 1 ? "Fotos salvas" : "Foto salva");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao enviar a foto");
     } finally {
@@ -229,6 +235,7 @@ export function OsDetalhe({
         });
       }
       await recarregar();
+      toast.success(arquivos.length > 1 ? "Anexos salvos" : "Anexo salvo");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao enviar o anexo");
     } finally {
@@ -270,6 +277,20 @@ export function OsDetalhe({
 
   return (
     <div className="space-y-4">
+      {/* O aviso troca o botão de salvar que as pessoas procuram. */}
+      <div className="flex items-center justify-between gap-2 text-xs bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-lg px-3 py-2">
+        <span className="inline-flex items-center gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          As alterações são salvas automaticamente.
+        </span>
+        {salvoEm && (
+          <span className="text-emerald-700 shrink-0">
+            Salvo às{" "}
+            {salvoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+      </div>
+
       {/* Identificação: o que a folha impressa precisa carregar. */}
       <div className="border rounded-lg p-3 flex items-center gap-4">
         <div className="min-w-0 flex-1">
