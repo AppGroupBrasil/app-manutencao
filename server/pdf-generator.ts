@@ -1,23 +1,9 @@
 import PDFDocument from "pdfkit";
-import https from "https";
-import http from "http";
 import QRCode from "qrcode";
+import { carregarImagemParaPdf } from "./_core/imagemPdf";
 
-// Baixar imagem de URL remota e retornar Buffer
-async function fetchImageBuffer(url: string): Promise<Buffer | null> {
-  return new Promise((resolve) => {
-    const client = url.startsWith('https') ? https : http;
-    const req = client.get(url, { timeout: 8000 }, (res) => {
-      if (res.statusCode !== 200) { resolve(null); return; }
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', () => resolve(null));
-    });
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => { req.destroy(); resolve(null); });
-  });
-}
+/** Alias local: o gerador chama assim em vários pontos. */
+const fetchImageBuffer = carregarImagemParaPdf;
 
 interface OSPDFData {
   osId: number;

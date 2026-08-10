@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { carregarImagemParaPdf, formatoDaImagem } from './_core/imagemPdf';
 import 'jspdf-autotable';
 
 interface ItemFuncaoRapida {
@@ -388,15 +389,15 @@ export async function generateFuncaoRapidaPDF(item: ItemFuncaoRapida): Promise<B
       const xPos = margin + col * (imgWidth + imgGap);
       
       try {
-        // Buscar imagem e converter para base64
+        // A url pode ser caminho local (`/uploads/...`) ou endereço; quem
+        // resolve os dois é o carregador comum. Com `fetch` direto, toda foto
+        // guardada no disco do servidor virava "Imagem indisponível".
         const imgUrl = item.imagens[i].url;
-        const response = await fetch(imgUrl);
-        if (response.ok) {
-          const arrayBuffer = await response.arrayBuffer();
-          const base64 = Buffer.from(arrayBuffer).toString('base64');
-          const contentType = response.headers.get('content-type') || 'image/jpeg';
-          const format = contentType.includes('png') ? 'PNG' : 'JPEG';
-          const dataUri = `data:${contentType};base64,${base64}`;
+        const buffer = await carregarImagemParaPdf(imgUrl);
+        if (buffer) {
+          const format = formatoDaImagem(imgUrl);
+          const contentType = format === 'PNG' ? 'image/png' : 'image/jpeg';
+          const dataUri = `data:${contentType};base64,${buffer.toString('base64')}`;
           
           // Borda e fundo
           doc.setFillColor(248, 250, 252);
