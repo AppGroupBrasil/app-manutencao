@@ -252,7 +252,8 @@ export default function Home() {
                 App Manutenção
                 {/* A frase é longa para um título: entra menor, sem virar parede de texto. */}
                 <span className="block text-blue-400 text-xl md:text-3xl font-semibold leading-snug mt-4">
-                  Manutenção feita sob medida para a sua empresa, de acordo com a sua necessidade
+                  Manutenção feita sob medida para a sua empresa e condomínio, de acordo com a
+                  sua necessidade
                 </span>
               </h1>
 
