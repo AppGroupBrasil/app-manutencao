@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
-import { AlertTriangle, ClipboardCheck, ImagePlus, Loader2, MapPin, Search, Wrench, X } from "lucide-react";
+import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
+import { AlertTriangle, ClipboardCheck, ImagePlus, Loader2, MapPin, Printer, Search, Wrench, X } from "lucide-react";
 
 type CoreSection = "checklists" | "manutencoes" | "ocorrencias" | "vistorias";
 
@@ -20,6 +21,8 @@ type RegistroItem = {
   prioridade?: string | null;
   localizacao?: string | null;
   createdAt?: string | Date | null;
+  /** Fotos anexadas; vêm de `listWithDetails`. */
+  imagens?: { id: number; url: string }[];
 };
 
 interface CoreModulesPanelProps {
@@ -44,6 +47,11 @@ interface SectionLayoutProps {
   onSubmit: (values: FormValues) => Promise<void>;
   /** Falso esconde o formulário e deixa apenas a lista. */
   podeCriar?: boolean;
+  /** Unidade ativa: alimenta o compartilhamento com a equipe. */
+  condominioId?: number;
+  /** Gera o relatório do registro; sem isto o botão não aparece. */
+  onBaixarPdf?: (id: number) => void;
+  baixandoPdf?: boolean;
 }
 
 interface FormValues {
@@ -53,6 +61,33 @@ interface FormValues {
   prioridade: "baixa" | "media" | "alta" | "urgente";
   /** URLs já enviadas ao storage; vinculadas ao registro depois de criado. */
   imagens: string[];
+}
+
+
+/** Baixa o base64 devolvido pelo servidor como arquivo. */
+function baixarPdfBase64(base64: string, nome: string) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nome;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Texto do compartilhamento, no mesmo formato usado na ordem de serviço. */
+function mensagemDoRegistro(section: CoreSection, item: RegistroItem): string {
+  return [
+    `*${SECTION_META[section].title}*`,
+    `*Protocolo:* ${item.protocolo}`,
+    `*Título:* ${item.titulo}`,
+    item.status ? `*Status:* ${item.status}` : "",
+    item.prioridade ? `*Prioridade:* ${item.prioridade}` : "",
+    item.localizacao ? `*Local:* ${item.localizacao}` : "",
+    item.descricao ? `\n${item.descricao}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 const SECTION_META: Record<CoreSection, { title: string; description: string; accentClass: string }> = {
@@ -121,6 +156,9 @@ function SectionLayout({
   onRememberTitleChange,
   titleSuggestions,
   onSubmit,
+  condominioId,
+  onBaixarPdf,
+  baixandoPdf,
 }: Readonly<SectionLayoutProps>) {
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -219,6 +257,22 @@ function SectionLayout({
               </div>
             </div>
             {item.descricao ? <p className="mt-3 text-sm text-slate-600">{item.descricao}</p> : null}
+
+            {/* Fotos anexadas: sem isto, quem anexou não via o que mandou. */}
+            {item.imagens && item.imagens.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {item.imagens.map((img) => (
+                  <a key={img.id} href={img.url} target="_blank" rel="noreferrer">
+                    <img
+                      src={img.url}
+                      alt=""
+                      className="h-16 w-16 rounded border object-cover"
+                    />
+                  </a>
+                ))}
+              </div>
+            ) : null}
+
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
               <span>{formatDate(item.createdAt)}</span>
               {item.localizacao ? (
@@ -228,6 +282,34 @@ function SectionLayout({
                 </span>
               ) : null}
             </div>
+
+            {/* Mesmas ações da ordem de serviço: relatório e compartilhamento. */}
+            {(onBaixarPdf || condominioId) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                {onBaixarPdf && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={baixandoPdf}
+                    onClick={() => onBaixarPdf(item.id)}
+                  >
+                    {baixandoPdf ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Printer className="mr-2 h-4 w-4" />
+                    )}
+                    PDF
+                  </Button>
+                )}
+                {condominioId ? (
+                  <BotaoCompartilhar
+                    condominioId={condominioId}
+                    mensagem={mensagemDoRegistro(section, item)}
+                    rotulo="Compartilhar"
+                  />
+                ) : null}
+              </div>
+            )}
           </div>
         ))}
       </>
@@ -399,7 +481,13 @@ function SectionLayout({
 
 function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.checklist.list.useQuery({ condominioId });
+  // `listWithDetails` traz as fotos junto: sem elas o cartão não mostra o que
+  // foi anexado.
+  const { data, isLoading } = trpc.checklist.listWithDetails.useQuery({ condominioId });
+  // O servidor devolve só o base64; o nome do arquivo é montado aqui.
+  const gerarPdf = trpc.checklist.generatePdf.useMutation({
+    onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
+  });
   const storageKey = `checklist_saved_titles_${condominioId}`;
   const [rememberTitle, setRememberTitle] = useState(false);
   const [savedTitles, setSavedTitles] = useState<string[]>(() => {
@@ -440,6 +528,12 @@ function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: 
       accentClass={SECTION_META.checklists.accentClass}
       records={(data || []) as RegistroItem[]}
       isLoading={isLoading}
+      condominioId={condominioId}
+      onBaixarPdf={async (id) => {
+        const res = await gerarPdf.mutateAsync({ id });
+        baixarPdfBase64(res.pdf, `checklists-${id}.pdf`);
+      }}
+      baixandoPdf={gerarPdf.isPending}
       isSubmitting={createMutation.isPending}
       rememberTitleEnabled
       rememberTitleChecked={rememberTitle}
@@ -467,7 +561,13 @@ function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: 
 
 function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.manutencao.list.useQuery({ condominioId });
+  // `listWithDetails` traz as fotos junto: sem elas o cartão não mostra o que
+  // foi anexado.
+  const { data, isLoading } = trpc.manutencao.listWithDetails.useQuery({ condominioId });
+  // O servidor devolve só o base64; o nome do arquivo é montado aqui.
+  const gerarPdf = trpc.manutencao.generatePdf.useMutation({
+    onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
+  });
   const addImagemManutencao = trpc.manutencao.addImagem.useMutation();
   const createMutation = trpc.manutencao.create.useMutation({
     onSuccess: async () => {
@@ -486,6 +586,12 @@ function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId:
       accentClass={SECTION_META.manutencoes.accentClass}
       records={(data || []) as RegistroItem[]}
       isLoading={isLoading}
+      condominioId={condominioId}
+      onBaixarPdf={async (id) => {
+        const res = await gerarPdf.mutateAsync({ id });
+        baixarPdfBase64(res.pdf, `manutencoes-${id}.pdf`);
+      }}
+      baixandoPdf={gerarPdf.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
@@ -498,7 +604,13 @@ function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId:
 
 function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.ocorrencia.list.useQuery({ condominioId });
+  // `listWithDetails` traz as fotos junto: sem elas o cartão não mostra o que
+  // foi anexado.
+  const { data, isLoading } = trpc.ocorrencia.listWithDetails.useQuery({ condominioId });
+  // O servidor devolve só o base64; o nome do arquivo é montado aqui.
+  const gerarPdf = trpc.ocorrencia.generatePdf.useMutation({
+    onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
+  });
   const addImagem = trpc.ocorrencia.addImagem.useMutation();
   const createMutation = trpc.ocorrencia.create.useMutation({
     onSuccess: async () => {
@@ -517,6 +629,12 @@ function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId:
       accentClass={SECTION_META.ocorrencias.accentClass}
       records={(data || []) as RegistroItem[]}
       isLoading={isLoading}
+      condominioId={condominioId}
+      onBaixarPdf={async (id) => {
+        const res = await gerarPdf.mutateAsync({ id });
+        baixarPdfBase64(res.pdf, `ocorrencias-${id}.pdf`);
+      }}
+      baixandoPdf={gerarPdf.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
@@ -535,7 +653,13 @@ function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId:
 
 function VistoriaSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.vistoria.list.useQuery({ condominioId });
+  // `listWithDetails` traz as fotos junto: sem elas o cartão não mostra o que
+  // foi anexado.
+  const { data, isLoading } = trpc.vistoria.listWithDetails.useQuery({ condominioId });
+  // O servidor devolve só o base64; o nome do arquivo é montado aqui.
+  const gerarPdf = trpc.vistoria.generatePdf.useMutation({
+    onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
+  });
   const addImagemVistoria = trpc.vistoria.addImagem.useMutation();
   const createMutation = trpc.vistoria.create.useMutation({
     onSuccess: async () => {
@@ -554,6 +678,12 @@ function VistoriaSection({ condominioId, podeCriar }: Readonly<{ condominioId: n
       accentClass={SECTION_META.vistorias.accentClass}
       records={(data || []) as RegistroItem[]}
       isLoading={isLoading}
+      condominioId={condominioId}
+      onBaixarPdf={async (id) => {
+        const res = await gerarPdf.mutateAsync({ id });
+        baixarPdfBase64(res.pdf, `vistorias-${id}.pdf`);
+      }}
+      baixandoPdf={gerarPdf.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
