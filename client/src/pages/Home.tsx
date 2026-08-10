@@ -277,6 +277,14 @@ export default function Home() {
                   compromisso.
                 </span>
               </div>
+
+              {/* A promessa de adaptação fica junto do botão: é o argumento que
+                  diferencia, e o cliente decide ali. */}
+              <p className="text-sm md:text-base text-slate-400 max-w-xl mt-5 leading-relaxed border-l-2 border-blue-500/40 pl-4">
+                A base já está pronta. <span className="text-slate-200">Nomes, funções, tipos
+                de acesso e de manutenção</span> se ajustam ao seu caso — e o que faltar, a
+                gente desenvolve para você.
+              </p>
             </Revelar>
 
             <Revelar className="lg:pl-6">
