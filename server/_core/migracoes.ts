@@ -49,6 +49,14 @@ function numeroDoArquivo(nome: string): string | null {
   return m ? m[1] : null;
 }
 
+/** Crase fora de comentário = identificador MySQL, que o Postgres não entende. */
+export function temCraseNoSql(conteudo: string): boolean {
+  const semComentarios = conteudo
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/--[^\n]*/g, "");
+  return semComentarios.includes("`");
+}
+
 export interface ResultadoMigracao {
   aplicadas: string[];
   registradasComoBaseline: string[];
@@ -86,17 +94,19 @@ export async function aplicarMigracoesPendentes(
   const sql = postgres(urlDoBanco, { max: 1, idle_timeout: 20, connect_timeout: 30 });
 
   try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS "_migracoes_aplicadas" (
-        "arquivo" text PRIMARY KEY,
-        "aplicada_em" timestamptz NOT NULL DEFAULT now(),
-        "baseline" boolean NOT NULL DEFAULT false
-      )
-    `;
-
+    // O lock vem antes de tudo: duas instâncias subindo juntas não podem nem
+    // criar a tabela de controle ao mesmo tempo.
     await sql`SELECT pg_advisory_lock(${LOCK_ID})`;
 
     try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS "_migracoes_aplicadas" (
+          "arquivo" text PRIMARY KEY,
+          "aplicada_em" timestamptz NOT NULL DEFAULT now(),
+          "baseline" boolean NOT NULL DEFAULT false
+        )
+      `;
+
       const registradas = await sql<{ arquivo: string }[]>`
         SELECT "arquivo" FROM "_migracoes_aplicadas"
       `;
@@ -120,6 +130,18 @@ export async function aplicarMigracoesPendentes(
         }
 
         const conteudo = fs.readFileSync(path.join(pasta, arquivo), "utf8");
+
+        // Guarda contra baseline errado: as migrações da era MySQL usam crase e
+        // não rodam no Postgres. Melhor recusar com a causa do que estourar com
+        // "syntax error at or near". Comentário com crase não conta — os nossos
+        // citam `nextval` e afins.
+        if (temCraseNoSql(conteudo)) {
+          throw new Error(
+            `${arquivo} é uma migração da era MySQL e não pode ser executada. ` +
+              `Ajuste MIGRACAO_BASELINE (atual: ${baseline}) para incluí-la no baseline.`,
+          );
+        }
+
         console.log(`[migracoes] aplicando ${arquivo}`);
 
         await sql.begin(async (tx) => {

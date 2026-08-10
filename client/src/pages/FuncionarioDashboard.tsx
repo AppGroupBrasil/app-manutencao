@@ -195,7 +195,9 @@ export default function FuncionarioDashboard() {
         // Admin/gestor: libera todas as funções
         setFuncoesHabilitadas(Object.keys(FUNCOES_CONFIG));
         setFuncoesQueCria(Object.keys(FUNCOES_CONFIG));
-        setFuncoesQueExclui(Object.keys(FUNCOES_CONFIG));
+        // Excluir não entra no pacote da hierarquia: o servidor só aceita com a
+        // chave ligada por pessoa, e mostrar o botão aqui daria erro no clique.
+        setFuncoesQueExclui([]);
       } else if (funcionario.funcoes) {
         const habilitadas = funcionario.funcoes
           .filter(f => f.habilitada)

@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
+import { proximoProtocoloComData } from "../../_core/protocolo";
 import { tarefasSimples, compartilhamentosEquipe, membrosEquipe } from "../../../drizzle/schema";
 import { router, protectedProcedure } from "../../_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -64,34 +65,9 @@ export const tarefasSimplesRouter = router({
       };
       const prefixo = prefixos[input.tipo];
 
-      // Retry loop para evitar colisão de protocolo
-      for (let tentativa = 0; tentativa < 5; tentativa++) {
-        const data = new Date();
-        const ano = data.getFullYear().toString().slice(-2);
-        const mes = (data.getMonth() + 1).toString().padStart(2, "0");
-        const dia = data.getDate().toString().padStart(2, "0");
-        const hora = data.getHours().toString().padStart(2, "0");
-        const min = data.getMinutes().toString().padStart(2, "0");
-        const seg = data.getSeconds().toString().padStart(2, "0");
-        const random = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-        const protocolo = `${prefixo}-${ano}${mes}${dia}-${hora}${min}${seg}-${random}`;
-
-        // Verificar se já existe no banco
-        const [existing] = await db.select({ id: tarefasSimples.id })
-          .from(tarefasSimples)
-          .where(eq(tarefasSimples.protocolo, protocolo))
-          .limit(1);
-
-        if (!existing) {
-          return { protocolo };
-        }
-        // Colisão — aguardar e tentar novamente
-        await new Promise(r => setTimeout(r, 50));
-      }
-      // Fallback: usar timestamp em ms para garantir unicidade
-      const ts = Date.now().toString(36);
-      const fallback = `${prefixo}-${ts}-${Math.floor(Math.random() * 10000).toString().padStart(4, "0")}`;
-      return { protocolo: fallback };
+      // O número vem da sequence do banco: sem sorteio, sem retry, sem colisão.
+      const protocolo = await proximoProtocoloComData(db, "tarefaSimples", `${prefixo}-`);
+      return { protocolo };
     }),
 
   // Criar nova tarefa simples (rascunho)

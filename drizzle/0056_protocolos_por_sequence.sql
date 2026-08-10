@@ -12,20 +12,19 @@ DO $$
 DECLARE
   alvo record;
   maximo bigint;
+  atual bigint;
 BEGIN
   FOR alvo IN
     SELECT * FROM (VALUES
-      ('checklists',        'protocolo_checklist'),
-      ('manutencoes',       'protocolo_manutencao'),
-      ('ocorrencias',       'protocolo_ocorrencia'),
-      ('vistorias',         'protocolo_vistoria'),
       ('reportes',          'protocolo_reporte'),
       ('ordens_servico',    'protocolo_os'),
       ('quadro_atividades', 'protocolo_atividade'),
       ('tarefas_agendadas', 'protocolo_tarefa'),
       ('vencimentos',       'protocolo_vencimento'),
       ('qrcodes',           'protocolo_qrcode'),
-      ('qrcode_respostas',  'protocolo_qrcode_resposta')
+      ('qrcode_respostas',  'protocolo_qrcode_resposta'),
+      ('tarefas_simples',   'protocolo_tarefa_simples'),
+      ('timelines',         'protocolo_timeline')
     ) AS v(tabela, sequencia)
   LOOP
     CONTINUE WHEN to_regclass(alvo.tabela) IS NULL;
@@ -40,9 +39,60 @@ BEGIN
       alvo.tabela
     ) INTO maximo;
 
+    -- Nunca recua: se a sequence já passou do maior protocolo (porque houve
+    -- exclusão de registros), reaplicar a migração não pode devolver números
+    -- que já foram entregues.
+    SELECT COALESCE(
+      (SELECT last_value FROM pg_sequences
+        WHERE schemaname = 'public' AND sequencename = alvo.sequencia), 0)
+      INTO atual;
+
+    maximo := GREATEST(maximo, atual);
     PERFORM setval(alvo.sequencia, GREATEST(maximo, 1), maximo > 0);
   END LOOP;
 END $$;
+
+-- Checklist, manutenção, ocorrência e vistoria mostram só o número, sem
+-- prefixo. Com uma sequence para cada, as quatro começariam em 000001 e o
+-- mesmo protocolo apontaria para quatro registros diferentes — a busca por
+-- protocolo do Quadro de Atividades ficaria ambígua em toda importação. Uma
+-- sequence só, dividida pelas quatro, mantém o formato de seis dígitos e
+-- garante que o número identifica um registro único.
+DO $$
+DECLARE
+  maximo bigint;
+  atual bigint;
+BEGIN
+  CREATE SEQUENCE IF NOT EXISTS protocolo_funcao_rapida;
+
+  SELECT COALESCE(MAX(sufixo::bigint), 0) INTO maximo FROM (
+    SELECT regexp_replace(protocolo, '^.*-', '') AS sufixo
+      FROM checklists WHERE protocolo IS NOT NULL
+    UNION ALL
+    SELECT regexp_replace(protocolo, '^.*-', '')
+      FROM manutencoes WHERE protocolo IS NOT NULL
+    UNION ALL
+    SELECT regexp_replace(protocolo, '^.*-', '')
+      FROM ocorrencias WHERE protocolo IS NOT NULL
+    UNION ALL
+    SELECT regexp_replace(protocolo, '^.*-', '')
+      FROM vistorias WHERE protocolo IS NOT NULL
+  ) t WHERE sufixo ~ '^[0-9]+$';
+
+  SELECT COALESCE(
+    (SELECT last_value FROM pg_sequences
+      WHERE schemaname = 'public' AND sequencename = 'protocolo_funcao_rapida'), 0)
+    INTO atual;
+
+  maximo := GREATEST(maximo, atual);
+  PERFORM setval('protocolo_funcao_rapida', GREATEST(maximo, 1), maximo > 0);
+END $$;
+
+-- Sequences por função, criadas numa versão anterior desta migração.
+DROP SEQUENCE IF EXISTS protocolo_checklist;
+DROP SEQUENCE IF EXISTS protocolo_manutencao;
+DROP SEQUENCE IF EXISTS protocolo_ocorrencia;
+DROP SEQUENCE IF EXISTS protocolo_vistoria;
 
 -- Rede de segurança: as demais tabelas de protocolo já têm índice único; estas
 -- duas ficaram de fora. Se houver duplicado herdado, o índice não é criado e o

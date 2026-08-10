@@ -17,10 +17,13 @@ type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 /** Sequences existentes. Lista fechada: o nome nunca vem de input. */
 export const SEQUENCIAS = {
-  checklist: "protocolo_checklist",
-  manutencao: "protocolo_manutencao",
-  ocorrencia: "protocolo_ocorrencia",
-  vistoria: "protocolo_vistoria",
+  // As quatro dividem a mesma sequence: o protocolo delas não tem prefixo,
+  // então o número precisa ser único entre elas para a busca por protocolo do
+  // Quadro não ficar ambígua.
+  checklist: "protocolo_funcao_rapida",
+  manutencao: "protocolo_funcao_rapida",
+  ocorrencia: "protocolo_funcao_rapida",
+  vistoria: "protocolo_funcao_rapida",
   reporte: "protocolo_reporte",
   os: "protocolo_os",
   atividade: "protocolo_atividade",
@@ -28,6 +31,8 @@ export const SEQUENCIAS = {
   vencimento: "protocolo_vencimento",
   qrcode: "protocolo_qrcode",
   qrcodeResposta: "protocolo_qrcode_resposta",
+  tarefaSimples: "protocolo_tarefa_simples",
+  timeline: "protocolo_timeline",
 } as const;
 
 export type Sequencia = keyof typeof SEQUENCIAS;
