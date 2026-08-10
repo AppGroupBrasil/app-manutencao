@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { useVocabulario } from "@/hooks/useVocabulario";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
@@ -16,6 +17,8 @@ const TENANT_ATIVO_KEY = "condominio_ativo";
  */
 export default function AdminManutencoes() {
   const [, setLocation] = useLocation();
+  // Os nomes das funções vêm do vocabulário do cliente, não escritos aqui.
+  const v = useVocabulario();
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: organizacoes } = trpc.condominio.list.useQuery(undefined, { enabled: !!user });
 
@@ -92,7 +95,7 @@ export default function AdminManutencoes() {
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <CardQuadrado
             icone={<ClipboardList className="w-6 h-6 text-sky-500" />}
-            titulo="Ordens de Serviço"
+            titulo={v.ordensServico}
             valor={ordens?.total ?? "—"}
             descricao="abertura, execução e conclusão"
             onClick={() => setLocation("/manutencoes/ordens-servico")}
@@ -110,28 +113,28 @@ export default function AdminManutencoes() {
           />
           <CardQuadrado
             icone={<ClipboardCheck className="w-6 h-6 text-emerald-500" />}
-            titulo="Checklists"
+            titulo={v.checklists}
             valor={checklists?.length ?? "—"}
             descricao="itens, antes e depois, problemas"
             onClick={() => setLocation("/manutencoes/checklists")}
           />
           <CardQuadrado
             icone={<ListChecks className="w-6 h-6 text-violet-500" />}
-            titulo="Lista de Tarefas"
+            titulo={v.tarefas}
             valor={tarefas?.length ?? "—"}
             descricao="atribuição, recorrência e execução"
             onClick={() => setLocation("/manutencoes/tarefas")}
           />
           <CardQuadrado
             icone={<ClipboardCheck className="w-6 h-6 text-rose-500" />}
-            titulo="Vistorias"
+            titulo={v.vistorias}
             valor={vistorias?.length ?? "—"}
             descricao="itens, conformidade e problemas"
             onClick={() => setLocation("/manutencoes/vistorias")}
           />
           <CardQuadrado
             icone={<Columns3 className="w-6 h-6 text-indigo-500" />}
-            titulo="Quadro de Atividades"
+            titulo={v.atividades}
             valor={atividades?.length ?? "—"}
             descricao="a fazer, em andamento, revisão, concluído"
             onClick={() => setLocation("/manutencoes/quadro")}
@@ -145,7 +148,7 @@ export default function AdminManutencoes() {
           />
           <CardQuadrado
             icone={<Wrench className="w-6 h-6 text-orange-500" />}
-            titulo="Registro de Manutenções"
+            titulo={`Registro de ${v.manutencoes}`}
             valor={manutencoes?.total ?? "—"}
             descricao="registros já existentes no sistema"
             onClick={() => setLocation("/manutencoes")}

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { useVocabulario } from "@/hooks/useVocabulario";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -156,6 +157,7 @@ export function ConteudoListaTarefas({
   podeCriar?: boolean;
 }) {
   const utils = trpc.useUtils();
+  const v = useVocabulario();
   const organizacaoAtiva = organizacoes.find((o) => o.id === condominioId) ?? null;
   const habilitado = condominioId > 0;
 
@@ -447,7 +449,7 @@ export function ConteudoListaTarefas({
               </div>
 
               <div>
-                <Rotulo>Setor</Rotulo>
+                <Rotulo>{v.setor}</Rotulo>
                 {/* Texto livre: cada unidade nomeia os setores do seu jeito
                     (berçário, cozinha, secretaria), e a lista fixa de blocos
                     era vocabulário de condomínio. */}
@@ -459,7 +461,7 @@ export function ConteudoListaTarefas({
               </div>
 
               <div>
-                <Rotulo>Local</Rotulo>
+                <Rotulo>{v.local}</Rotulo>
                 <Input
                   placeholder="Ex.: cozinha, pátio, sala 3"
                   value={form.local}

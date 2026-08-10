@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
+import { useVocabulario } from "@/hooks/useVocabulario";
 import {
   ArrowLeft,
   Calendar,
@@ -148,6 +149,7 @@ export function ConteudoOrdensServico({
   podeExcluir?: boolean;
 }) {
   const utils = trpc.useUtils();
+  const v = useVocabulario();
   const habilitado = condominioId > 0;
 
   // O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
@@ -324,7 +326,7 @@ export function ConteudoOrdensServico({
             </Button>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold">Ordens de Serviço</h1>
+            <h1 className="text-lg font-bold">{v.ordensServico}</h1>
             <p className="text-xs text-slate-500">
               {lista?.total ?? 0} ordens registradas
               {organizacao ? ` · ${organizacao.nome}` : ""}

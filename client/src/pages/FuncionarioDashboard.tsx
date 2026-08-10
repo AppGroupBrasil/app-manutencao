@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useBootstrap } from "@/hooks/useBootstrap";
+import { useVocabulario } from "@/hooks/useVocabulario";
+import { FUNCOES_FUNCIONARIO } from "@shared/funcoesFuncionario";
 import { CoreModulesPanel } from "@/components/funcionario/CoreModulesPanel";
 import { ConteudoListaTarefas } from "@/pages/ListaTarefas";
 import { ConteudoQuadroAtividades } from "@/pages/QuadroAtividades";
@@ -151,6 +153,13 @@ export default function FuncionarioDashboard() {
 
   // Módulos liberados para a organização deste funcionário
   const { temModulo } = useBootstrap();
+
+  // O nome de cada função é do cliente: "Vistorias" pode ser "Inspeções".
+  const v = useVocabulario();
+  const rotuloDaFuncao = (chave: string) =>
+    FUNCOES_FUNCIONARIO.find((f) => f.chave === chave)?.termo
+      ? v[FUNCOES_FUNCIONARIO.find((f) => f.chave === chave)!.termo]
+      : FUNCOES_CONFIG[chave]?.label;
 
   const logoutMutation = trpc.funcionario.logout.useMutation({
     onSuccess: () => {
@@ -552,7 +561,7 @@ export default function FuncionarioDashboard() {
                           <Icon className="w-6 h-6" />
                         </div>
                         <CardTitle className="text-lg text-slate-800 group-hover:text-blue-600 transition-colors">
-                          {config.label}
+                          {rotuloDaFuncao(key) ?? config.label}
                         </CardTitle>
                         <CardDescription className="text-slate-500">
                           {config.description}

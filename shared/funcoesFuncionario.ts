@@ -9,11 +9,15 @@
  * `modulo` amarra a permissão individual ao módulo da organização: mesmo
  * liberada para a pessoa, a função some se o cliente não tem o módulo.
  */
+import type { TermoVocabulario } from "./vocabulario";
+
 export interface FuncaoFuncionario {
   chave: string;
   rotulo: string;
   descricao: string;
   modulo: string;
+  /** Termo do vocabulário usado como rótulo; o cliente pode renomear. */
+  termo: TermoVocabulario;
   /**
    * Mostra a chave de "excluir" na tela de permissões.
    *
@@ -26,42 +30,49 @@ export interface FuncaoFuncionario {
 export const FUNCOES_FUNCIONARIO: readonly FuncaoFuncionario[] = [
   {
     chave: "checklists",
+    termo: "checklists",
     rotulo: "Checklists",
     descricao: "Verificações e tarefas diárias",
     modulo: "checklists",
   },
   {
     chave: "manutencoes",
+    termo: "manutencoes",
     rotulo: "Manutenções",
     descricao: "Registrar e acompanhar manutenções",
     modulo: "manutencoes",
   },
   {
     chave: "ocorrencias",
+    termo: "ocorrencias",
     rotulo: "Ocorrências",
     descricao: "Reportar problemas e incidentes",
     modulo: "ocorrencias",
   },
   {
     chave: "vistorias",
+    termo: "vistorias",
     rotulo: "Vistorias",
     descricao: "Inspeções e verificações",
     modulo: "vistorias",
   },
   {
     chave: "tarefas",
+    termo: "tarefas",
     rotulo: "Lista de Tarefas",
     descricao: "Tarefas atribuídas e registro de execução",
     modulo: "tarefas-agendadas",
   },
   {
     chave: "quadro",
+    termo: "atividades",
     rotulo: "Quadro de Atividades",
     descricao: "Atividades da equipe por coluna",
     modulo: "quadro-atividades",
   },
   {
     chave: "ordens",
+    termo: "ordensServico",
     rotulo: "Ordens de Serviço",
     descricao: "Abrir e acompanhar ordens de serviço",
     modulo: "ordens-servico",
@@ -69,6 +80,7 @@ export const FUNCOES_FUNCIONARIO: readonly FuncaoFuncionario[] = [
   },
   {
     chave: "qrcode",
+    termo: "atividade",
     rotulo: "QR Code",
     descricao: "Pontos e registros recebidos por leitura",
     modulo: "qrcode",

@@ -5,8 +5,9 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx watch server/_core/index.ts",
-    "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:./vite --external:./vite.js && pnpm build:migrar",
+    "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:./vite --external:./vite.js && pnpm build:migrar && pnpm build:admin",
     "build:migrar": "esbuild scripts/db/migrar.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/migrar.js",
+    "build:admin": "esbuild scripts/db/criar-admin-plataforma.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/admin-plataforma.js",
     "build:client": "vite build",
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",

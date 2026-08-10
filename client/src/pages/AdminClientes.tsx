@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { SEGMENTOS_VALIDOS } from "@shared/modules/registry";
+import { VOCABULARIO_PADRAO, PREFIXO_VOCABULARIO, type TermoVocabulario } from "@shared/vocabulario";
 import { ArrowLeft, Building2, KeyRound, Loader2, Plus, Users } from "lucide-react";
 
 const ROTULO_SEGMENTO: Record<string, string> = {
@@ -62,11 +63,14 @@ export default function AdminClientes() {
 
   const [aberto, setAberto] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
+  // Vocabulário do cliente: em branco significa "usa o padrão".
+  const [vocabulario, setVocabulario] = useState<Partial<Record<TermoVocabulario, string>>>({});
 
   const abrir = trpc.plataforma.abrirCliente.useMutation({
     onSuccess: async (res) => {
       setAberto(false);
       setForm(FORM_VAZIO);
+      setVocabulario({});
       await utils.plataforma.listarClientes.invalidate();
       toast.success(
         `Cliente aberto: ${res.unidades.length} unidade(s) para ${res.gestor.nome}`,
@@ -250,10 +254,44 @@ export default function AdminClientes() {
               </div>
             </div>
 
+            {/* Vocabulário: o que muda de negócio para negócio. Em branco, o
+                cliente fica com o termo padrão. */}
+            <details className="border rounded-lg p-3">
+              <summary className="text-sm font-medium cursor-pointer">
+                Vocabulário do cliente (opcional)
+              </summary>
+              <p className="text-xs text-slate-500 mt-2">
+                Renomeia os termos nas telas deste cliente. Uma metalúrgica chama de
+                "Planta" o que a rede de creches chama de "Unidade".
+              </p>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                {(Object.keys(VOCABULARIO_PADRAO) as TermoVocabulario[]).map((termo) => (
+                  <div key={termo}>
+                    <Label className="text-[11px] text-slate-500">
+                      {VOCABULARIO_PADRAO[termo]}
+                    </Label>
+                    <Input
+                      className="h-8 text-sm"
+                      placeholder={VOCABULARIO_PADRAO[termo]}
+                      value={vocabulario[termo] ?? ""}
+                      onChange={(e) =>
+                        setVocabulario((atual) => ({ ...atual, [termo]: e.target.value }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </details>
+
             <Button
               className="w-full"
               disabled={!podeSalvar || abrir.isPending}
-              onClick={() =>
+              onClick={() => {
+                const labels: Record<string, string> = {};
+                for (const [termo, valor] of Object.entries(vocabulario)) {
+                  if (valor?.trim()) labels[`${PREFIXO_VOCABULARIO}${termo}`] = valor.trim();
+                }
+
                 abrir.mutate({
                   segmento: form.segmento as (typeof SEGMENTOS_VALIDOS)[number],
                   unidades,
@@ -263,8 +301,9 @@ export default function AdminClientes() {
                     senhaProvisoria: form.senhaProvisoria,
                     telefone: form.gestorTelefone.trim() || undefined,
                   },
-                })
-              }
+                  labels: Object.keys(labels).length > 0 ? labels : undefined,
+                });
+              }}
             >
               {abrir.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />

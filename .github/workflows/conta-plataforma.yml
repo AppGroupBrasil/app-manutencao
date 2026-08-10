@@ -1,0 +1,52 @@
+name: Conta da plataforma
+
+# Cria (ou promove) a conta dona da plataforma — a única `admin_master`, que
+# abre cliente novo. Roda só quando você aperta o botão em Actions.
+#
+# A senha vem do secret PLATAFORMA_SENHA, nunca de um campo do formulário:
+# valor digitado em input aparece no log da execução.
+on:
+  workflow_dispatch:
+    inputs:
+      nome:
+        description: "Nome da conta (ex.: Plataforma App Group)"
+        required: true
+        type: string
+      email:
+        description: "E-mail de acesso"
+        required: true
+        type: string
+
+env:
+  APP_PATH: /opt/app-manutencao
+
+jobs:
+  criar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir o secret da senha
+        run: |
+          if [ -z "${{ secrets.PLATAFORMA_SENHA }}" ]; then
+            echo "Defina o secret PLATAFORMA_SENHA (mínimo de 12 caracteres) antes de rodar."
+            exit 1
+          fi
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      # Container descartável, com a mesma imagem e o mesmo .env do app.
+      - name: Criar conta
+        env:
+          NOME: ${{ inputs.nome }}
+          EMAIL: ${{ inputs.email }}
+          SENHA: ${{ secrets.PLATAFORMA_SENHA }}
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose run --rm --no-deps app \
+               node dist/admin-plataforma.js '$NOME' '$EMAIL' '$SENHA'"

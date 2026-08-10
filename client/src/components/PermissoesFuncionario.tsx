@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { FUNCOES_FUNCIONARIO } from "@shared/funcoesFuncionario";
+import { useVocabulario } from "@/hooks/useVocabulario";
 import { Loader2 } from "lucide-react";
 
 type Permissao = { habilitada: boolean; podeCriar: boolean; podeExcluir: boolean };
@@ -32,6 +33,8 @@ export function PermissoesFuncionario({
   onFechar: () => void;
 }) {
   const utils = trpc.useUtils();
+  // O gestor vê a função com o nome que o cliente dele usa.
+  const v = useVocabulario();
   const { data, isLoading } = trpc.funcionario.listFuncoes.useQuery({ funcionarioId });
 
   const [permissoes, setPermissoes] = useState<Record<string, Permissao>>({});
@@ -113,21 +116,21 @@ export function PermissoesFuncionario({
                   className="flex items-center gap-4 border rounded-lg px-3 py-2.5"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-800">{funcao.rotulo}</p>
+                    <p className="text-sm font-medium text-slate-800">{v[funcao.termo]}</p>
                     <p className="text-xs text-slate-500">{funcao.descricao}</p>
                   </div>
                   <div className="w-10 flex justify-center">
                     <Switch
                       checked={atual.habilitada}
                       onCheckedChange={(v) => alternar(funcao.chave, "habilitada", v)}
-                      aria-label={`Ver ${funcao.rotulo}`}
+                      aria-label={`Ver ${v[funcao.termo]}`}
                     />
                   </div>
                   <div className="w-10 flex justify-center">
                     <Switch
                       checked={atual.podeCriar}
                       onCheckedChange={(v) => alternar(funcao.chave, "podeCriar", v)}
-                      aria-label={`Criar em ${funcao.rotulo}`}
+                      aria-label={`Criar em ${v[funcao.termo]}`}
                     />
                   </div>
                   <div className="w-10 flex justify-center">
@@ -135,7 +138,7 @@ export function PermissoesFuncionario({
                       <Switch
                         checked={atual.podeExcluir}
                         onCheckedChange={(v) => alternar(funcao.chave, "podeExcluir", v)}
-                        aria-label={`Excluir em ${funcao.rotulo}`}
+                        aria-label={`Excluir em ${v[funcao.termo]}`}
                       />
                     ) : (
                       <span className="text-slate-300 text-xs" aria-hidden>
