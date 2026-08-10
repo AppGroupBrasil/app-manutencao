@@ -40,7 +40,11 @@ export default function QrCodePublico({ token }: { token: string }) {
   const [contato, setContato] = useState("");
   const [descricao, setDescricao] = useState("");
   const [imagens, setImagens] = useState<{ fileName: string; fileType: string; fileData: string; preview: string }[]>([]);
-  const [local, setLocal] = useState<{ latitude: string; longitude: string } | null>(null);
+  const [local, setLocal] = useState<{
+    latitude: string;
+    longitude: string;
+    enderecoGeo?: string;
+  } | null>(null);
   const [localizando, setLocalizando] = useState(true);
   const [protocoloEnviado, setProtocoloEnviado] = useState<string | null>(null);
   const inputCamera = useRef<HTMLInputElement>(null);
@@ -54,12 +58,24 @@ export default function QrCodePublico({ token }: { token: string }) {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocal({
-          latitude: pos.coords.latitude.toFixed(6),
-          longitude: pos.coords.longitude.toFixed(6),
-        });
+      async (pos) => {
+        const latitude = pos.coords.latitude.toFixed(6);
+        const longitude = pos.coords.longitude.toFixed(6);
+        setLocal({ latitude, longitude });
         setLocalizando(false);
+
+        // Coordenada não diz nada a quem vai atender: guarda também o endereço.
+        try {
+          const resposta = await fetch(`/api/geocode/reverse?lat=${latitude}&lon=${longitude}`);
+          if (resposta.ok) {
+            const dados = await resposta.json();
+            if (dados?.display_name) {
+              setLocal({ latitude, longitude, enderecoGeo: dados.display_name });
+            }
+          }
+        } catch {
+          // Sem endereço, o registro sai só com a coordenada.
+        }
       },
       () => setLocalizando(false),
       { enableHighAccuracy: true, timeout: 10000 },
@@ -279,6 +295,7 @@ export default function QrCodePublico({ token }: { token: string }) {
                   descricao: descricao.trim() || undefined,
                   latitude: local?.latitude,
                   longitude: local?.longitude,
+                  enderecoGeo: local?.enderecoGeo,
                   imagens: imagens.map(({ fileName, fileType, fileData }) => ({
                     fileName,
                     fileType,

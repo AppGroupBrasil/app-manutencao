@@ -250,4 +250,98 @@ export const qrcodeRouter = router({
 
       return { success: true };
     }),
+
+  /** Remove um registro recebido — trote e duplicata não devem ficar na fila. */
+  deletarResposta: qrcodeProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      await db.delete(qrcodeRespostas).where(eq(qrcodeRespostas.id, input.id));
+      return { success: true };
+    }),
+
+  /**
+   * Responde por e-mail quem registrou pelo QR Code.
+   *
+   * Só faz sentido quando a pessoa deixou um e-mail no contato — o campo é
+   * livre e aceita telefone também, então a rota confere antes de tentar.
+   * As fotos vão como link: o corpo do e-mail carrega miniatura, e o endereço
+   * abre a imagem inteira.
+   */
+  responderPorEmail: qrcodeProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        mensagem: z.string().min(1).max(4000),
+        imagens: z.array(z.string().max(500)).max(10).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const [resposta] = await db
+        .select()
+        .from(qrcodeRespostas)
+        .where(eq(qrcodeRespostas.id, input.id))
+        .limit(1);
+
+      if (!resposta) throw new TRPCError({ code: "NOT_FOUND", message: "Registro não encontrado" });
+
+      const destino = (resposta.informanteContato ?? "").trim();
+      if (!destino.includes("@")) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Quem registrou não deixou e-mail, apenas contato.",
+        });
+      }
+
+      const autor = autorDaRequisicao(ctx);
+      const base = process.env.VITE_APP_URL || "https://appmanutencao.com.br";
+      const fotos = input.imagens ?? [];
+
+      const html = [
+        `<p>Olá, ${resposta.informanteNome}.</p>`,
+        `<p>Sobre o registro <strong>${resposta.protocolo}</strong>:</p>`,
+        `<p style="white-space:pre-wrap">${input.mensagem}</p>`,
+        fotos.length > 0
+          ? `<p>${fotos
+              .map(
+                (url) =>
+                  `<a href="${url.startsWith("http") ? url : base + url}"><img src="${
+                    url.startsWith("http") ? url : base + url
+                  }" style="max-width:180px;margin:4px;border-radius:6px" /></a>`,
+              )
+              .join("")}</p>`
+          : "",
+        `<p style="color:#64748b;font-size:12px">Enviado por ${autor.nome} · App Manutenção</p>`,
+      ].join("");
+
+      const { sendEmail } = await import("../../_core/email");
+      const envio = await sendEmail({
+        to: destino,
+        subject: `Resposta ao seu registro ${resposta.protocolo}`,
+        text: input.mensagem,
+        html,
+      });
+
+      if (!envio.success) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: envio.error || "Não foi possível enviar o e-mail",
+        });
+      }
+
+      // Registro respondido sai de "nova": é o sinal de que alguém tratou.
+      if (resposta.status === "nova") {
+        await db
+          .update(qrcodeRespostas)
+          .set({ status: "em_andamento" })
+          .where(eq(qrcodeRespostas.id, input.id));
+      }
+
+      return { success: true, destino };
+    }),
 });

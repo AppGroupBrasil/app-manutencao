@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -23,6 +24,7 @@ import {
   ArrowLeft,
   Inbox,
   Loader2,
+  Mail,
   MapPin,
   Plus,
   Printer,
@@ -102,6 +104,16 @@ export function ConteudoQrCodes({
   const [modalNovo, setModalNovo] = useState(false);
   const [form, setForm] = useState({ titulo: "", tipo: "local", descricao: "" });
   const [verCodigo, setVerCodigo] = useState<{ token: string; titulo: string } | null>(null);
+  // Registro em resposta; nulo com o modal fechado.
+  const [respondendo, setRespondendo] = useState<{
+    id: number;
+    protocolo: string | null;
+    informanteNome: string;
+    informanteContato: string | null;
+  } | null>(null);
+  const [mensagemResposta, setMensagemResposta] = useState("");
+  const [fotosResposta, setFotosResposta] = useState<string[]>([]);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
 
   const { data: codigos, isLoading: carregando } = trpc.qrcode.listar.useQuery(
     { condominioId },
@@ -130,6 +142,27 @@ export function ConteudoQrCodes({
     },
     onError: (e) => toast.error(e.message || "Erro ao remover"),
   });
+
+  const deletarResposta = trpc.qrcode.deletarResposta.useMutation({
+    onSuccess: async () => {
+      await utils.qrcode.listarRespostas.invalidate();
+      toast.success("Registro removido");
+    },
+    onError: (e) => toast.error(e.message || "Erro ao remover"),
+  });
+
+  const responder = trpc.qrcode.responderPorEmail.useMutation({
+    onSuccess: async (res) => {
+      setRespondendo(null);
+      setMensagemResposta("");
+      setFotosResposta([]);
+      await utils.qrcode.listarRespostas.invalidate();
+      toast.success(`Resposta enviada para ${res.destino}`);
+    },
+    onError: (e) => toast.error(e.message || "Erro ao responder"),
+  });
+
+  const enviarImagem = trpc.upload.image.useMutation();
 
   const atualizarResposta = trpc.qrcode.atualizarResposta.useMutation({
     onSuccess: () => utils.qrcode.listarRespostas.invalidate(),
@@ -309,14 +342,17 @@ export function ConteudoQrCodes({
 
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mt-2">
                       <span>{formatarDataHora(r.createdAt)}</span>
-                      {r.latitude && r.longitude && (
+                      {(r.enderecoGeo || (r.latitude && r.longitude)) && (
                         <a
                           className="inline-flex items-center gap-1 text-sky-700 hover:underline"
                           href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <MapPin className="w-3.5 h-3.5" /> {r.latitude}, {r.longitude}
+                          {/* Coordenada só aparece quando não há endereço: número
+                              solto não diz nada a quem vai atender. */}
+                          <MapPin className="w-3.5 h-3.5" />
+                          {r.enderecoGeo ?? `${r.latitude}, ${r.longitude}`}
                         </a>
                       )}
                       <span
@@ -325,6 +361,48 @@ export function ConteudoQrCodes({
                       >
                         {status.rotulo}
                       </span>
+                    </div>
+
+                    {/* Mapa do OpenStreetMap: mostra onde é sem depender de
+                        chave de API nem de conta em serviço de mapas. */}
+                    {r.latitude && r.longitude && (
+                      <iframe
+                        title={`Local do registro ${r.protocolo}`}
+                        className="w-full h-40 rounded-lg border mt-3"
+                        loading="lazy"
+                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${
+                          Number(r.longitude) - 0.002
+                        },${Number(r.latitude) - 0.002},${Number(r.longitude) + 0.002},${
+                          Number(r.latitude) + 0.002
+                        }&layer=mapnik&marker=${r.latitude},${r.longitude}`}
+                      />
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
+                      {podeCriar && r.informanteContato?.includes("@") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setRespondendo(r)}
+                        >
+                          <Mail className="w-4 h-4 mr-2" /> Responder
+                        </Button>
+                      )}
+                      {podeCriar && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            if (confirm(`Excluir o registro ${r.protocolo}?`)) {
+                              deletarResposta.mutate({ id: r.id });
+                            }
+                          }}
+                          aria-label={`Excluir registro ${r.protocolo}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -399,6 +477,108 @@ export function ConteudoQrCodes({
       </Dialog>
 
       {/* Código para impressão */}
+      {/* Responder por e-mail */}
+      <Dialog open={respondendo !== null} onOpenChange={(a) => !a && setRespondendo(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Responder {respondendo?.protocolo}</DialogTitle>
+          </DialogHeader>
+          {respondendo && (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">
+                Para {respondendo.informanteNome} · {respondendo.informanteContato}
+              </p>
+
+              <Textarea
+                rows={5}
+                placeholder="Escreva a resposta que a pessoa vai receber por e-mail…"
+                value={mensagemResposta}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setMensagemResposta(e.target.value)
+                }
+              />
+
+              <div>
+                <label className="flex cursor-pointer items-center justify-center rounded-md border border-dashed px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={async (e) => {
+                      const arquivos = e.target.files;
+                      e.target.value = "";
+                      if (!arquivos || arquivos.length === 0) return;
+                      setEnviandoFoto(true);
+                      try {
+                        for (const arquivo of Array.from(arquivos)) {
+                          const base64 = await new Promise<string>((resolve, reject) => {
+                            const leitor = new FileReader();
+                            leitor.onload = () => resolve(String(leitor.result));
+                            leitor.onerror = () => reject(new Error("Falha ao ler o arquivo"));
+                            leitor.readAsDataURL(arquivo);
+                          });
+                          const { url } = await enviarImagem.mutateAsync({
+                            fileName: arquivo.name,
+                            fileType: arquivo.type,
+                            fileData: base64,
+                            folder: "qrcode-respostas",
+                          });
+                          setFotosResposta((atual) => [...atual, url]);
+                        }
+                      } catch (erro) {
+                        toast.error(erro instanceof Error ? erro.message : "Erro ao anexar");
+                      } finally {
+                        setEnviandoFoto(false);
+                      }
+                    }}
+                  />
+                  {enviandoFoto ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando…
+                    </>
+                  ) : (
+                    "Anexar fotos"
+                  )}
+                </label>
+
+                {fotosResposta.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {fotosResposta.map((url) => (
+                      <img
+                        key={url}
+                        src={url}
+                        alt=""
+                        className="w-16 h-16 rounded border object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Button
+                className="w-full"
+                disabled={responder.isPending || mensagemResposta.trim().length < 2}
+                onClick={() =>
+                  responder.mutate({
+                    id: respondendo.id,
+                    mensagem: mensagemResposta.trim(),
+                    imagens: fotosResposta,
+                  })
+                }
+              >
+                {responder.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Mail className="w-4 h-4 mr-2" />
+                )}
+                Enviar resposta
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!verCodigo} onOpenChange={(aberto) => !aberto && setVerCodigo(null)}>
         <DialogContent className="max-w-xs">
           <DialogHeader>
