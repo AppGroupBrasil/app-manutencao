@@ -26,6 +26,7 @@ import { recuperacaoSenhaRouter } from "./recuperacaoSenha";
 
 import { authRouter } from "./modules/auth/router";
 import { condominioRouter } from "./modules/condominio/router";
+import { plataformaRouter } from "./modules/plataforma/router";
 import { osRouter } from "./modules/os/router";
 import { destaqueRouter, paginaCustomRouter } from "./modules/comunicacao/destaqueRouter";
 
@@ -92,6 +93,7 @@ export const appRouter = router({
 
   // ==================== CONDOMÍNIOS ====================
   condominio: condominioRouter,
+  plataforma: plataformaRouter,
 
     // ==================== REVISTAS ====================
   revista: revistaRouter,

@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
 import { PainelPendencias } from "@/components/PainelPendencias";
-import { Loader2, LogOut, Building2, Users, UserCog, Wrench, AlertTriangle } from "lucide-react";
+import { Loader2, LogOut, Building2, Users, UserCog, Wrench, AlertTriangle, Briefcase } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function AdminDashboard() {
@@ -12,6 +12,9 @@ export default function AdminDashboard() {
   const utils = trpc.useContext();
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: condominios } = trpc.condominio.list.useQuery(undefined, { enabled: !!user });
+
+  // Conta da plataforma: a única que abre cliente novo.
+  const ehPlataforma = (user as { hierarquia?: string } | undefined)?.hierarquia === "admin_master";
 
   // A hierarquia já vem resolvida do servidor: `condominio.list` devolve as 15
   // unidades para o gestor-chefe e só a dele para o gestor de unidade.
@@ -87,6 +90,15 @@ export default function AdminDashboard() {
 
         {/* Quadrados, dois por linha: o mesmo desenho vale no celular. */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          {/* Só a conta da plataforma abre cliente; gestor de cliente nem vê. */}
+          {ehPlataforma && (
+            <CardQuadrado
+              icone={<Briefcase className="w-6 h-6 text-violet-500" />}
+              titulo="Clientes"
+              descricao="abrir cliente com gestor-chefe e unidades"
+              onClick={() => setLocation("/admin/clientes")}
+            />
+          )}
           <CardQuadrado
             icone={<Building2 className="w-6 h-6 text-blue-500" />}
             titulo="Organizações"

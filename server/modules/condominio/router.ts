@@ -6,6 +6,7 @@ import { condominios, condominioFuncoes, usuarioCondominios } from "../../../dri
 import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { seedModulosDoTenant } from "../../_core/modules";
+import { ehGestorMaster } from "../../_core/gestorMaster";
 import type { Segmento } from "../../../shared/modules/registry";
 
 const SEGMENTOS = [
@@ -60,6 +61,22 @@ export const condominioRouter = router({
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
+
+        /**
+         * Criar organização é ato de dono da plataforma ou de gestor-chefe
+         * abrindo mais uma unidade da própria rede.
+         *
+         * Antes qualquer conta autenticada podia criar — inofensivo com um
+         * cliente só, mas com dois clientes na mesma base é a porta para um
+         * deles fabricar organização e virar dono dela.
+         */
+        if (!ctx.tenant.isMaster() && !(await ehGestorMaster(ctx.user.id))) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Apenas o gestor-chefe pode criar uma nova unidade.",
+          });
+        }
+
         const segmento = (input.segmento ?? "condominio") as Segmento;
         const [result] = await db.insert(condominios).values({
           ...input,
@@ -68,6 +85,17 @@ export const condominioRouter = router({
         }).returning();
 
         const id = Number(result.id);
+
+        // Vínculo explícito de chefe: o acesso do criador deixa de depender só
+        // de `sindicoId`, que é uma coluna só e não comporta dois responsáveis.
+        try {
+          await db
+            .insert(usuarioCondominios)
+            .values({ userId: ctx.user.id, condominioId: id, papel: "chefe", ativo: true });
+        } catch (erro) {
+          console.error(`[condominio.create] vínculo de chefe falhou para #${id}:`, erro);
+        }
+
         // Grava explicitamente os módulos do segmento. Sem isto o tenant nasce
         // dependendo do fallback e qualquer módulo novo mudaria o que ele vê.
         // Falha aqui não invalida a organização já criada — ela cai no pacote

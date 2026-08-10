@@ -29,6 +29,7 @@ const QrCodes = lazy(() => import("./pages/QrCodes"));
 const Ocorrencias = lazy(() => import("./pages/Ocorrencias"));
 const QrCodePublico = lazy(() => import("./pages/QrCodePublico"));
 const AdminOrganizacoes = lazy(() => import("./pages/AdminOrganizacoes"));
+const AdminClientes = lazy(() => import("./pages/AdminClientes"));
 const AdminFuncionarios = lazy(() => import("./pages/AdminFuncionarios"));
 const AdminGestores = lazy(() => import("./pages/AdminGestores"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
@@ -105,6 +106,9 @@ function Router() {
       </Route>
       <Route path="/admin/modulos">
         <ExigeSenhaDefinida><AdminModulos /></ExigeSenhaDefinida>
+      </Route>
+      <Route path="/admin/clientes">
+        <ExigeSenhaDefinida><AdminClientes /></ExigeSenhaDefinida>
       </Route>
       <Route path="/admin/organizacoes">
         <ExigeSenhaDefinida><AdminOrganizacoes /></ExigeSenhaDefinida>

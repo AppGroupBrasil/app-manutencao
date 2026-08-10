@@ -51,7 +51,8 @@ export interface ModuloManifest {
   segmentos?: Segmento[];
 }
 
-const TODOS_SEGMENTOS: Segmento[] = [
+/** Lista fechada, para validar entrada e montar seletor sem repetir os nomes. */
+export const SEGMENTOS_VALIDOS = [
   'generico',
   'condominio',
   'metalurgia',
@@ -59,7 +60,9 @@ const TODOS_SEGMENTOS: Segmento[] = [
   'academia',
   'facilities',
   'educacional',
-];
+] as const;
+
+const TODOS_SEGMENTOS: Segmento[] = [...SEGMENTOS_VALIDOS];
 
 /** Núcleo operacional: serve a qualquer segmento. */
 const OPERACIONAL_BASE: Segmento[] = TODOS_SEGMENTOS;

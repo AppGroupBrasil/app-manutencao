@@ -14,6 +14,7 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "smoke": "tsx scripts/smoke.ts",
+    "db:admin-plataforma": "tsx scripts/db/criar-admin-plataforma.ts",
     "db:migrar": "tsx scripts/db/migrar.ts",
     "db:materializar-modulos": "tsx scripts/db/materializar-modulos.ts",
     "db:seed-asa": "tsx scripts/db/seed-asa.ts",
