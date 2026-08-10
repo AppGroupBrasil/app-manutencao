@@ -213,12 +213,11 @@ export default function Home() {
 
         <header className="relative z-10">
           <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-            <Link href="/" className="flex items-center">
-              <img
-                src="/logo-manutencao-header.png"
-                alt="App Manutenção"
-                className="h-9 object-contain brightness-0 invert"
-              />
+            {/* Marca amarela como ela é, com o nome em texto: a arte com o
+                lettering some no fundo escuro. */}
+            <Link href="/" className="flex items-center gap-2.5">
+              <img src="/icon-192.png" alt="" className="h-9 w-9 rounded-xl" />
+              <span className="font-bold text-lg tracking-tight">App Manutenção</span>
             </Link>
             <div className="flex-1" />
             <a
@@ -501,11 +500,10 @@ export default function Home() {
 
       <footer className="bg-slate-950 border-t border-white/10 text-slate-400">
         <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <img
-            src="/logo-manutencao-header.png"
-            alt="App Manutenção"
-            className="h-8 object-contain brightness-0 invert opacity-80"
-          />
+          <div className="flex items-center gap-2.5">
+            <img src="/icon-192.png" alt="" className="h-8 w-8 rounded-lg" />
+            <span className="font-semibold text-slate-200">App Manutenção</span>
+          </div>
           <p className="text-sm">
             © {new Date().getFullYear()} App Manutenção. Todos os direitos reservados.
           </p>
