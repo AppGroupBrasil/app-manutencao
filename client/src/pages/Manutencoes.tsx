@@ -372,13 +372,27 @@ function DialogNova({ aberta, condominioId, onFechar, onCriada }: DialogNovaProp
   const [descricao, setDescricao] = useState("");
   const [localizacao, setLocalizacao] = useState("");
   const [responsavelNome, setResponsavelNome] = useState("");
-  const [fornecedor, setFornecedor] = useState("");
   const [prioridade, setPrioridade] = useState<Prioridade>("media");
   const [tipo, setTipo] = useState<Tipo>("corretiva");
+  const [status, setStatus] = useState<Status>("pendente");
   const [dataAgendada, setDataAgendada] = useState("");
+  // As fotos vão para o storage antes de a manutenção existir; só depois de
+  // criada dá para vinculá-las, porque `addImagem` exige o id.
+  const [fotos, setFotos] = useState<{ url: string; fase: "antes" | "depois" }[]>([]);
+  const [enviandoGaleria, setEnviandoGaleria] = useState(false);
+  const inputAntes = useRef<HTMLInputElement>(null);
+  const inputDepois = useRef<HTMLInputElement>(null);
+
+  const enviarImagemGaleria = trpc.upload.image.useMutation();
+  const addImagemGaleria = trpc.manutencao.addImagem.useMutation();
 
   const criar = trpc.manutencao.create.useMutation({
     onSuccess: async (res) => {
+      for (const foto of fotos) {
+        await addImagemGaleria
+          .mutateAsync({ manutencaoId: res.id, url: foto.url, fase: foto.fase })
+          .catch(() => toast.error("Uma das fotos não pôde ser vinculada"));
+      }
       toast.success(`Manutenção criada — protocolo ${res.protocolo}`);
       await Promise.allSettled([
         utils.manutencao.list.invalidate(),
@@ -395,10 +409,32 @@ function DialogNova({ aberta, condominioId, onFechar, onCriada }: DialogNovaProp
     setDescricao("");
     setLocalizacao("");
     setResponsavelNome("");
-    setFornecedor("");
     setPrioridade("media");
     setTipo("corretiva");
+    setStatus("pendente");
     setDataAgendada("");
+    setFotos([]);
+  }
+
+  async function selecionarFotos(arquivos: FileList | null, fase: "antes" | "depois") {
+    if (!arquivos || arquivos.length === 0) return;
+    setEnviandoGaleria(true);
+    try {
+      for (const arquivo of Array.from(arquivos)) {
+        const base64 = await lerArquivoBase64(arquivo);
+        const { url } = await enviarImagemGaleria.mutateAsync({
+          fileName: arquivo.name,
+          fileType: arquivo.type,
+          fileData: base64,
+          folder: "manutencoes",
+        });
+        setFotos((atual) => [...atual, { url, fase }]);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao enviar a foto");
+    } finally {
+      setEnviandoGaleria(false);
+    }
   }
 
   function submeter() {
@@ -409,9 +445,9 @@ function DialogNova({ aberta, condominioId, onFechar, onCriada }: DialogNovaProp
       descricao: descricao.trim() || undefined,
       localizacao: localizacao.trim() || undefined,
       responsavelNome: responsavelNome.trim() || undefined,
-      fornecedor: fornecedor.trim() || undefined,
       prioridade,
       tipo,
+      status,
       dataAgendada: dataAgendada || undefined,
     });
   }
@@ -461,12 +497,80 @@ function DialogNova({ aberta, condominioId, onFechar, onCriada }: DialogNovaProp
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="fornecedor">Fornecedor</Label>
-              <Input id="fornecedor" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} />
+              <Label>Status</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as Status)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STATUS.map((s) => <SelectItem key={s} value={s}>{ROTULO_STATUS[s]}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="agendada">Data agendada</Label>
               <Input id="agendada" type="date" value={dataAgendada} onChange={(e) => setDataAgendada(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Galeria de antes e depois */}
+          <div className="border rounded-lg p-3 space-y-3">
+            <p className="text-sm font-medium text-slate-700">Galeria de fotos</p>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                { fase: "antes" as const, rotulo: "Antes", campo: inputAntes },
+                { fase: "depois" as const, rotulo: "Depois", campo: inputDepois },
+              ]).map((lado) => {
+                const doLado = fotos.filter((f) => f.fase === lado.fase);
+                return (
+                  <div key={lado.fase} className="border rounded-md p-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-slate-600">{lado.rotulo}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={enviandoGaleria}
+                        onClick={() => lado.campo.current?.click()}
+                      >
+                        {enviandoGaleria ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <ImagePlus className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
+                      <input
+                        ref={lado.campo}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        hidden
+                        onChange={(e) => {
+                          void selecionarFotos(e.target.files, lado.fase);
+                          e.target.value = "";
+                        }}
+                      />
+                    </div>
+                    {doLado.length === 0 ? (
+                      <p className="text-xs text-slate-400">Nenhuma foto.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {doLado.map((foto) => (
+                          <div key={foto.url} className="relative">
+                            <img src={foto.url} alt="" className="w-14 h-14 object-cover rounded border" />
+                            <button
+                              type="button"
+                              className="absolute -top-1.5 -right-1.5 bg-white border rounded-full p-0.5"
+                              onClick={() => setFotos((atual) => atual.filter((f) => f.url !== foto.url))}
+                              aria-label="Remover foto"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -492,6 +596,7 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
   const utils = trpc.useContext();
   const inputFoto = useRef<HTMLInputElement>(null);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const [faseFoto, setFaseFoto] = useState<"antes" | "depois">("antes");
 
   const { data: item, isLoading } = trpc.manutencao.getById.useQuery({ id });
   const { data: timeline } = trpc.manutencao.getTimeline.useQuery({ manutencaoId: id });
@@ -582,7 +687,7 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
         fileData: base64,
         folder: "manutencoes",
       });
-      await addImagem.mutateAsync({ manutencaoId: id, url });
+      await addImagem.mutateAsync({ manutencaoId: id, url, fase: faseFoto });
       toast.success("Foto anexada");
       await recarregar();
     } catch (e) {
@@ -708,13 +813,23 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                 </div>
               </div>
 
+              {/* Galeria separada em antes e depois, igual à da criação. */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label>Fotos</Label>
-                  <Button size="sm" variant="outline" disabled={enviandoFoto} onClick={() => inputFoto.current?.click()}>
-                    {enviandoFoto ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-1" />}
-                    Anexar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Select value={faseFoto} onValueChange={(v) => setFaseFoto(v as "antes" | "depois")}>
+                      <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="antes">Antes</SelectItem>
+                        <SelectItem value="depois">Depois</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="outline" disabled={enviandoFoto} onClick={() => inputFoto.current?.click()}>
+                      {enviandoFoto ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-1" />}
+                      Anexar
+                    </Button>
+                  </div>
                   <input
                     ref={inputFoto}
                     type="file"
@@ -723,27 +838,38 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                     onChange={(e) => selecionarFoto(e.target.files?.[0])}
                   />
                 </div>
-                {imagens?.length ? (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {imagens.map((img) => (
-                      <div key={img.id} className="relative group">
-                        <img src={img.url} alt={img.legenda ?? ""} className="w-full h-20 object-cover rounded border" />
-                        <button
-                          type="button"
-                          className="absolute top-1 right-1 bg-white/90 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={async () => {
-                            await removeImagem.mutateAsync({ id: img.id });
-                            await recarregar();
-                          }}
-                        >
-                          <X className="w-3 h-3 text-red-600" />
-                        </button>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {(["antes", "depois"] as const).map((fase) => {
+                    const doLado = (imagens ?? []).filter((img) => (img.fase ?? "antes") === fase);
+                    return (
+                      <div key={fase} className="border rounded-md p-2">
+                        <p className="text-xs font-medium text-slate-600 mb-1 capitalize">{fase}</p>
+                        {doLado.length === 0 ? (
+                          <p className="text-xs text-slate-400">Nenhuma foto.</p>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            {doLado.map((img) => (
+                              <div key={img.id} className="relative group">
+                                <img src={img.url} alt={img.legenda ?? ""} className="w-full h-20 object-cover rounded border" />
+                                <button
+                                  type="button"
+                                  className="absolute top-1 right-1 bg-white/90 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={async () => {
+                                    await removeImagem.mutateAsync({ id: img.id });
+                                    await recarregar();
+                                  }}
+                                >
+                                  <X className="w-3 h-3 text-red-600" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-500">Nenhuma foto anexada.</p>
-                )}
+                    );
+                  })}
+                </div>
               </div>
 
               <div>

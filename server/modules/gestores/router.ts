@@ -5,6 +5,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../../_core/trpc";
 import { getDb } from "../../db";
+import { ehGestorMaster } from "../../_core/gestorMaster";
 import { condominios, users, usuarioCondominios } from "../../../drizzle/schema";
 
 /**
@@ -43,33 +44,23 @@ async function assertPodeGerenciar(ctx: { user: { id: number } }) {
   }
 }
 
-async function podeGerenciarGestores(userId: number): Promise<boolean> {
-  const db = await getDb();
-  if (!db) return false;
-
-  const [dono] = await db
-    .select({ id: condominios.id })
-    .from(condominios)
-    .where(eq(condominios.sindicoId, userId))
-    .limit(1);
-  if (dono) return true;
-
-  const [chefe] = await db
-    .select({ id: usuarioCondominios.id })
-    .from(usuarioCondominios)
-    .where(and(eq(usuarioCondominios.userId, userId), eq(usuarioCondominios.papel, "chefe")))
-    .limit(1);
-  return !!chefe;
-}
+const podeGerenciarGestores = ehGestorMaster;
 
 export const gestoresRouter = router({
   /** A tela usa isto para esconder o que o gestor de unidade não pode fazer. */
   podeGerenciar: protectedProcedure.query(({ ctx }) => podeGerenciarGestores(ctx.user.id)),
 
   /** Gestores das organizações que o solicitante alcança, com seus vínculos. */
+  /**
+   * Só o master vê a rede inteira. Gestor de unidade vê apenas a própria
+   * conta — antes ele via os colegas da mesma unidade, inclusive a etiqueta
+   * de senha provisória, que denuncia quem ainda está com a senha padrão.
+   */
   listar: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return [];
+
+    const master = await ehGestorMaster(ctx.user.id);
 
     const idsOrg = await ctx.tenant.ids();
     if (idsOrg.length === 0) return [];
@@ -88,7 +79,9 @@ export const gestoresRouter = router({
 
     if (vinculos.length === 0) return [];
 
-    const idsUsuarios = [...new Set(vinculos.map((v) => v.userId))];
+    const idsUsuarios = master
+      ? [...new Set(vinculos.map((v) => v.userId))]
+      : [ctx.user.id];
     const contas = await db
       .select({
         id: users.id,

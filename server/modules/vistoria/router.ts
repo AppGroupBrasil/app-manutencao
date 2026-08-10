@@ -1,5 +1,5 @@
 ﻿import { z } from "zod";
-import { eq, desc, and, like, sql } from "drizzle-orm";
+import { eq, desc, and, like, sql, isNotNull } from "drizzle-orm";
 import { moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
@@ -10,8 +10,22 @@ import {
   vistoriaTimeline,
   vistoriaImagens,
   vistoriaAnexos,
+  vistoriaItens,
+  vistoriaItemAnexos,
+  reportes,
   condominios
 } from "../../../drizzle/schema";
+
+/** Situações do item de vistoria, definidas pelo cliente. */
+const STATUS_ITEM_VISTORIA = [
+  "pendente",
+  "vamos_levando",
+  "concluir_essa_semana",
+  "proxima_vez",
+  "atencao",
+  "problema",
+  "intervencao_imediata",
+] as const;
 
 // Exige o modulo "vistorias" habilitado e valida que cada id recebido pertence
 // a organizacao da requisicao. `id` aponta para a vistoria, exceto nas rotas
@@ -25,9 +39,20 @@ const vistoriaProcedure = moduloProcedure(
     },
     {
       removeImagem: { id: via(vistoriaImagens, "vistoriaId", vistorias) },
+      // Itens e seus registros: o item pende da vistoria; o anexo pende do item
+      // e por isso a rota tambem exige o itemId, que e escopavel.
+      atualizarItem: { itemId: via(vistoriaItens, "vistoriaId", vistorias) },
+      removerItem: { itemId: via(vistoriaItens, "vistoriaId", vistorias) },
+      salvarAntesDepois: { itemId: via(vistoriaItens, "vistoriaId", vistorias) },
+      listarAnexosItem: { itemId: via(vistoriaItens, "vistoriaId", vistorias) },
+      adicionarAnexoItem: { itemId: via(vistoriaItens, "vistoriaId", vistorias) },
+      removerAnexoItem: { itemId: via(vistoriaItens, "vistoriaId", vistorias) },
+      atualizarReporte: { id: direto(reportes) },
       removeAnexo: { id: via(vistoriaAnexos, "vistoriaId", vistorias) },
     },
   ),
+  // Permissao individual do funcionario vale aqui, nao so na tela.
+  "vistorias",
 );
 
 // Auto-criar colunas de assinatura se não existirem
@@ -462,5 +487,177 @@ export const vistoriaRouter = router({
         total: vistoriasComDetalhes.length,
         vistorias: vistoriasComDetalhes,
       };
+    }),
+
+  // ========== ITENS DA VISTORIA ==========
+
+  getItens: vistoriaProcedure
+    .input(z.object({ vistoriaId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(vistoriaItens)
+        .where(eq(vistoriaItens.vistoriaId, input.vistoriaId))
+        .orderBy(vistoriaItens.ordem);
+    }),
+
+  addItem: vistoriaProcedure
+    .input(z.object({
+      vistoriaId: z.number(),
+      descricao: z.string().min(1).max(500),
+      local: z.string().max(255).optional(),
+      prioridade: z.enum(["baixa", "media", "alta", "urgente"]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const [criado] = await db.insert(vistoriaItens).values(input).returning();
+      return { id: criado.id };
+    }),
+
+  atualizarItem: vistoriaProcedure
+    .input(z.object({
+      itemId: z.number(),
+      descricao: z.string().min(1).max(500).optional(),
+      local: z.string().max(255).optional(),
+      status: z.enum(STATUS_ITEM_VISTORIA).optional(),
+      prioridade: z.enum(["baixa", "media", "alta", "urgente"]).optional(),
+      observacao: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const { itemId, ...campos } = input;
+      await db.update(vistoriaItens).set({ ...campos, updatedAt: new Date() })
+        .where(eq(vistoriaItens.id, itemId));
+      return { success: true };
+    }),
+
+  removerItem: vistoriaProcedure
+    .input(z.object({ itemId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      await db.delete(vistoriaItens).where(eq(vistoriaItens.id, input.itemId));
+      return { success: true };
+    }),
+
+  salvarAntesDepois: vistoriaProcedure
+    .input(z.object({
+      itemId: z.number(),
+      fotoAntes: z.string().nullable().optional(),
+      descAntes: z.string().max(2000).optional(),
+      fotoDepois: z.string().nullable().optional(),
+      descDepois: z.string().max(2000).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const { itemId, ...campos } = input;
+      await db.update(vistoriaItens).set({ ...campos, updatedAt: new Date() })
+        .where(eq(vistoriaItens.id, itemId));
+      return { success: true };
+    }),
+
+  listarAnexosItem: vistoriaProcedure
+    .input(z.object({ itemId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(vistoriaItemAnexos)
+        .where(eq(vistoriaItemAnexos.itemId, input.itemId))
+        .orderBy(vistoriaItemAnexos.createdAt);
+    }),
+
+  adicionarAnexoItem: vistoriaProcedure
+    .input(z.object({
+      itemId: z.number(),
+      url: z.string(),
+      nome: z.string().max(255).optional(),
+      tipo: z.enum(["imagem", "arquivo"]).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const autor = autorDaRequisicao(ctx);
+      const [criado] = await db.insert(vistoriaItemAnexos).values({
+        itemId: input.itemId,
+        url: input.url,
+        nome: input.nome ?? null,
+        tipo: input.tipo ?? (/.pdf$/i.test(input.url) ? "arquivo" : "imagem"),
+        autorId: autor.userId,
+        autorNome: autor.nome,
+      }).returning();
+      return { id: criado.id };
+    }),
+
+  removerAnexoItem: vistoriaProcedure
+    .input(z.object({ itemId: z.number(), anexoId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      await db.delete(vistoriaItemAnexos).where(and(
+        eq(vistoriaItemAnexos.id, input.anexoId),
+        eq(vistoriaItemAnexos.itemId, input.itemId),
+      ));
+      return { success: true };
+    }),
+
+  // ========== REPORTE DE PROBLEMA ==========
+
+  reportarProblema: vistoriaProcedure
+    .input(z.object({
+      condominioId: z.number(),
+      vistoriaId: z.number(),
+      vistoriaItemId: z.number().optional(),
+      itemDesc: z.string().max(500).optional(),
+      descricao: z.string().min(3).max(2000),
+      status: z.enum(["aberto", "em_andamento", "resolvido"]).optional(),
+      prioridade: z.enum(["baixa", "media", "alta", "urgente"]).optional(),
+      imagens: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const autor = autorDaRequisicao(ctx);
+      // Mesmo formato do Manutenção X: RPT-AAMMDD-9999.
+      const agora = new Date();
+      const protocolo = [
+        "RPT-",
+        String(agora.getFullYear()).slice(2),
+        String(agora.getMonth() + 1).padStart(2, "0"),
+        String(agora.getDate()).padStart(2, "0"),
+        "-",
+        String(Math.floor(1000 + Math.random() * 9000)),
+      ].join("");
+      const [criado] = await db.insert(reportes).values({
+        condominioId: input.condominioId,
+        vistoriaId: input.vistoriaId,
+        vistoriaItemId: input.vistoriaItemId,
+        protocolo,
+        itemDesc: input.itemDesc ?? null,
+        descricao: input.descricao,
+        status: input.status ?? "aberto",
+        prioridade: input.prioridade ?? "media",
+        imagens: input.imagens ?? [],
+        criadoPorId: autor.userId,
+        criadoPorNome: autor.nome,
+      }).returning();
+      return { id: criado.id, protocolo: criado.protocolo };
+    }),
+
+  listarReportes: vistoriaProcedure
+    .input(z.object({ condominioId: z.number(), vistoriaId: z.number().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      // A tabela `reportes` atende checklist e vistoria: sem filtrar pela
+      // origem, esta tela mostraria os problemas abertos no checklist.
+      const condicoes = [
+        eq(reportes.condominioId, input.condominioId),
+        isNotNull(reportes.vistoriaId),
+      ];
+      if (input.vistoriaId) condicoes.push(eq(reportes.vistoriaId, input.vistoriaId));
+      return db.select().from(reportes).where(and(...condicoes)).orderBy(desc(reportes.createdAt));
     }),
 });

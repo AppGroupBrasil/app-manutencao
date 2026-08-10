@@ -19,7 +19,8 @@ import {
   notificacoes,
   manutencoes,
   funcionarios,
-  condominios
+  condominios,
+  users
 } from "../../../drizzle/schema"; // Adjusted path
 import { eq, and, desc, like, or, sql, gte, inArray, asc, not } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -66,6 +67,86 @@ const osProcedure = moduloUserProcedure(
     },
   ),
 );
+
+/**
+ * Aviso de abertura de O.S. aos funcionários da unidade.
+ *
+ * Dois canais, como no Manutenção X: notificação no aplicativo — só quando a
+ * organização liga `osAutoNotificar`, porque avisa todo mundo — e e-mail para
+ * quem tem `notificarOsEmail`, que é o padrão e a tela permite desmarcar.
+ */
+async function notificarAberturaDeOS(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  os: { condominioId: number; protocolo: string; titulo: string; descricao?: string },
+): Promise<void> {
+  const [organizacao] = await db
+    .select({ nome: condominios.nome, autoNotificar: condominios.osAutoNotificar })
+    .from(condominios)
+    .where(eq(condominios.id, os.condominioId))
+    .limit(1);
+
+  const equipe = await db
+    .select({
+      nome: funcionarios.nome,
+      email: funcionarios.email,
+      loginEmail: funcionarios.loginEmail,
+      notificarEmail: funcionarios.notificarOsEmail,
+    })
+    .from(funcionarios)
+    .where(and(eq(funcionarios.condominioId, os.condominioId), eq(funcionarios.ativo, true)));
+
+  if (organizacao?.autoNotificar) {
+    // `funcionarios` não tem coluna de usuário e `notificacoes` exige uma:
+    // o vínculo possível é o e-mail. Quem não tem conta recebe só o e-mail.
+    const enderecos = equipe
+      .flatMap((f) => [f.loginEmail, f.email])
+      .filter((e): e is string => !!e)
+      .map((e) => e.toLowerCase());
+
+    if (enderecos.length > 0) {
+      const contas = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(inArray(sql`lower(${users.email})`, enderecos));
+
+      if (contas.length > 0) {
+        await db.insert(notificacoes).values(
+          contas.map((conta) => ({
+            userId: conta.id,
+            condominioId: os.condominioId,
+            tipo: "geral" as const,
+            titulo: `Nova O.S. ${os.protocolo}`,
+            mensagem: os.titulo,
+            link: `/manutencoes/ordens-servico`,
+          })),
+        );
+      }
+    }
+  }
+
+  const emails = equipe
+    .filter((f) => f.notificarEmail && f.email)
+    .map((f) => f.email as string);
+
+  if (emails.length === 0) return;
+
+  const { isEmailConfigured, sendEmail } = await import("../../_core/email");
+  if (!isEmailConfigured()) return;
+
+  await sendEmail({
+    to: emails,
+    subject: `Nova ordem de serviço ${os.protocolo}`,
+    text: [
+      `Foi aberta uma ordem de serviço em ${organizacao?.nome ?? "sua unidade"}.`,
+      ``,
+      `Protocolo: ${os.protocolo}`,
+      `Título: ${os.titulo}`,
+      os.descricao ? `Descrição: ${os.descricao}` : ``,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  });
+}
 
 export const osRouter = router({
     // ========== CONFIGURAÇÕES ==========
@@ -715,7 +796,20 @@ export const osRouter = router({
           usuarioId: ctx.user?.id,
           usuarioNome: ctx.user?.name,
         });
-        
+
+        // Aviso de abertura aos funcionários da unidade. Falha aqui não desfaz
+        // a O.S.: ela já existe e o aviso é acessório.
+        try {
+          await notificarAberturaDeOS(db, {
+            condominioId: input.condominioId,
+            protocolo,
+            titulo: input.titulo,
+            descricao: input.descricao,
+          });
+        } catch (erro) {
+          console.error("[os] falha ao notificar abertura:", erro);
+        }
+
         return { id: result.id, protocolo, success: true };
       }),
     
@@ -1451,6 +1545,9 @@ export const osRouter = router({
         fileType: z.string(),
         fileData: z.string(),
         descricao: z.string().optional(),
+        // Fase da foto. Sem isto a imagem cai em "outro" e some das galerias
+        // de antes e depois.
+        tipo: z.enum(["antes", "durante", "depois", "orcamento", "outro"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
@@ -1478,9 +1575,10 @@ export const osRouter = router({
         const [result] = await db.insert(osImagens).values({
           ordemServicoId: input.ordemServicoId,
           url,
+          tipo: input.tipo ?? "outro",
           descricao: input.descricao,
         }).returning();
-        
+
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
           tipo: "foto_adicionada",
@@ -1876,5 +1974,86 @@ export const osRouter = router({
           porStatus,
           porMes,
         };
+      }),
+
+    // ========== RESPONSÁVEIS, AVISOS E AVALIAÇÃO ==========
+
+    /** Quem pode ser marcado como responsável: a equipe ativa da unidade. */
+    listarCandidatos: osProcedure
+      .input(z.object({ condominioId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+
+        return db
+          .select({
+            id: funcionarios.id,
+            nome: funcionarios.nome,
+            cargo: funcionarios.cargo,
+            email: funcionarios.email,
+            telefone: funcionarios.telefone,
+            notificarOsEmail: funcionarios.notificarOsEmail,
+          })
+          .from(funcionarios)
+          .where(and(eq(funcionarios.condominioId, input.condominioId), eq(funcionarios.ativo, true)))
+          .orderBy(asc(funcionarios.nome));
+      }),
+
+    /** Liga/desliga o aviso no aplicativo para toda a equipe da unidade. */
+    setAutoNotificar: osProcedure
+      .input(z.object({ condominioId: z.number(), ativo: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db
+          .update(condominios)
+          .set({ osAutoNotificar: input.ativo })
+          .where(eq(condominios.id, input.condominioId));
+
+        return { success: true };
+      }),
+
+    /** Marca/desmarca um funcionário para receber o e-mail de abertura. */
+    setNotificarEmail: osProcedure
+      .input(z.object({ funcionarioId: z.number(), ativo: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db
+          .update(funcionarios)
+          .set({ notificarOsEmail: input.ativo })
+          .where(eq(funcionarios.id, input.funcionarioId));
+
+        return { success: true };
+      }),
+
+    avaliar: osProcedure
+      .input(z.object({
+        id: z.number(),
+        nota: z.number().int().min(1).max(5),
+        comentario: z.string().max(1000).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db
+          .update(ordensServico)
+          .set({ avaliacaoNota: input.nota, avaliacaoComentario: input.comentario ?? null })
+          .where(eq(ordensServico.id, input.id));
+
+        // O enum da timeline não tem "avaliacao"; entra como comentário para
+        // não exigir migration de tipo só por causa do rótulo.
+        await db.insert(osTimeline).values({
+          ordemServicoId: input.id,
+          tipo: "comentario",
+          descricao: `Serviço avaliado com ${input.nota} estrela(s)`,
+          usuarioId: ctx.user?.id,
+          usuarioNome: ctx.user?.name,
+        });
+
+        return { success: true };
       }),
 });

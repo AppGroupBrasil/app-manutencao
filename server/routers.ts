@@ -77,6 +77,9 @@ import { permissoesRouter } from "./modules/funcionario/permissoesRouter";
 import { templatesCategoriasRouter } from "./modules/configuracao/templatesRouter";
 import { hierarquiaRouter } from "./modules/hierarquia/router";
 import { gestoresRouter } from "./modules/gestores/router";
+import { tarefasAgendadasRouter } from "./modules/tarefasAgendadas/router";
+import { quadroAtividadesRouter } from "./modules/quadroAtividades/router";
+import { qrcodeRouter } from "./modules/qrcode/router";
 
 
 
@@ -364,6 +367,9 @@ export const appRouter = router({
 
   // Gestores das unidades (users + usuario_condominios), com escopo de tenant.
   gestores: gestoresRouter,
+  tarefasAgendadas: tarefasAgendadasRouter,
+  quadroAtividades: quadroAtividadesRouter,
+  qrcode: qrcodeRouter,
 });
 
 export type AppRouter = typeof appRouter;

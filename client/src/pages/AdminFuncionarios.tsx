@@ -22,7 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { ArrowLeft, Loader2, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, Search, SlidersHorizontal, Trash2, Users } from "lucide-react";
+import { PermissoesFuncionario } from "@/components/PermissoesFuncionario";
 
 const TENANT_ATIVO_KEY = "condominio_ativo";
 
@@ -75,6 +76,7 @@ const VAZIO: Formulario = {
 };
 
 export default function AdminFuncionarios() {
+  const [permissoesDe, setPermissoesDe] = useState<{ id: number; nome: string } | null>(null);
   const [, setLocation] = useLocation();
   const utils = trpc.useContext();
 
@@ -286,6 +288,15 @@ export default function AdminFuncionarios() {
                       )}
                     </div>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Permissões"
+                    aria-label={`Permissões de ${f.nome}`}
+                    onClick={() => setPermissoesDe({ id: f.id, nome: f.nome })}
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => abrirEdicao(f)}>
                     <Pencil className="w-4 h-4" />
                   </Button>
@@ -306,6 +317,14 @@ export default function AdminFuncionarios() {
           </div>
         )}
       </main>
+
+      {permissoesDe && (
+        <PermissoesFuncionario
+          funcionarioId={permissoesDe.id}
+          nome={permissoesDe.nome}
+          onFechar={() => setPermissoesDe(null)}
+        />
+      )}
 
       <Dialog open={criando || !!editando} onOpenChange={(v) => !v && fechar()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

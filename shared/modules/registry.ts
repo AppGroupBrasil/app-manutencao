@@ -176,6 +176,27 @@ export const MODULOS: readonly ModuloManifest[] = [
     segmentos: OPERACIONAL_BASE,
   },
   {
+    id: 'tarefas-agendadas',
+    nome: 'Lista de Tarefas',
+    categoria: 'operacional',
+    descricao: 'Tarefas atribuídas à equipe, com recorrência e execução',
+    segmentos: OPERACIONAL_BASE,
+  },
+  {
+    id: 'quadro-atividades',
+    nome: 'Quadro de Atividades',
+    categoria: 'operacional',
+    descricao: 'Quadro visual da equipe, com as atividades por rotina e responsável',
+    segmentos: OPERACIONAL_BASE,
+  },
+  {
+    id: 'qrcode',
+    nome: 'QR Code',
+    categoria: 'operacional',
+    descricao: 'Pontos com QR Code e registros enviados por quem escaneia',
+    segmentos: OPERACIONAL_BASE,
+  },
+  {
     id: 'leitura-medidores',
     nome: 'Leitura de Medidores',
     categoria: 'operacional',

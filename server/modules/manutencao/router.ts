@@ -27,6 +27,8 @@ const manutencaoProcedure = moduloProcedure(
       removeAnexo: { id: via(manutencaoAnexos, "manutencaoId", manutencoes) },
     },
   ),
+  // Permissao individual do funcionario vale aqui, nao so na tela.
+  "manutencoes",
 );
 
 export const manutencaoRouter = router({
@@ -273,6 +275,7 @@ export const manutencaoRouter = router({
       manutencaoId: z.number(),
       url: z.string(),
       legenda: z.string().optional(),
+      fase: z.enum(["antes", "depois"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();

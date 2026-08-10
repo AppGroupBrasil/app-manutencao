@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
-import { AlertTriangle, ClipboardCheck, Loader2, MapPin, Search, Wrench } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, ImagePlus, Loader2, MapPin, Search, Wrench, X } from "lucide-react";
 
 type CoreSection = "checklists" | "manutencoes" | "ocorrencias" | "vistorias";
 
@@ -25,6 +25,8 @@ type RegistroItem = {
 interface CoreModulesPanelProps {
   section: CoreSection;
   condominioId: number;
+  /** Vem da permissão do funcionário: sem isto, a tela é só de leitura. */
+  podeCriar?: boolean;
 }
 
 interface SectionLayoutProps {
@@ -40,6 +42,8 @@ interface SectionLayoutProps {
   onRememberTitleChange?: (checked: boolean) => void;
   titleSuggestions?: string[];
   onSubmit: (values: FormValues) => Promise<void>;
+  /** Falso esconde o formulário e deixa apenas a lista. */
+  podeCriar?: boolean;
 }
 
 interface FormValues {
@@ -47,6 +51,8 @@ interface FormValues {
   descricao: string;
   localizacao: string;
   prioridade: "baixa" | "media" | "alta" | "urgente";
+  /** URLs já enviadas ao storage; vinculadas ao registro depois de criado. */
+  imagens: string[];
 }
 
 const SECTION_META: Record<CoreSection, { title: string; description: string; accentClass: string }> = {
@@ -91,7 +97,18 @@ function statusVariant(status?: string | null) {
   }
 }
 
+/**
+ * O registro nasce sem imagem: elas já estão no storage, mas só podem ser
+ * vinculadas depois que existe id. Falha aqui não desfaz o registro.
+ */
+async function vincularImagens(imagens: string[], anexar: (url: string) => Promise<unknown>) {
+  for (const url of imagens) {
+    await anexar(url).catch(() => toast.error("Uma das imagens não pôde ser vinculada"));
+  }
+}
+
 function SectionLayout({
+  podeCriar = true,
   section,
   title,
   description,
@@ -109,6 +126,37 @@ function SectionLayout({
   const [descricao, setDescricao] = useState("");
   const [localizacao, setLocalizacao] = useState("");
   const [prioridade, setPrioridade] = useState<FormValues["prioridade"]>("media");
+  const [imagens, setImagens] = useState<string[]>([]);
+  const [enviandoImagem, setEnviandoImagem] = useState(false);
+  const enviarImagem = trpc.upload.image.useMutation();
+
+  async function anexarImagens(arquivos: FileList | null) {
+    if (!arquivos || arquivos.length === 0) return;
+    setEnviandoImagem(true);
+    try {
+      const urls: string[] = [];
+      for (const arquivo of Array.from(arquivos)) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const leitor = new FileReader();
+          leitor.onload = () => resolve(String(leitor.result));
+          leitor.onerror = () => reject(new Error("Falha ao ler o arquivo"));
+          leitor.readAsDataURL(arquivo);
+        });
+        const { url } = await enviarImagem.mutateAsync({
+          fileName: arquivo.name,
+          fileType: arquivo.type,
+          fileData: base64,
+          folder: section,
+        });
+        urls.push(url);
+      }
+      setImagens((atual) => [...atual, ...urls]);
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Erro ao enviar a imagem");
+    } finally {
+      setEnviandoImagem(false);
+    }
+  }
 
   const total = records.length;
   const pendentes = useMemo(
@@ -132,12 +180,14 @@ function SectionLayout({
       descricao: descricao.trim(),
       localizacao: localizacao.trim(),
       prioridade,
+      imagens,
     });
 
     setTitulo("");
     setDescricao("");
     setLocalizacao("");
     setPrioridade("media");
+    setImagens([]);
   }
 
   let recordsContent = (
@@ -210,7 +260,10 @@ function SectionLayout({
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div
+        className={`grid gap-6 ${podeCriar ? "xl:grid-cols-[420px_minmax(0,1fr)]" : "xl:grid-cols-1"}`}
+      >
+        {podeCriar && (
         <Card className="border-0 bg-white/90 shadow-sm">
           <CardHeader>
             <CardTitle>{title}</CardTitle>
@@ -281,13 +334,56 @@ function SectionLayout({
                   ))}
                 </div>
               </div>
-              <Button className="w-full" disabled={isSubmitting} type="submit">
+              <div className="space-y-2">
+                <Label>Imagens</Label>
+                <label className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={(event) => {
+                      void anexarImagens(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                  {enviandoImagem ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando…
+                    </>
+                  ) : (
+                    <>
+                      <ImagePlus className="mr-2 h-4 w-4" /> Anexar imagens
+                    </>
+                  )}
+                </label>
+                {imagens.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {imagens.map((url) => (
+                      <div key={url} className="relative">
+                        <img src={url} alt="" className="h-14 w-14 rounded border object-cover" />
+                        <button
+                          type="button"
+                          className="absolute -right-1.5 -top-1.5 rounded-full border bg-white p-0.5"
+                          onClick={() => setImagens((atual) => atual.filter((i) => i !== url))}
+                          aria-label="Remover imagem"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <Button className="w-full" disabled={isSubmitting || enviandoImagem} type="submit">
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Criar registro
               </Button>
             </form>
           </CardContent>
         </Card>
+        )}
 
         <Card className="border-0 bg-white/90 shadow-sm">
           <CardHeader>
@@ -301,7 +397,7 @@ function SectionLayout({
   );
 }
 
-function ChecklistSection({ condominioId }: Readonly<{ condominioId: number }>) {
+function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.checklist.list.useQuery({ condominioId });
   const storageKey = `checklist_saved_titles_${condominioId}`;
@@ -337,6 +433,7 @@ function ChecklistSection({ condominioId }: Readonly<{ condominioId: number }>) 
 
   return (
     <SectionLayout
+      podeCriar={podeCriar}
       section="checklists"
       title={SECTION_META.checklists.title}
       description={SECTION_META.checklists.description}
@@ -349,7 +446,8 @@ function ChecklistSection({ condominioId }: Readonly<{ condominioId: number }>) 
       onRememberTitleChange={setRememberTitle}
       titleSuggestions={titleSuggestions}
       onSubmit={async (values) => {
-        await createMutation.mutateAsync({ condominioId, ...values });
+        const { imagens: _imagensChecklist, ...dados } = values;
+        await createMutation.mutateAsync({ condominioId, ...dados });
 
         if (rememberTitle) {
           const normalizedTitle = values.titulo.trim();
@@ -367,9 +465,10 @@ function ChecklistSection({ condominioId }: Readonly<{ condominioId: number }>) 
   );
 }
 
-function ManutencaoSection({ condominioId }: Readonly<{ condominioId: number }>) {
+function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.manutencao.list.useQuery({ condominioId });
+  const addImagemManutencao = trpc.manutencao.addImagem.useMutation();
   const createMutation = trpc.manutencao.create.useMutation({
     onSuccess: async () => {
       await utils.manutencao.list.invalidate({ condominioId });
@@ -380,6 +479,7 @@ function ManutencaoSection({ condominioId }: Readonly<{ condominioId: number }>)
 
   return (
     <SectionLayout
+      podeCriar={podeCriar}
       section="manutencoes"
       title={SECTION_META.manutencoes.title}
       description={SECTION_META.manutencoes.description}
@@ -388,15 +488,18 @@ function ManutencaoSection({ condominioId }: Readonly<{ condominioId: number }>)
       isLoading={isLoading}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
-        await createMutation.mutateAsync({ condominioId, tipo: "corretiva", ...values });
+        const { imagens, ...dados } = values;
+        const criada = await createMutation.mutateAsync({ condominioId, tipo: "corretiva", ...dados });
+        await vincularImagens(imagens, (url) => addImagemManutencao.mutateAsync({ manutencaoId: criada.id, url }));
       }}
     />
   );
 }
 
-function OcorrenciaSection({ condominioId }: Readonly<{ condominioId: number }>) {
+function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.ocorrencia.list.useQuery({ condominioId });
+  const addImagem = trpc.ocorrencia.addImagem.useMutation();
   const createMutation = trpc.ocorrencia.create.useMutation({
     onSuccess: async () => {
       await utils.ocorrencia.list.invalidate({ condominioId });
@@ -407,6 +510,7 @@ function OcorrenciaSection({ condominioId }: Readonly<{ condominioId: number }>)
 
   return (
     <SectionLayout
+      podeCriar={podeCriar}
       section="ocorrencias"
       title={SECTION_META.ocorrencias.title}
       description={SECTION_META.ocorrencias.description}
@@ -415,15 +519,24 @@ function OcorrenciaSection({ condominioId }: Readonly<{ condominioId: number }>)
       isLoading={isLoading}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
-        await createMutation.mutateAsync({ condominioId, categoria: "outros", ...values });
+        const { imagens, ...dados } = values;
+        const criada = await createMutation.mutateAsync({
+          condominioId,
+          categoria: "outros",
+          ...dados,
+        });
+        await vincularImagens(imagens, (url) =>
+          addImagem.mutateAsync({ ocorrenciaId: criada.id, url }),
+        );
       }}
     />
   );
 }
 
-function VistoriaSection({ condominioId }: Readonly<{ condominioId: number }>) {
+function VistoriaSection({ condominioId, podeCriar }: Readonly<{ condominioId: number; podeCriar: boolean }>) {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.vistoria.list.useQuery({ condominioId });
+  const addImagemVistoria = trpc.vistoria.addImagem.useMutation();
   const createMutation = trpc.vistoria.create.useMutation({
     onSuccess: async () => {
       await utils.vistoria.list.invalidate({ condominioId });
@@ -434,6 +547,7 @@ function VistoriaSection({ condominioId }: Readonly<{ condominioId: number }>) {
 
   return (
     <SectionLayout
+      podeCriar={podeCriar}
       section="vistorias"
       title={SECTION_META.vistorias.title}
       description={SECTION_META.vistorias.description}
@@ -442,17 +556,27 @@ function VistoriaSection({ condominioId }: Readonly<{ condominioId: number }>) {
       isLoading={isLoading}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
-        await createMutation.mutateAsync({ condominioId, tipo: "rotina", ...values });
+        const { imagens, ...dados } = values;
+        const criada = await createMutation.mutateAsync({ condominioId, tipo: "rotina", ...dados });
+        await vincularImagens(imagens, (url) => addImagemVistoria.mutateAsync({ vistoriaId: criada.id, url }));
       }}
     />
   );
 }
 
-export function CoreModulesPanel({ section, condominioId }: Readonly<CoreModulesPanelProps>) {
-  if (section === "checklists") return <ChecklistSection condominioId={condominioId} />;
-  if (section === "manutencoes") return <ManutencaoSection condominioId={condominioId} />;
-  if (section === "ocorrencias") return <OcorrenciaSection condominioId={condominioId} />;
-  if (section === "vistorias") return <VistoriaSection condominioId={condominioId} />;
+export function CoreModulesPanel({
+  section,
+  condominioId,
+  podeCriar = true,
+}: Readonly<CoreModulesPanelProps>) {
+  if (section === "checklists")
+    return <ChecklistSection condominioId={condominioId} podeCriar={podeCriar} />;
+  if (section === "manutencoes")
+    return <ManutencaoSection condominioId={condominioId} podeCriar={podeCriar} />;
+  if (section === "ocorrencias")
+    return <OcorrenciaSection condominioId={condominioId} podeCriar={podeCriar} />;
+  if (section === "vistorias")
+    return <VistoriaSection condominioId={condominioId} podeCriar={podeCriar} />;
 
   return (
     <Card className="border-0 bg-white/90 shadow-sm">

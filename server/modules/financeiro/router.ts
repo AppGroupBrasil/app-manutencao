@@ -1,9 +1,89 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, moduloUserProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
-import { vencimentos, vencimentoAlertas, vencimentoEmails, vencimentoNotificacoes, condominios } from "../../../drizzle/schema";
-import { eq, and, desc, gte, sql, lte, lt } from "drizzle-orm";
+import { vencimentos, vencimentoAlertas, vencimentoAnexos, vencimentoEmails, vencimentoNotificacoes, vencimentoTipos, condominios } from "../../../drizzle/schema";
+import { eq, and, asc, desc, gte, sql, lte, lt } from "drizzle-orm";
 import { storagePut } from "../../storage";
+
+/**
+ * Agenda de Vencimentos: módulo habilitado + ids da própria organização.
+ *
+ * `protectedProcedure` só exige login — com ele, um gestor de uma unidade
+ * conseguia ler e alterar o vencimento de outra passando o id na chamada. Com
+ * 15 unidades no mesmo sistema isso não é aceitável.
+ */
+const vencimentoProcedure = moduloUserProcedure(
+  "agenda-vencimentos",
+  escopoPorRegistro(
+    {
+      id: direto(vencimentos),
+      vencimentoId: direto(vencimentos),
+      anexoId: via(vencimentoAnexos, "vencimentoId", vencimentos),
+    },
+    {
+      // Aqui `id` é o tipo de manutenção, não o vencimento.
+      removerTipo: { id: direto(vencimentoTipos) },
+      // Nos sub-routers `id` aponta para o próprio registro deles. A chave é o
+      // caminho completo porque "delete" se repete entre routers.
+      "vencimentoEmails.delete": { id: direto(vencimentoEmails) },
+    },
+  ),
+);
+
+/**
+ * Aviso de vencimento no formato do Manutenção X: por dias de antecedência ou
+ * por data específica, com descrição e imagens próprias. Máximo de três por
+ * vencimento, como lá.
+ */
+const avisoSchema = z.object({
+  id: z.string(),
+  tipo: z.enum(['dias_antes', 'data_especifica']),
+  valor: z.number().int().min(0),
+  dataEspecifica: z.string().optional(),
+  descricao: z.string().optional(),
+  imagens: z.array(z.string()).optional(),
+});
+
+/**
+ * Converte a data do formulário sem perder o dia.
+ *
+ * O campo manda "AAAA-MM-DD" e `new Date()` lê isso como meia-noite UTC; a
+ * coluna é `timestamp` sem fuso, então a gravação e a leitura deslocam o
+ * horário e o dia anda para trás — 10/08 aparecia como 09/08 na tela, no
+ * calendário e na conta de dias restantes. Fixar no meio-dia local dá 12 horas
+ * de folga para cada lado, o que nenhum fuso real alcança.
+ */
+function dataDoFormulario(valor: string): Date {
+  const soData = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  if (!soData) return new Date(valor);
+
+  const [, ano, mes, dia] = soData;
+  return new Date(Number(ano), Number(mes) - 1, Number(dia), 12, 0, 0, 0);
+}
+
+/** Protocolo do vencimento: VNC-000123, derivado do maior id da tabela. */
+async function gerarProtocoloVencimento(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<string> {
+  const [linha] = await db
+    .select({ maximo: sql<number>`coalesce(max(${vencimentos.id}), 0)` })
+    .from(vencimentos);
+
+  return `VNC-${String(Number(linha?.maximo ?? 0) + 1).padStart(6, "0")}`;
+}
+
+/** Slug estável para o tipo de manutenção cadastrado pelo usuário. */
+function gerarSlug(valor: string): string {
+  return (
+    valor
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || String(Date.now())
+  );
+}
 
 // Função auxiliar para gerar PDF de vencimentos usando jsPDF
 async function generateVencimentosPDF(htmlContent: string): Promise<Buffer> {
@@ -60,11 +140,11 @@ export const financeiroRouter = router({
   // ==================== VENCIMENTOS ====================
   vencimentos: router({
     // Listar todos os vencimentos de um condomínio
-    list: protectedProcedure
+    list: vencimentoProcedure
       .input(z.object({
         condominioId: z.number(),
         status: z.enum(['todos', 'ativo', 'vencido', 'renovado', 'cancelado']).optional().default('todos'),
-        tipo: z.enum(['todos', 'contrato', 'servico', 'manutencao']).optional().default('todos'),
+        tipo: z.string().max(100).optional().default('todos'),
         mes: z.number().optional(),
         ano: z.number().optional(),
         limit: z.number().optional(),
@@ -136,7 +216,7 @@ export const financeiroRouter = router({
       }),
 
     // Obter um vencimento específico
-    get: protectedProcedure
+    get: vencimentoProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -165,10 +245,10 @@ export const financeiroRouter = router({
       }),
 
     // Criar vencimento
-    create: protectedProcedure
+    create: vencimentoProcedure
       .input(z.object({
         condominioId: z.number(),
-        tipo: z.enum(['contrato', 'servico', 'manutencao']),
+        tipo: z.string().min(1).max(100),
         titulo: z.string(),
         descricao: z.string().optional(),
         fornecedor: z.string().optional(),
@@ -186,24 +266,34 @@ export const financeiroRouter = router({
         imagemUrl: z.string().optional(),
         emailsNotificacao: z.string().optional(),
         alertas: z.array(z.enum(['na_data', 'um_dia_antes', 'uma_semana_antes', 'quinze_dias_antes', 'um_mes_antes'])).optional(),
+        // Modelo do Manutenção X
+        avisos: avisoSchema.array().max(3).optional(),
+        emails: z.array(z.string()).optional(),
+        qtdNotificacoes: z.number().int().min(0).optional(),
+        imagens: z.array(z.string()).optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
+
         const { alertas, ...vencimentoData } = input;
-        
+
         const [result] = await db.insert(vencimentos).values({
           condominioId: vencimentoData.condominioId,
+          protocolo: await gerarProtocoloVencimento(db),
           tipo: vencimentoData.tipo,
+          avisos: vencimentoData.avisos ?? [],
+          emails: vencimentoData.emails ?? [],
+          qtdNotificacoes: vencimentoData.qtdNotificacoes ?? 0,
+          imagens: vencimentoData.imagens ?? [],
           titulo: vencimentoData.titulo,
           descricao: vencimentoData.descricao || null,
           fornecedor: vencimentoData.fornecedor || null,
           valor: vencimentoData.valor || null,
-          dataInicio: vencimentoData.dataInicio ? new Date(vencimentoData.dataInicio) : null,
-          dataVencimento: new Date(vencimentoData.dataVencimento),
-          ultimaRealizacao: vencimentoData.ultimaRealizacao ? new Date(vencimentoData.ultimaRealizacao) : null,
-          proximaRealizacao: vencimentoData.proximaRealizacao ? new Date(vencimentoData.proximaRealizacao) : null,
+          dataInicio: vencimentoData.dataInicio ? dataDoFormulario(vencimentoData.dataInicio) : null,
+          dataVencimento: dataDoFormulario(vencimentoData.dataVencimento),
+          ultimaRealizacao: vencimentoData.ultimaRealizacao ? dataDoFormulario(vencimentoData.ultimaRealizacao) : null,
+          proximaRealizacao: vencimentoData.proximaRealizacao ? dataDoFormulario(vencimentoData.proximaRealizacao) : null,
           periodicidade: vencimentoData.periodicidade || 'unico',
           observacoes: vencimentoData.observacoes || null,
           arquivoUrl: vencimentoData.arquivoUrl || null,
@@ -233,7 +323,7 @@ export const financeiroRouter = router({
       }),
 
     // Atualizar vencimento
-    update: protectedProcedure
+    update: vencimentoProcedure
       .input(z.object({
         id: z.number(),
         titulo: z.string().optional(),
@@ -254,11 +344,17 @@ export const financeiroRouter = router({
         imagemUrl: z.string().optional(),
         emailsNotificacao: z.string().optional(),
         alertas: z.array(z.enum(['na_data', 'um_dia_antes', 'uma_semana_antes', 'quinze_dias_antes', 'um_mes_antes'])).optional(),
+        // Modelo do Manutenção X
+        tipo: z.string().max(100).optional(),
+        avisos: avisoSchema.array().max(3).optional(),
+        emails: z.array(z.string()).optional(),
+        qtdNotificacoes: z.number().int().min(0).optional(),
+        imagens: z.array(z.string()).optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
+
         const { id, alertas, ...updateData } = input;
         
         const fieldsToUpdate: Record<string, unknown> = {};
@@ -266,10 +362,10 @@ export const financeiroRouter = router({
         if (updateData.descricao !== undefined) fieldsToUpdate.descricao = updateData.descricao || null;
         if (updateData.fornecedor !== undefined) fieldsToUpdate.fornecedor = updateData.fornecedor || null;
         if (updateData.valor !== undefined) fieldsToUpdate.valor = updateData.valor || null;
-        if (updateData.dataInicio !== undefined) fieldsToUpdate.dataInicio = updateData.dataInicio ? new Date(updateData.dataInicio) : null;
-        if (updateData.dataVencimento !== undefined) fieldsToUpdate.dataVencimento = new Date(updateData.dataVencimento);
-        if (updateData.ultimaRealizacao !== undefined) fieldsToUpdate.ultimaRealizacao = updateData.ultimaRealizacao ? new Date(updateData.ultimaRealizacao) : null;
-        if (updateData.proximaRealizacao !== undefined) fieldsToUpdate.proximaRealizacao = updateData.proximaRealizacao ? new Date(updateData.proximaRealizacao) : null;
+        if (updateData.dataInicio !== undefined) fieldsToUpdate.dataInicio = updateData.dataInicio ? dataDoFormulario(updateData.dataInicio) : null;
+        if (updateData.dataVencimento !== undefined) fieldsToUpdate.dataVencimento = dataDoFormulario(updateData.dataVencimento);
+        if (updateData.ultimaRealizacao !== undefined) fieldsToUpdate.ultimaRealizacao = updateData.ultimaRealizacao ? dataDoFormulario(updateData.ultimaRealizacao) : null;
+        if (updateData.proximaRealizacao !== undefined) fieldsToUpdate.proximaRealizacao = updateData.proximaRealizacao ? dataDoFormulario(updateData.proximaRealizacao) : null;
         if (updateData.periodicidade !== undefined) fieldsToUpdate.periodicidade = updateData.periodicidade;
         if (updateData.status !== undefined) fieldsToUpdate.status = updateData.status;
         if (updateData.observacoes !== undefined) fieldsToUpdate.observacoes = updateData.observacoes || null;
@@ -279,7 +375,12 @@ export const financeiroRouter = router({
         if (updateData.responsavel !== undefined) fieldsToUpdate.responsavel = updateData.responsavel || null;
         if (updateData.imagemUrl !== undefined) fieldsToUpdate.imagemUrl = updateData.imagemUrl || null;
         if (updateData.emailsNotificacao !== undefined) fieldsToUpdate.emailsNotificacao = updateData.emailsNotificacao || null;
-        
+        if (updateData.tipo !== undefined) fieldsToUpdate.tipo = updateData.tipo;
+        if (updateData.avisos !== undefined) fieldsToUpdate.avisos = updateData.avisos;
+        if (updateData.emails !== undefined) fieldsToUpdate.emails = updateData.emails;
+        if (updateData.qtdNotificacoes !== undefined) fieldsToUpdate.qtdNotificacoes = updateData.qtdNotificacoes;
+        if (updateData.imagens !== undefined) fieldsToUpdate.imagens = updateData.imagens;
+
         if (Object.keys(fieldsToUpdate).length > 0) {
           await db.update(vencimentos).set(fieldsToUpdate).where(eq(vencimentos.id, id));
         }
@@ -306,7 +407,7 @@ export const financeiroRouter = router({
       }),
 
     // Excluir vencimento
-    delete: protectedProcedure
+    delete: vencimentoProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -321,7 +422,7 @@ export const financeiroRouter = router({
       }),
 
     // Obter estatísticas de vencimentos
-    stats: protectedProcedure
+    stats: vencimentoProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -354,7 +455,7 @@ export const financeiroRouter = router({
       }),
 
     // Listar próximos vencimentos (para card na visão geral)
-    proximos: protectedProcedure
+    proximos: vencimentoProcedure
       .input(z.object({
         condominioId: z.number(),
         dias: z.number().optional().default(30),
@@ -386,12 +487,161 @@ export const financeiroRouter = router({
           .filter(item => item.diasRestantes >= 0 && item.diasRestantes <= input.dias)
           .slice(0, input.limite);
       }),
+
+    // ── Registro de execução (descrição, status e anexos de antes/depois) ──
+
+    getRegistro: vencimentoProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { descricao: '', status: '', anexos: [] };
+
+        const [venc] = await db.select({
+          descricao: vencimentos.registroDescricao,
+          status: vencimentos.registroStatus,
+        }).from(vencimentos).where(eq(vencimentos.id, input.id)).limit(1);
+
+        if (!venc) throw new Error("Vencimento não encontrado");
+
+        const anexos = await db.select().from(vencimentoAnexos)
+          .where(eq(vencimentoAnexos.vencimentoId, input.id))
+          .orderBy(asc(vencimentoAnexos.createdAt));
+
+        return { descricao: venc.descricao ?? '', status: venc.status ?? '', anexos };
+      }),
+
+    salvarRegistro: vencimentoProcedure
+      .input(z.object({
+        id: z.number(),
+        descricao: z.string().max(5000),
+        status: z.string().max(20).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db.update(vencimentos)
+          .set({
+            registroDescricao: input.descricao,
+            ...(input.status !== undefined ? { registroStatus: input.status || null } : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(vencimentos.id, input.id));
+
+        return { success: true };
+      }),
+
+    // Mesmo teto do Manutenção X: 30 anexos por vencimento.
+    adicionarAnexos: vencimentoProcedure
+      .input(z.object({
+        id: z.number(),
+        anexos: z.array(z.object({
+          url: z.string(),
+          nome: z.string().max(255).optional(),
+          tipo: z.enum(['imagem', 'arquivo']).optional(),
+          fase: z.enum(['antes', 'depois']).optional(),
+        })).min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const [{ total }] = await db.select({ total: sql<number>`count(*)` })
+          .from(vencimentoAnexos)
+          .where(eq(vencimentoAnexos.vencimentoId, input.id));
+
+        if (Number(total) + input.anexos.length > 30) {
+          throw new Error("Limite de 30 anexos por vencimento");
+        }
+
+        await db.insert(vencimentoAnexos).values(
+          input.anexos.map(anexo => ({
+            vencimentoId: input.id,
+            url: anexo.url,
+            nome: anexo.nome ?? null,
+            tipo: anexo.tipo ?? (/\.pdf$/i.test(anexo.url) ? 'arquivo' : 'imagem'),
+            fase: anexo.fase ?? 'antes',
+            autorId: ctx.user?.id,
+            autorNome: ctx.user?.name,
+          })),
+        );
+
+        return { success: true };
+      }),
+
+    removerAnexo: vencimentoProcedure
+      .input(z.object({ anexoId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db.delete(vencimentoAnexos).where(eq(vencimentoAnexos.id, input.anexoId));
+        return { success: true };
+      }),
+
+    // ── Tipos de manutenção cadastráveis ──
+
+    listarTipos: vencimentoProcedure
+      .input(z.object({ condominioId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+
+        return db.select().from(vencimentoTipos)
+          .where(and(
+            eq(vencimentoTipos.condominioId, input.condominioId),
+            eq(vencimentoTipos.ativo, true),
+          ))
+          .orderBy(asc(vencimentoTipos.nome));
+      }),
+
+    criarTipo: vencimentoProcedure
+      .input(z.object({ condominioId: z.number(), nome: z.string().min(1).max(120) }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const slug = gerarSlug(input.nome);
+
+        const [existente] = await db.select().from(vencimentoTipos)
+          .where(and(
+            eq(vencimentoTipos.condominioId, input.condominioId),
+            eq(vencimentoTipos.slug, slug),
+          ))
+          .limit(1);
+
+        // Recadastrar um tipo desativado reativa o mesmo registro: assim os
+        // vencimentos que já apontam para "manutencao:<slug>" continuam válidos.
+        if (existente) {
+          await db.update(vencimentoTipos)
+            .set({ nome: input.nome, ativo: true })
+            .where(eq(vencimentoTipos.id, existente.id));
+          return { id: existente.id, slug };
+        }
+
+        const [criado] = await db.insert(vencimentoTipos)
+          .values({ condominioId: input.condominioId, slug, nome: input.nome })
+          .returning();
+
+        return { id: criado.id, slug };
+      }),
+
+    removerTipo: vencimentoProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        // Desativa em vez de apagar: vencimento antigo continua exibindo o nome.
+        await db.update(vencimentoTipos).set({ ativo: false }).where(eq(vencimentoTipos.id, input.id));
+        return { success: true };
+      }),
   }),
 
   // ==================== E-MAILS DE VENCIMENTOS ====================
   vencimentoEmails: router({
     // Listar e-mails do condomínio
-    list: protectedProcedure
+    list: vencimentoProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -401,7 +651,7 @@ export const financeiroRouter = router({
       }),
 
     // Adicionar e-mail
-    create: protectedProcedure
+    create: vencimentoProcedure
       .input(z.object({
         condominioId: z.number(),
         email: z.string().email(),
@@ -422,7 +672,7 @@ export const financeiroRouter = router({
       }),
 
     // Atualizar e-mail
-    update: protectedProcedure
+    update: vencimentoProcedure
       .input(z.object({
         id: z.number(),
         email: z.string().email().optional(),
@@ -447,7 +697,7 @@ export const financeiroRouter = router({
       }),
 
     // Excluir e-mail
-    delete: protectedProcedure
+    delete: vencimentoProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -462,7 +712,7 @@ export const financeiroRouter = router({
   // ==================== NOTIFICAÇÕES DE VENCIMENTOS ====================
   vencimentoNotificacoes: router({
     // Listar notificações de um vencimento
-    list: protectedProcedure
+    list: vencimentoProcedure
       .input(z.object({ vencimentoId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -473,7 +723,7 @@ export const financeiroRouter = router({
       }),
 
     // Enviar notificação manual
-    enviar: protectedProcedure
+    enviar: vencimentoProcedure
       .input(z.object({
         vencimentoId: z.number(),
         condominioId: z.number(),
@@ -545,7 +795,7 @@ Sistema de Gestão do Condomínio
   // ==================== DISPARO AUTOMÁTICO DE E-MAILS ====================
   alertasAutomaticos: router({
     // Verificar e enviar alertas pendentes
-    processarAlertas: protectedProcedure
+    processarAlertas: vencimentoProcedure
       .input(z.object({ condominioId: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -668,7 +918,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Verificar alertas pendentes (sem enviar)
-    verificarPendentes: protectedProcedure
+    verificarPendentes: vencimentoProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -723,7 +973,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Histórico de notificações enviadas
-    historico: protectedProcedure
+    historico: vencimentoProcedure
       .input(z.object({ 
         condominioId: z.number(),
         limite: z.number().optional().default(50),
@@ -750,7 +1000,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Enviar resumo de vencimentos por email
-    enviarResumoPorEmail: protectedProcedure
+    enviarResumoPorEmail: vencimentoProcedure
       .input(z.object({
         condominioId: z.number(),
         email: z.string().email(),
@@ -837,10 +1087,10 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
   // ==================== RELATÓRIO DE VENCIMENTOS EM PDF ====================
   vencimentosRelatorio: router({
     // Gerar relatório em PDF
-    gerarPDF: protectedProcedure
+    gerarPDF: vencimentoProcedure
       .input(z.object({
         condominioId: z.number(),
-        tipo: z.enum(['todos', 'contrato', 'servico', 'manutencao']).optional().default('todos'),
+        tipo: z.string().max(100).optional().default('todos'),
         status: z.enum(['todos', 'ativo', 'vencido', 'renovado', 'cancelado']).optional().default('todos'),
         dataInicio: z.string().optional(),
         dataFim: z.string().optional(),
@@ -1036,10 +1286,10 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Obter dados para o relatório (sem gerar PDF)
-    dados: protectedProcedure
+    dados: vencimentoProcedure
       .input(z.object({
         condominioId: z.number(),
-        tipo: z.enum(['todos', 'contrato', 'servico', 'manutencao']).optional().default('todos'),
+        tipo: z.string().max(100).optional().default('todos'),
         status: z.enum(['todos', 'ativo', 'vencido', 'renovado', 'cancelado']).optional().default('todos'),
       }))
       .query(async ({ input }) => {
@@ -1081,7 +1331,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
   // ==================== DASHBOARD DE VENCIMENTOS ====================
   vencimentosDashboard: router({
     // Estatísticas gerais
-    estatisticasGerais: protectedProcedure
+    estatisticasGerais: vencimentoProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1112,7 +1362,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Vencimentos por mês (para gráfico de barras)
-    porMes: protectedProcedure
+    porMes: vencimentoProcedure
       .input(z.object({ condominioId: z.number(), ano: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1149,7 +1399,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Vencimentos por categoria (para gráfico de pizza)
-    porCategoria: protectedProcedure
+    porCategoria: vencimentoProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1183,7 +1433,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Vencimentos por status (para gráfico de pizza)
-    porStatus: protectedProcedure
+    porStatus: vencimentoProcedure
       .input(z.object({ condominioId: z.number() }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1213,7 +1463,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Vencimentos vencidos
-    vencidos: protectedProcedure
+    vencidos: vencimentoProcedure
       .input(z.object({ condominioId: z.number(), limite: z.number().optional().default(10) }))
       .query(async ({ input }) => {
         const db = await getDb();
@@ -1240,7 +1490,7 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
       }),
 
     // Evolução temporal
-    evolucao: protectedProcedure
+    evolucao: vencimentoProcedure
       .input(z.object({ condominioId: z.number(), meses: z.number().optional().default(12) }))
       .query(async ({ input }) => {
           const db = await getDb();

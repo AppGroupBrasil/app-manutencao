@@ -5,6 +5,7 @@ import type { TrpcContext } from "./context";
 
 import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from './trpc.types';
 import { isModuloHabilitado } from './modules';
+import { assegurarPermissaoFuncionario } from './permissaoFuncionario';
 import type { VerificadorEscopo } from './escopoRegistro';
 
 export { getUserHierarquiaNivel, HIERARQUIA_NIVEL };
@@ -234,10 +235,22 @@ async function assegurarEscopo(
  * Uso:  const p = moduloProcedure('vistorias', escopoPorRegistro({ id: direto(vistorias) }));
  *       p.input(...).query(...)
  */
-export function moduloProcedure(moduloId: string, escopo?: VerificadorEscopo) {
-  return tenantProcedure.use(async ({ ctx, next, path, getRawInput }) => {
+export function moduloProcedure(
+  moduloId: string,
+  escopo?: VerificadorEscopo,
+  /**
+   * Chave em `funcionario_funcoes`. Informada, a permissão individual do
+   * funcionário passa a valer no servidor, e não só na tela — sem isso, uma
+   * função desligada continua acessível chamando a rota direto.
+   */
+  chaveFuncao?: string,
+) {
+  return tenantProcedure.use(async ({ ctx, next, path, type, getRawInput }) => {
     await assegurarModulo(ctx, moduloId);
     await assegurarEscopo(ctx, escopo, path, getRawInput);
+    if (chaveFuncao) {
+      await assegurarPermissaoFuncionario(ctx, chaveFuncao, type === "mutation");
+    }
     return next({ ctx });
   });
 }

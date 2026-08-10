@@ -226,7 +226,9 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
 
   // Gerar QR Code como PNG buffer
   const baseUrl = process.env.VITE_APP_URL || "https://appmanutencao.com.br";
-  const osUrl = `${baseUrl}/dashboard/ordens-servico/${data.osId}`;
+  // Precisa bater com a rota real do client: quem escaneia a O.S. impressa cai
+  // na tela dela já aberta para edição.
+  const osUrl = `${baseUrl}/manutencoes/ordens-servico/${data.osId}`;
   let qrBuffer: Buffer | null = null;
   try {
     qrBuffer = await QRCode.toBuffer(osUrl, {

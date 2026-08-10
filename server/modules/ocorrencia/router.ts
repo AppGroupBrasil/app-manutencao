@@ -41,6 +41,8 @@ const ocorrenciaProcedure = moduloProcedure(
       removeAnexo: { id: via(ocorrenciaAnexos, "ocorrenciaId", ocorrencias) },
     },
   ),
+  // Permissao individual do funcionario vale aqui, nao so na tela.
+  "ocorrencias",
 );
 
 export const ocorrenciaRouter = router({
