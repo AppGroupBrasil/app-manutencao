@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
+import { BotaoQrCode } from "@/components/BotaoQrCode";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -30,6 +32,7 @@ import {
   Plus,
   Save,
   Search,
+  Printer,
   Trash2,
   X,
 } from "lucide-react";
@@ -245,16 +248,58 @@ function ItensAoVivo({
   );
 }
 
+/** Baixa o base64 devolvido pelo servidor como arquivo. */
+function baixarPdfBase64(base64: string, nome: string) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nome;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Texto do compartilhamento, no mesmo formato das outras funções. */
+function mensagemDaVistoria(
+  vistoria: { protocolo: string; titulo: string; tipo: string | null; localizacao: string | null; status: string },
+  totalItens: number,
+): string {
+  return [
+    "*Vistoria*",
+    `*Protocolo:* ${vistoria.protocolo}`,
+    `*Título:* ${vistoria.titulo}`,
+    `*Tipo:* ${vistoria.tipo ?? "rotina"}`,
+    `*Status:* ${vistoria.status}`,
+    vistoria.localizacao ? `*Local:* ${vistoria.localizacao}` : "",
+    `*Itens:* ${totalItens}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** Cartão de uma vistoria com seus itens. */
 function CartaoVistoria({
   vistoria,
   condominioId,
 }: {
-  vistoria: { id: number; titulo: string; protocolo: string; tipo: string | null; localizacao: string | null; status: string };
+  vistoria: {
+    id: number;
+    titulo: string;
+    protocolo: string;
+    tipo: string | null;
+    localizacao: string | null;
+    status: string;
+    /** Token do link público, usado no QR. */
+    shareToken?: string | null;
+  };
   condominioId: number;
 }) {
   const utils = trpc.useUtils();
   const { data: itens } = trpc.vistoria.getItens.useQuery({ vistoriaId: vistoria.id });
+  // O servidor devolve só o base64; o nome do arquivo é montado aqui.
+  const gerarPdf = trpc.vistoria.generatePdf.useMutation({
+    onError: (e) => toast.error(e.message || "Erro ao gerar o PDF"),
+  });
 
   const [novoItem, setNovoItem] = useState("");
   const [acoesDe, setAcoesDe] = useState<{ id: number; descricao: string } | null>(null);
@@ -405,6 +450,38 @@ function CartaoVistoria({
           >
             <Plus className="w-3.5 h-3.5" />
           </Button>
+        </div>
+
+        {/* Mesmo rodapé das outras funções: consulta pública, relatório e
+            compartilhamento. */}
+        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
+          {vistoria.shareToken ? (
+            <BotaoQrCode
+              titulo={vistoria.titulo}
+              url={`${typeof window !== "undefined" ? window.location.origin : ""}/registro/vistoria/${vistoria.shareToken}`}
+            />
+          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={gerarPdf.isPending}
+            onClick={async () => {
+              const res = await gerarPdf.mutateAsync({ id: vistoria.id });
+              baixarPdfBase64(res.pdf, `vistoria-${vistoria.id}.pdf`);
+            }}
+          >
+            {gerarPdf.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Printer className="w-4 h-4 mr-2" />
+            )}
+            PDF
+          </Button>
+          <BotaoCompartilhar
+            condominioId={condominioId}
+            mensagem={mensagemDaVistoria(vistoria, itens?.length ?? 0)}
+            rotulo="Compartilhar"
+          />
         </div>
       </CardContent>
 
