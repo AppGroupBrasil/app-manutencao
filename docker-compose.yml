@@ -55,6 +55,18 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
     volumes:
       - uploads:/app/uploads
+    healthcheck:
+      # /api/saude responde 503 quando as migracoes falham: o container aparece
+      # como unhealthy em vez de parecer normal com o schema atrasado.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/api/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     networks:
       - coolify
     labels:

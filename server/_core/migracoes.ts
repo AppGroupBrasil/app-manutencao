@@ -63,6 +63,25 @@ export interface ResultadoMigracao {
   jaAplicadas: number;
 }
 
+export interface EstadoMigracoes {
+  situacao: "nao_executado" | "ok" | "falhou";
+  aplicadas: string[];
+  erro: string | null;
+  em: string | null;
+}
+
+let estado: EstadoMigracoes = {
+  situacao: "nao_executado",
+  aplicadas: [],
+  erro: null,
+  em: null,
+};
+
+/** Como foi a última execução. Serve à rota de saúde e ao log do deploy. */
+export function estadoDasMigracoes(): EstadoMigracoes {
+  return estado;
+}
+
 /**
  * Aplica o que falta. Lança em caso de erro de SQL — subir com banco
  * incompleto é pior do que não subir.
@@ -169,7 +188,22 @@ export async function aplicarMigracoesPendentes(
         : "[migracoes] banco já estava atualizado.",
     );
 
+    estado = {
+      situacao: "ok",
+      aplicadas: resultado.aplicadas,
+      erro: null,
+      em: new Date().toISOString(),
+    };
+
     return resultado;
+  } catch (erro) {
+    estado = {
+      situacao: "falhou",
+      aplicadas: resultado.aplicadas,
+      erro: erro instanceof Error ? erro.message : String(erro),
+      em: new Date().toISOString(),
+    };
+    throw erro;
   } finally {
     await sql.end({ timeout: 5 });
   }

@@ -28,15 +28,41 @@ jobs:
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
             "cd ${{ env.APP_PATH }} && git fetch origin main && git reset --hard origin/main"
 
-      - name: Build and restart
+      # A imagem é construída antes da troca. Falha de build para o deploy aqui,
+      # com a versão antiga ainda no ar.
+      - name: Build image
         run: |
           ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "cd ${{ env.APP_PATH }} && docker compose up -d --build --remove-orphans"
+            "cd ${{ env.APP_PATH }} && docker compose build app"
 
+      # Migração num container descartável, com o site ainda servindo a versão
+      # anterior. Se o SQL falhar, o passo falha, nada é trocado e o site
+      # continua no ar — é isto que tira o risco de reinício em laço.
+      - name: Migrate database
+        run: |
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose run --rm --no-deps app node dist/migrar.js"
+
+      - name: Restart with the new image
+        run: |
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose up -d --remove-orphans"
+
+      # O container tem healthcheck em `/api/saude`, que responde 503 quando as
+      # migrações falham. Esperar ficar `healthy` evita dar o deploy por bom com
+      # um container que subiu torto.
       - name: Health check
         run: |
-          sleep 15
           ssh -o ServerAliveInterval=30 \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "docker ps --filter name=app-manutencao --format '{{.Names}}: {{.Status}}'"
+            "for i in \$(seq 1 24); do \
+               estado=\$(docker inspect -f '{{.State.Health.Status}}' app-manutencao 2>/dev/null || echo ausente); \
+               echo \"tentativa \$i: \$estado\"; \
+               [ \"\$estado\" = healthy ] && exit 0; \
+               [ \"\$estado\" = unhealthy ] && break; \
+               sleep 5; \
+             done; \
+             docker logs --tail 80 app-manutencao; exit 1"

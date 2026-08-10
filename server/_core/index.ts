@@ -50,16 +50,25 @@ async function startServer() {
     process.exit(1);
   }
 
-  // Migrações antes de atender: subir com o banco atrasado deixa as telas
-  // novas quebrando com "coluna não existe". `MIGRAR_AO_SUBIR=false` desliga
-  // para quem prefere aplicar por fora.
+  /**
+   * Migrações antes de atender.
+   *
+   * No deploy elas já rodaram num container descartável, antes da troca: se
+   * falharem lá, o deploy para e a versão antiga continua no ar. Aqui é a rede
+   * para reinício manual — e falha **não** derruba o processo, senão um SQL
+   * ruim tiraria o site do ar em laço de reinício. O estado fica em
+   * `/api/saude` e no log.
+   */
   if (process.env.MIGRAR_AO_SUBIR !== "false") {
     try {
       const { aplicarMigracoesPendentes } = await import("./migracoes");
       await aplicarMigracoesPendentes();
     } catch (err) {
-      console.error("❌ [FATAL] Falha ao aplicar migrações:", err);
-      process.exit(1);
+      console.error(
+        "🚨 [migracoes] falha ao aplicar migrações. O servidor continua no ar, " +
+          "mas telas que dependem do schema novo podem quebrar. Veja /api/saude.",
+        err,
+      );
     }
   }
 
@@ -155,6 +164,29 @@ async function startServer() {
         }
       }
     ]);
+  });
+
+  /**
+   * Saúde do processo, para o deploy e para o monitoramento.
+   *
+   * Devolve 503 quando as migrações falharam: o servidor segue atendendo o que
+   * já funcionava, mas quem observa precisa saber que o schema está atrás do
+   * código. Sem detalhe de banco nem de ambiente — a rota é pública.
+   */
+  app.get("/api/saude", async (_req, res) => {
+    const { estadoDasMigracoes } = await import("./migracoes");
+    const migracoes = estadoDasMigracoes();
+    const ok = migracoes.situacao !== "falhou";
+
+    res.status(ok ? 200 : 503).json({
+      ok,
+      migracoes: {
+        situacao: migracoes.situacao,
+        aplicadas: migracoes.aplicadas.length,
+        em: migracoes.em,
+        erro: migracoes.erro,
+      },
+    });
   });
 
   // OAuth callback under /api/oauth/callback
