@@ -77,6 +77,8 @@ export function RegistroVencimento({
     onSuccess: async () => {
       await recarregar();
       toast.success("Registro salvo");
+      // Salvou, acabou: deixar o modal aberto faz a pessoa duvidar se gravou.
+      onFechar();
     },
     onError: (e) => toast.error(e.message || "Erro ao salvar o registro"),
   });

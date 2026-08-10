@@ -57,6 +57,7 @@ type Formulario = {
   nome: string;
   cargo: string;
   telefone: string;
+  whatsapp: string;
   email: string;
   tipoFuncionario: TipoFuncionario;
   loginEmail: string;
@@ -68,6 +69,7 @@ const VAZIO: Formulario = {
   nome: "",
   cargo: "",
   telefone: "",
+  whatsapp: "",
   email: "",
   tipoFuncionario: "auxiliar",
   loginEmail: "",
@@ -162,6 +164,7 @@ export default function AdminFuncionarios() {
       nome: f.nome ?? "",
       cargo: f.cargo ?? "",
       telefone: f.telefone ?? "",
+      whatsapp: (f as { whatsapp?: string | null }).whatsapp ?? "",
       email: f.email ?? "",
       tipoFuncionario: (f.tipoFuncionario as TipoFuncionario) ?? "auxiliar",
       loginEmail: f.loginEmail ?? f.email ?? "",
@@ -187,6 +190,7 @@ export default function AdminFuncionarios() {
         nome: form.nome.trim(),
         cargo: form.cargo.trim() || undefined,
         telefone: form.telefone.trim() || undefined,
+        whatsapp: form.whatsapp.trim() || undefined,
         email: form.email.trim() || undefined,
         tipoFuncionario: form.tipoFuncionario,
         loginEmail: form.loginEmail.trim() || undefined,
@@ -197,13 +201,22 @@ export default function AdminFuncionarios() {
       return;
     }
 
+    // Acesso junto do cadastro: com senha, o funcionário já nasce podendo
+    // entrar; sem senha, fica só como ficha.
+    if (form.senha.trim() && !/^\d{6}$/.test(form.senha.trim())) {
+      return toast.error("A senha de acesso precisa ter 6 dígitos");
+    }
+
     criar.mutate({
       condominioId: orgId,
       nome: form.nome.trim(),
       cargo: form.cargo.trim() || undefined,
       telefone: form.telefone.trim() || undefined,
+      whatsapp: form.whatsapp.trim() || undefined,
       email: form.email.trim() || undefined,
       tipoFuncionario: form.tipoFuncionario,
+      loginEmail: form.loginEmail.trim() || form.email.trim() || undefined,
+      senha: form.senha.trim() || undefined,
     });
   }
 
@@ -365,11 +378,28 @@ export default function AdminFuncionarios() {
                 <Label htmlFor="f-tel">Telefone</Label>
                 <Input id="f-tel" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="f-zap">WhatsApp</Label>
+                <Input
+                  id="f-zap"
+                  value={form.whatsapp}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                  placeholder="(11) 99999-9999"
+                />
+                <p className="text-xs text-slate-500">
+                  Para receber os links das funções no WhatsApp.
+                </p>
+              </div>
             </div>
 
-            {editando && (
-              <div className="border-t pt-3 space-y-3">
-                <p className="text-sm font-medium text-slate-700">Acesso ao portal</p>
+            <div className="border-t pt-3 space-y-3">
+              <p className="text-sm font-medium text-slate-700">Acesso ao portal</p>
+              {!editando && (
+                <p className="text-xs text-slate-500">
+                  Preencha a senha para o funcionário já sair daqui podendo entrar. Em branco,
+                  ele fica cadastrado sem acesso.
+                </p>
+              )}
                 <div className="space-y-1.5">
                   <Label htmlFor="f-login">E-mail de login</Label>
                   <Input id="f-login" value={form.loginEmail} onChange={(e) => setForm({ ...form, loginEmail: e.target.value })} />
@@ -384,6 +414,7 @@ export default function AdminFuncionarios() {
                     placeholder="deixe em branco para manter"
                   />
                 </div>
+              {editando && (
                 <label className="flex items-center gap-2 text-sm text-slate-600">
                   <input
                     type="checkbox"
@@ -392,8 +423,8 @@ export default function AdminFuncionarios() {
                   />
                   Acesso ativo
                 </label>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <DialogFooter>

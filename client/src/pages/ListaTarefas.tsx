@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import {
   ArrowLeft,
@@ -258,15 +259,8 @@ export function ConteudoListaTarefas({
     return RECORRENCIA_ROTULO[t.recorrencia] ?? t.recorrencia;
   };
 
-  const compartilhar = async () => {
-    const texto = `Tarefas Agendadas — ${lista.length} tarefa(s), ${execucoes?.length ?? 0} execuções`;
-    if (navigator.share) {
-      await navigator.share({ title: "Tarefas Agendadas", text: texto }).catch(() => {});
-      return;
-    }
-    await navigator.clipboard.writeText(texto);
-    toast.success("Copiado para a área de transferência");
-  };
+  const mensagemDaLista = () =>
+    `*Lista de Tarefas*\n${lista.length} tarefa(s), ${execucoes?.length ?? 0} execução(ões) registradas`;
 
   const gerarPdf = async () => {
     if (!conteudo.current) return;
@@ -327,9 +321,7 @@ export function ConteudoListaTarefas({
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={compartilhar} aria-label="Compartilhar">
-            <Share2 className="w-4 h-4" />
-          </Button>
+          <BotaoCompartilhar condominioId={condominioId} mensagem={mensagemDaLista()} />
           <Button
             variant="outline"
             size="icon"

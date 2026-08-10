@@ -181,9 +181,8 @@ export async function sendAlertaVencimentoEmail(params: {
   descricao?: string;
   organizacao?: string;
   fornecedor?: string;
-  valor?: string;
 }): Promise<EmailResult> {
-  const { destinatarios, titulo, tipo, dataVencimento, diasRestantes, descricao, organizacao, fornecedor, valor } = params;
+  const { destinatarios, titulo, tipo, dataVencimento, diasRestantes, descricao, organizacao, fornecedor } = params;
 
   const dataFormatada = dataVencimento.toLocaleDateString('pt-BR');
 
@@ -255,12 +254,6 @@ export async function sendAlertaVencimentoEmail(params: {
             <tr>
               <td style="padding: 8px 0; color: #6b7280;">Fornecedor:</td>
               <td style="padding: 8px 0;">${fornecedor}</td>
-            </tr>
-            ` : ''}
-            ${valor ? `
-            <tr>
-              <td style="padding: 8px 0; color: #6b7280;">Valor:</td>
-              <td style="padding: 8px 0;">R$ ${valor}</td>
             </tr>
             ` : ''}
           </table>

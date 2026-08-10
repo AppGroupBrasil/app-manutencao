@@ -21,6 +21,7 @@ import {
   MapPin,
   Paperclip,
   Play,
+  RotateCcw,
   Plus,
   Printer,
   Star,
@@ -175,6 +176,13 @@ export function OsDetalhe({
     onSuccess: recarregar,
     onError: (e) => toast.error(e.message || "Erro ao finalizar"),
   });
+  const reabrir = trpc.ordensServico.reabrir.useMutation({
+    onSuccess: async () => {
+      await recarregar();
+      toast.success("Ordem reaberta");
+    },
+    onError: (e) => toast.error(e.message || "Erro ao reabrir"),
+  });
   const avaliar = trpc.ordensServico.avaliar.useMutation({
     onSuccess: async () => {
       await recarregar();
@@ -323,6 +331,25 @@ export function OsDetalhe({
           <CheckCircle2 className="w-4 h-4 mr-2" />
           {os.dataFim ? `Finalizada em ${formatarDataHora(os.dataFim)}` : "Finalizar serviço"}
         </Button>
+        {/* Só aparece depois de encerrada; o motivo fica na linha do tempo. */}
+        {os.dataFim && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={reabrir.isPending}
+            onClick={() => {
+              const motivo = window.prompt("Por que esta ordem está sendo reaberta?");
+              if (motivo === null) return;
+              if (motivo.trim().length < 3) {
+                toast.error("Escreva o motivo da reabertura");
+                return;
+              }
+              reabrir.mutate({ id: ordemServicoId, motivo: motivo.trim() });
+            }}
+          >
+            <RotateCcw className="w-4 h-4 mr-2" /> Reabrir
+          </Button>
+        )}
       </div>
 
       {/* Responsáveis */}

@@ -286,6 +286,8 @@ export const funcionarios = pgTable("funcionarios", {
   cargo: varchar("cargo", { length: 100 }),
   departamento: varchar("departamento", { length: 100 }),
   telefone: varchar("telefone", { length: 20 }),
+  /** Número usado para mandar link de função pelo wa.me. */
+  whatsapp: varchar("whatsapp", { length: 20 }),
   email: varchar("email", { length: 255 }),
   fotoUrl: text("fotoUrl"),
   descricao: text("descricao"),

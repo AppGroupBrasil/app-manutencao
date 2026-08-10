@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { RegistroVencimento, rotuloStatus } from "@/components/RegistroVencimento";
 import { CalendarioManutencoes } from "@/components/CalendarioManutencoes";
 import {
@@ -116,7 +117,6 @@ const FORM_VAZIO = {
   proximaRealizacao: "",
   fornecedor: "",
   responsavel: "",
-  valor: "",
   emails: [] as string[],
   avisos: [] as Aviso[],
   qtdNotificacoes: 1,
@@ -264,7 +264,6 @@ export default function AgendaVencimentos() {
       proximaRealizacao: paraCampoData(item.proximaRealizacao),
       fornecedor: item.fornecedor ?? "",
       responsavel: item.responsavel ?? "",
-      valor: item.valor ?? "",
       emails: [...(item.emails ?? [])],
       avisos: (item.avisos ?? []).map((a) => ({ ...a })),
       qtdNotificacoes: item.qtdNotificacoes ?? 1,
@@ -343,8 +342,9 @@ export default function AgendaVencimentos() {
     }
   };
 
-  const compartilharWhatsApp = (item: (typeof itens)[number]) => {
-    const mensagem = [
+  /** Texto do compartilhamento, o mesmo para o WhatsApp e para copiar. */
+  const mensagemDoItem = (item: (typeof itens)[number]) =>
+    [
       "*Vencimento*",
       `*Título:* ${item.titulo}`,
       `*Tipo:* ${rotuloTipo(item.tipo)}`,
@@ -357,18 +357,6 @@ export default function AgendaVencimentos() {
     ]
       .filter(Boolean)
       .join("\n");
-    window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
-  };
-
-  const compartilhar = async (item: (typeof itens)[number]) => {
-    const texto = `${item.titulo} — vence em ${formatarData(item.dataVencimento)}`;
-    if (navigator.share) {
-      await navigator.share({ title: "Vencimento", text: texto }).catch(() => {});
-      return;
-    }
-    await navigator.clipboard.writeText(texto);
-    toast.success("Copiado para a área de transferência");
-  };
 
   const salvar = () => {
     if (form.titulo.trim().length < 3) {
@@ -389,7 +377,6 @@ export default function AgendaVencimentos() {
       proximaRealizacao: form.proximaRealizacao || undefined,
       fornecedor: form.fornecedor.trim() || undefined,
       responsavel: form.responsavel.trim() || undefined,
-      valor: form.valor.trim() || undefined,
       emails: form.emails,
       avisos: form.avisos,
       qtdNotificacoes: form.qtdNotificacoes,
@@ -619,7 +606,6 @@ export default function AgendaVencimentos() {
                       {item.proximaRealizacao && (
                         <span>próxima: {formatarData(item.proximaRealizacao)}</span>
                       )}
-                      {item.valor && <span>R$ {item.valor}</span>}
                       {item.responsavel && <span>{item.responsavel}</span>}
                     </div>
 
@@ -665,22 +651,11 @@ export default function AgendaVencimentos() {
                       >
                         <ClipboardList className="w-4 h-4 mr-2" /> Antes e depois
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => compartilharWhatsApp(item)}
-                        aria-label="Compartilhar no WhatsApp"
-                      >
-                        WhatsApp
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => compartilhar(item)}
-                        aria-label="Compartilhar"
-                      >
-                        <Share2 className="w-4 h-4" />
-                      </Button>
+                      <BotaoCompartilhar
+                        condominioId={condominioId}
+                        mensagem={mensagemDoItem(item)}
+                        rotulo="Compartilhar"
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -779,15 +754,6 @@ export default function AgendaVencimentos() {
                   onChange={(e) => setForm({ ...form, responsavel: e.target.value })}
                 />
               </div>
-            </div>
-
-            <div>
-              <Label>Valor</Label>
-              <Input
-                placeholder="0,00"
-                value={form.valor}
-                onChange={(e) => setForm({ ...form, valor: e.target.value })}
-              />
             </div>
 
             <div>

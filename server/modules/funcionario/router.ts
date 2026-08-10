@@ -130,8 +130,17 @@ export const funcionarioRouter = router({
         fotoUrl: z.string().optional(),
         descricao: z.string().optional(),
         tipoFuncionario: z.enum(["zelador", "porteiro", "supervisor", "gerente", "auxiliar", "sindico_externo"]).optional(),
+        /** Número do wa.me para receber os links das funções. */
+        whatsapp: z.string().max(20).optional(),
         condominiosIds: z.array(z.number()).optional(),
         appsIds: z.array(z.number()).optional(),
+        /**
+         * Acesso criado junto do cadastro. Sem senha, o funcionário nasce só
+         * como ficha — que é o caso de quem existe para ser responsável e não
+         * usa o sistema.
+         */
+        loginEmail: z.string().email().optional(),
+        senha: z.string().regex(/^\d{6}$/, "A senha deve ter 6 dígitos").optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
@@ -144,7 +153,11 @@ export const funcionarioRouter = router({
         if (!condominioId) throw new Error("Condomínio não encontrado");
         await assertOrganizacao(ctx, condominioId);
         for (const extra of input.condominiosIds ?? []) await assertOrganizacao(ctx, extra);
-        const { revistaId: _, condominiosIds, appsIds, ...data } = input;
+        const { revistaId: _, condominiosIds, appsIds, loginEmail, senha, ...data } = input;
+
+        // O acesso é gravado na mesma transação da ficha: funcionário criado e
+        // login pela metade seria pior do que não criar.
+        const senhaHash = senha ? await (await import("bcryptjs")).hash(senha, 10) : null;
         
         // Usar transação para garantir atomicidade
         const funcionarioId = await db.transaction(async (tx) => {
@@ -154,7 +167,25 @@ export const funcionarioRouter = router({
             .values({ ...data, condominioId, criadoPorId: ctx.user.id })
             .returning();
           const fId = Number(result.id);
-          
+
+          if (senhaHash) {
+            const loginUsuario = data.nome
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/[^a-zA-Z0-9]/g, "")
+              .toLowerCase();
+
+            await tx
+              .update(funcionarios)
+              .set({
+                loginEmail: loginEmail || data.email || null,
+                loginUsuario,
+                senha: senhaHash,
+                loginAtivo: true,
+              })
+              .where(eq(funcionarios.id, fId));
+          }
+
           // Se for supervisor, vincular aos condomínios adicionais
           if (condominiosIds && condominiosIds.length > 0) {
             await tx.insert(funcionarioCondominios).values(
@@ -187,6 +218,7 @@ export const funcionarioRouter = router({
       .input(z.object({
         id: z.number(),
         nome: z.string().optional(),
+        whatsapp: z.string().max(20).optional(),
         cargo: z.string().optional(),
         departamento: z.string().optional(),
         telefone: z.string().optional(),

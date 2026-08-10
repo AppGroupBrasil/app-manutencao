@@ -987,6 +987,62 @@ export const osRouter = router({
         return { success: true, tempoDecorridoMinutos };
       }),
 
+    /**
+     * Reabre uma O.S. encerrada.
+     *
+     * Trocar o status pelo seletor não bastava: a ordem continuava com data de
+     * fim e tempo total preenchidos, e nada registrava que ela tinha voltado.
+     * Aqui a reabertura desfaz o encerramento, devolve a ordem para um status
+     * não-final e deixa o motivo na linha do tempo — reabertura sem motivo é a
+     * que ninguém consegue explicar depois.
+     */
+    reabrir: osProcedure
+      .input(z.object({ id: z.number(), motivo: z.string().min(3).max(500) }))
+      .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const [os] = await db
+          .select()
+          .from(ordensServico)
+          .where(eq(ordensServico.id, input.id));
+        if (!os) throw new Error("Ordem de serviço não encontrada");
+
+        // Primeiro status não-final da organização: é para onde ela volta.
+        const [statusAberto] = await db
+          .select({ id: osStatus.id, nome: osStatus.nome })
+          .from(osStatus)
+          .where(
+            and(
+              eq(osStatus.condominioId, os.condominioId),
+              eq(osStatus.ativo, true),
+              or(eq(osStatus.isFinal, false), isNull(osStatus.isFinal)),
+            ),
+          )
+          .orderBy(asc(osStatus.ordem))
+          .limit(1);
+
+        await db
+          .update(ordensServico)
+          .set({
+            dataFim: null,
+            tempoDecorridoMinutos: null,
+            statusId: statusAberto?.id ?? os.statusId,
+          })
+          .where(eq(ordensServico.id, input.id));
+
+        await db.insert(osTimeline).values({
+          ordemServicoId: input.id,
+          tipo: "status_alterado",
+          descricao: `Ordem reaberta: ${input.motivo.trim()}`,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
+        });
+
+        return { success: true, statusId: statusAberto?.id ?? os.statusId };
+      }),
+
     // ========== RESPONSÁVEIS ==========
     addResponsavel: osProcedure
       .input(z.object({
@@ -1733,12 +1789,11 @@ export const osRouter = router({
           latitude: os.latitude || undefined,
           longitude: os.longitude || undefined,
           localizacaoDescricao: os.localizacaoDescricao || "",
+          // Sem valores: o relatório lista o que foi usado, não quanto custou.
           materiais: materiais.map(m => ({
             nome: m.nome,
             quantidade: m.quantidade || 0,
             unidade: m.unidade || undefined,
-            valorUnitario: m.valorUnitario ? parseFloat(String(m.valorUnitario)) : undefined,
-            valorTotal: m.valorTotal ? parseFloat(String(m.valorTotal)) : undefined,
           })),
           imagens: imagens.map(img => ({ url: img.url, tipo: img.tipo || undefined, descricao: img.descricao || undefined })),
           dataCriacao: os.createdAt,
@@ -1747,14 +1802,6 @@ export const osRouter = router({
           setorNome: setor?.nome || "",
           statusNome: status?.nome || "",
           statusCor: status?.cor || undefined,
-          // Orçamentos
-          orcamentos: orcamentos.map(o => ({
-            fornecedor: o.fornecedor || undefined,
-            descricao: o.descricao || undefined,
-            valor: parseFloat(String(o.valor)) || 0,
-            aprovado: o.aprovado || false,
-            dataOrcamento: o.dataOrcamento || undefined,
-          })),
           // Responsáveis
           responsaveis: responsaveis.map(r => ({
             nome: r.nome,
@@ -1778,8 +1825,6 @@ export const osRouter = router({
           condominioNome: condominio?.nome || "",
           condominioEndereco: condominio?.endereco || "",
           // Financeiro
-          valorEstimado: os.valorEstimado ? parseFloat(String(os.valorEstimado)) : undefined,
-          valorReal: os.valorReal ? parseFloat(String(os.valorReal)) : undefined,
           // Solicitante
           solicitanteNome: os.solicitanteNome || undefined,
           solicitanteTipo: os.solicitanteTipo || undefined,

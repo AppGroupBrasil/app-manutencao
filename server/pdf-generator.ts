@@ -386,14 +386,9 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
     doc.fontSize(8).fillColor('#f59e0b').font('Helvetica-Bold').text('PRAZO ESTIMADO', margin + half + 14, isY + 35);
     doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(prazoText, margin + half + 14, isY + 47, { width: half - 28 });
 
-    if (data.valorEstimado || data.valorReal) {
-      doc.fontSize(8).fillColor('#10b981').font('Helvetica-Bold').text('VALOR', margin + half + 14, isY + 62);
-      const vt = data.valorReal ? `${formatCurrency(data.valorReal)} (real)` : data.valorEstimado ? `${formatCurrency(data.valorEstimado)} (estimado)` : 'N/A';
-      doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(vt, margin + half + 14, isY + 74, { width: half - 28 });
-    } else {
-      doc.fontSize(8).fillColor('#06b6d4').font('Helvetica-Bold').text('LOCAL/ITEM', margin + half + 14, isY + 62);
-      doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(data.condominioNome || 'N/A', margin + half + 14, isY + 74, { width: half - 28 });
-    }
+    // O sistema não trabalha com valores: onde ficava o dinheiro, entra o local.
+    doc.fontSize(8).fillColor('#06b6d4').font('Helvetica-Bold').text('LOCAL/ITEM', margin + half + 14, isY + 62);
+    doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(data.condominioNome || 'N/A', margin + half + 14, isY + 74, { width: half - 28 });
 
     doc.restore();
     y += 105 + 12;
@@ -479,11 +474,8 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
       doc.text('MATERIAL', tX + 12, y + 8, { width: cW[0] - 16 });
       doc.text('QTD.', tX + cW[0] + 8, y + 8, { width: cW[1] - 16, align: 'center' });
       doc.text('UNID.', tX + cW[0] + cW[1] + 8, y + 8, { width: cW[2] - 16, align: 'center' });
-      doc.text('VALOR', tX + cW[0] + cW[1] + cW[2] + 8, y + 8, { width: cW[3] - 16, align: 'right' });
       doc.restore();
       y += rH;
-
-      let totalValor = 0;
 
       for (let i = 0; i < data.materiais.length; i++) {
         y = checkPageBreak(doc, rH + 5, margin, y);
@@ -505,67 +497,10 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
         doc.text(String(mat.quantidade || 0), tX + cW[0] + 8, y + 8, { width: cW[1] - 16, align: 'center' });
         doc.text(mat.unidade || 'un', tX + cW[0] + cW[1] + 8, y + 8, { width: cW[2] - 16, align: 'center' });
 
-        const val = mat.valorTotal || (mat.valorUnitario ? mat.valorUnitario * (mat.quantidade || 1) : 0);
-        totalValor += val;
-        doc.text(val > 0 ? formatCurrency(val) : '-', tX + cW[0] + cW[1] + cW[2] + 8, y + 8, { width: cW[3] - 16, align: 'right' });
-        doc.restore();
-        y += rH;
-      }
-
-      // Linha total
-      if (totalValor > 0) {
-        doc.save();
-        drawRoundedRect(doc, tX, y, tW, rH, 0, { fill: '#ecfdf5' });
-        doc.strokeColor(COLORS.success).lineWidth(1);
-        doc.moveTo(tX, y).lineTo(tX + tW, y).stroke();
-        doc.fontSize(9).fillColor(COLORS.dark).font('Helvetica-Bold').text('TOTAL', tX + 12, y + 8, { width: cW[0] - 16 });
-        doc.fontSize(10).fillColor(COLORS.success).font('Helvetica-Bold').text(formatCurrency(totalValor), tX + cW[0] + cW[1] + cW[2] + 8, y + 7, { width: cW[3] - 16, align: 'right' });
         doc.restore();
         y += rH;
       }
       y += 24;
-    }
-
-    // ==========================================
-    //  SECAO: ORCAMENTOS
-    // ==========================================
-    if (data.orcamentos && data.orcamentos.length > 0) {
-      y = checkPageBreak(doc, 100, margin, y);
-      y = drawSectionTitle(doc, ' ', 'ORCAMENTOS', y, pageWidth, margin);
-
-      for (let i = 0; i < data.orcamentos.length; i++) {
-        y = checkPageBreak(doc, 60, margin, y);
-        const orc = data.orcamentos[i];
-
-        doc.save();
-        const oH = 50;
-        drawRoundedRect(doc, margin, y, contentWidth, oH, 6, { fill: COLORS.cardBg, stroke: orc.aprovado ? '#86efac' : COLORS.border, lineWidth: orc.aprovado ? 1 : 0.5 });
-        drawRoundedRect(doc, margin, y, 4, oH, 2, { fill: orc.aprovado ? COLORS.success : COLORS.warning });
-
-        doc.fontSize(10).fillColor(COLORS.dark).font('Helvetica-Bold');
-        doc.text(orc.fornecedor || `Orcamento #${i + 1}`, margin + 14, y + 8, { width: contentWidth * 0.5 });
-
-        if (orc.descricao) {
-          doc.fontSize(8).fillColor(COLORS.textLight).font('Helvetica');
-          doc.text(orc.descricao, margin + 14, y + 22, { width: contentWidth * 0.5 });
-        }
-
-        if (orc.dataOrcamento) {
-          doc.fontSize(8).fillColor(COLORS.textMuted).font('Helvetica');
-          doc.text(formatDate(orc.dataOrcamento), margin + 14, y + 35);
-        }
-
-        doc.fontSize(14).fillColor(orc.aprovado ? COLORS.success : COLORS.dark).font('Helvetica-Bold');
-        doc.text(formatCurrency(orc.valor), margin + contentWidth * 0.5, y + 10, { width: contentWidth * 0.5 - 14, align: 'right' });
-
-        const bText = orc.aprovado ? 'APROVADO' : 'PENDENTE';
-        const bColor = orc.aprovado ? COLORS.success : COLORS.warning;
-        drawBadge(doc, bText, margin + contentWidth - 85, y + 32, bColor);
-
-        doc.restore();
-        y += oH + 10;
-      }
-      y += 20;
     }
 
     // ==========================================

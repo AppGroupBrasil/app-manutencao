@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
+import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import {
   ArrowLeft,
@@ -247,7 +248,8 @@ export function ConteudoOrdensServico({
 
   const ordens = lista?.items ?? [];
 
-  const compartilharWhatsApp = (os: (typeof ordens)[number]) => {
+  /** Texto do compartilhamento, o mesmo para WhatsApp e para copiar. */
+  const mensagemDe = (os: (typeof ordens)[number]) => {
     const mensagem = [
       "*Ordem de Serviço*",
       `*Protocolo:* ${os.protocolo}`,
@@ -260,17 +262,7 @@ export function ConteudoOrdensServico({
     ]
       .filter(Boolean)
       .join("\n");
-    window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, "_blank");
-  };
-
-  const compartilhar = async (os: (typeof ordens)[number]) => {
-    const texto = `${os.protocolo} — ${os.titulo}`;
-    if (navigator.share) {
-      await navigator.share({ title: "Ordem de Serviço", text: texto }).catch(() => {});
-      return;
-    }
-    await navigator.clipboard.writeText(texto);
-    toast.success("Copiado para a área de transferência");
+    return mensagem;
   };
 
   const filtradas = useMemo(() => {
@@ -468,17 +460,11 @@ export function ConteudoOrdensServico({
                     <Button variant="outline" size="sm" onClick={() => setDetalheId(os.id)}>
                       Abrir O.S.
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => compartilharWhatsApp(os)}>
-                      WhatsApp
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => compartilhar(os)}
-                      aria-label="Compartilhar"
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </Button>
+                    <BotaoCompartilhar
+                      condominioId={condominioId}
+                      mensagem={mensagemDe(os)}
+                      rotulo="Compartilhar"
+                    />
                     {podeExcluir && (
                       <Button
                         variant="ghost"

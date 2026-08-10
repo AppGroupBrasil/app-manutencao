@@ -35,7 +35,6 @@ async function main() {
       "Este é um envio de teste do App Manutenção, para confirmar que os alertas de vencimento chegam. Nenhum contrato real está vencendo.",
     organizacao: "Envio de teste",
     fornecedor: "Fornecedor de exemplo",
-    valor: "R$ 1.250,00",
   });
 
   if (!resultado.success) {

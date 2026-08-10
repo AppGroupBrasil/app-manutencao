@@ -119,6 +119,7 @@ function normalizeFuncionario(row: Record<string, unknown>): Funcionario {
     cargo: asNullableString(row.cargo),
     departamento: asNullableString(row.departamento),
     telefone: asNullableString(row.telefone),
+    whatsapp: asNullableString(row.whatsapp),
     email: asNullableString(row.email),
     fotoUrl: asNullableString(row.fotoUrl),
     descricao: asNullableString(row.descricao),

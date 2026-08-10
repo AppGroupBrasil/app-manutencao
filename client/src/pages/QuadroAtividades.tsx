@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -216,15 +217,9 @@ export function ConteudoQuadroAtividades({
 
   const daColuna = (status: string) => filtradas.filter((a) => a.status === status);
 
-  const compartilhar = async () => {
-    const texto = COLUNAS.map((c) => `${c.rotulo}: ${daColuna(c.valor).length}`).join(" | ");
-    if (navigator.share) {
-      await navigator.share({ title: "Quadro de Atividades", text: texto }).catch(() => {});
-      return;
-    }
-    await navigator.clipboard.writeText(texto);
-    toast.success("Copiado para a área de transferência");
-  };
+  const mensagemDoQuadro = () =>
+    `*Quadro de Atividades*\n` +
+    COLUNAS.map((c) => `${c.rotulo}: ${daColuna(c.valor).length}`).join("\n");
 
   const gerarPdf = async () => {
     if (!conteudo.current) return;
@@ -266,9 +261,7 @@ export function ConteudoQuadroAtividades({
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={compartilhar} aria-label="Compartilhar">
-            <Share2 className="w-4 h-4" />
-          </Button>
+          <BotaoCompartilhar condominioId={condominioId} mensagem={mensagemDoQuadro()} />
           <Button variant="outline" size="icon" onClick={() => window.print()} aria-label="Imprimir">
             <Printer className="w-4 h-4" />
           </Button>
