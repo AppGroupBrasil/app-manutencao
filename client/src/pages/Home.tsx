@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useRevelar } from "@/hooks/useRevelar";
@@ -8,8 +7,6 @@ import {
   CalendarClock,
   Camera,
   Check,
-  ChevronLeft,
-  ChevronRight,
   ClipboardCheck,
   ClipboardList,
   Columns3,
@@ -126,25 +123,6 @@ const PLANOS = [
   },
 ] as const;
 
-/** Os outros sistemas da casa, que seguem como estão. */
-const OUTROS_SISTEMAS = [
-  {
-    nome: "App Condominial",
-    descricao: "O condomínio inteiro no celular do morador.",
-    href: "/app",
-  },
-  {
-    nome: "Revista Digital",
-    descricao: "A revista do cliente, montada e publicada em minutos.",
-    href: "/revista",
-  },
-  {
-    nome: "Relatórios de Gestão",
-    descricao: "Relatório de vistoria e de gestão pronto para enviar.",
-    href: "/relatorio",
-  },
-] as const;
-
 /** Bloco que aparece com um fade ao entrar na tela. */
 function Revelar({
   children,
@@ -209,67 +187,6 @@ function AmostraDoPainel() {
             </div>
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** Passa sozinho; as setas e os pontos só antecipam. */
-function Carrossel() {
-  const [indice, setIndice] = useState(0);
-  const total = OUTROS_SISTEMAS.length;
-
-  useEffect(() => {
-    const timer = setInterval(() => setIndice((i) => (i + 1) % total), 5000);
-    return () => clearInterval(timer);
-  }, [total]);
-
-  const atual = OUTROS_SISTEMAS[indice];
-
-  return (
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Sistema anterior"
-          onClick={() => setIndice((i) => (i - 1 + total) % total)}
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </Button>
-
-        <a
-          href={atual.href}
-          className="flex-1 bg-white border rounded-2xl px-6 py-10 text-center shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
-        >
-          <h3 className="font-semibold text-slate-900 text-lg">{atual.nome}</h3>
-          <p className="text-sm text-slate-500 mt-1.5">{atual.descricao}</p>
-          <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 mt-4">
-            Conhecer <ArrowRight className="w-4 h-4" />
-          </span>
-        </a>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Próximo sistema"
-          onClick={() => setIndice((i) => (i + 1) % total)}
-        >
-          <ChevronRight className="w-5 h-5" />
-        </Button>
-      </div>
-
-      <div className="flex justify-center gap-1.5 mt-5">
-        {OUTROS_SISTEMAS.map((s, i) => (
-          <button
-            key={s.nome}
-            aria-label={`Ver ${s.nome}`}
-            onClick={() => setIndice(i)}
-            className={`h-1.5 rounded-full transition-all ${
-              i === indice ? "w-7 bg-slate-800" : "w-1.5 bg-slate-300 hover:bg-slate-400"
-            }`}
-          />
-        ))}
       </div>
     </div>
   );
@@ -546,22 +463,6 @@ export default function Home() {
             <strong className="text-slate-700">muitos funcionários</strong>. Na dúvida, fale com a
             gente pelo WhatsApp — o botão fica no canto da tela.
           </p>
-        </div>
-      </section>
-
-      {/* ============ OUTROS SISTEMAS ============ */}
-      <section className="bg-white">
-        <div className="max-w-6xl mx-auto px-4 py-20">
-          <Revelar className="text-center">
-            <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
-              Outros sistemas da casa
-            </h2>
-            <p className="text-slate-600 mt-3">O App Manutenção é um deles. Conheça o resto.</p>
-          </Revelar>
-
-          <div className="mt-12">
-            <Carrossel />
-          </div>
         </div>
       </section>
 
