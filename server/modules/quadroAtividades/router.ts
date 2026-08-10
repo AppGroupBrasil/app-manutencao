@@ -4,6 +4,7 @@ import { moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { proximoProtocolo } from "../../_core/protocolo";
 import {
   quadroAtividades,
   ordensServico,
@@ -23,13 +24,6 @@ const quadroProcedure = moduloProcedure(
 
 
 /** Protocolo sequencial e legível: ATV-000123. */
-async function gerarProtocolo(db: NonNullable<Awaited<ReturnType<typeof getDb>>>): Promise<string> {
-  const [linha] = await db
-    .select({ maximo: sql<number>`coalesce(max(${quadroAtividades.id}), 0)` })
-    .from(quadroAtividades);
-
-  return `ATV-${String(Number(linha?.maximo ?? 0) + 1).padStart(6, "0")}`;
-}
 
 const STATUS = ["a_fazer", "em_andamento", "em_revisao", "concluido"] as const;
 const ROTINAS = ["diaria", "semanal", "mensal", "anual", "data_especifica"] as const;
@@ -233,7 +227,7 @@ export const quadroAtividadesRouter = router({
       if (!db) throw new Error("Database not available");
 
       const autor = autorDaRequisicao(ctx);
-      const protocolo = await gerarProtocolo(db);
+      const protocolo = await proximoProtocolo(db, "atividade", { prefixo: "ATV-" });
       const [criada] = await db
         .insert(quadroAtividades)
         .values({

@@ -345,6 +345,8 @@ export const funcionarioFuncoes = pgTable("funcionario_funcoes", {
   habilitada: boolean("habilitada").default(true),
   /** Além de ver, pode registrar. */
   podeCriar: boolean("podeCriar").default(true).notNull(),
+  /** Pode apagar registro da função. Padrão: não, o gestor libera. */
+  podeExcluir: boolean("podeExcluir").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

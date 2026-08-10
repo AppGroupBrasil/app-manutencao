@@ -59,7 +59,12 @@ async function assertFuncionario(ctx: CtxTenant, funcionarioId: number) {
  * para quem o gestor abrisse a tela de permissões e salvasse.
  */
 function funcoesComPadrao(
-  linhas: { funcaoKey: string; habilitada: boolean | null; podeCriar: boolean | null }[],
+  linhas: {
+    funcaoKey: string;
+    habilitada: boolean | null;
+    podeCriar: boolean | null;
+    podeExcluir: boolean | null;
+  }[],
 ) {
   const gravadas = new Map(linhas.map((f) => [f.funcaoKey, f]));
 
@@ -69,6 +74,8 @@ function funcoesComPadrao(
       funcaoKey: chave,
       habilitada: linha ? linha.habilitada === true : true,
       podeCriar: linha ? linha.podeCriar === true : true,
+      // Sem linha gravada nao ha autorizacao para apagar.
+      podeExcluir: linha ? linha.podeExcluir === true : false,
     };
   });
 }
@@ -300,7 +307,12 @@ export const funcionarioRouter = router({
         if (!db) return [];
         const funcoes = await db.select().from(funcionarioFuncoes)
           .where(eq(funcionarioFuncoes.funcionarioId, input.funcionarioId));
-        return funcoes.map(f => ({ ...f, habilitada: f.habilitada === true, podeCriar: f.podeCriar === true }));
+        return funcoes.map(f => ({
+          ...f,
+          habilitada: f.habilitada === true,
+          podeCriar: f.podeCriar === true,
+          podeExcluir: f.podeExcluir === true,
+        }));
       }),
 
     // Atualizar funções do funcionário
@@ -311,6 +323,7 @@ export const funcionarioRouter = router({
           funcaoKey: z.string(),
           habilitada: z.boolean(),
           podeCriar: z.boolean().optional(),
+          podeExcluir: z.boolean().optional(),
         })),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -331,6 +344,8 @@ export const funcionarioRouter = router({
                 funcaoKey: f.funcaoKey,
                 habilitada: f.habilitada,
                 podeCriar: f.podeCriar ?? true,
+                // Exclusao nasce negada: so entra ligada se o gestor marcar.
+                podeExcluir: f.podeExcluir ?? false,
               }))
             ).returning();
           }

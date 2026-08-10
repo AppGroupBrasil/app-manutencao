@@ -5,6 +5,7 @@ import { moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { proximoProtocolo, proximoProtocoloComData } from "../../_core/protocolo";
 
 // Auto-criar colunas de assinatura se não existirem
 async function ensureSignatureColumns() {
@@ -99,16 +100,6 @@ async function assegurarTemplateDoCliente(
   }
 }
 
-/** Protocolo do reporte no formato do Manutenção X: RPT-AAMMDD-9999. */
-function gerarProtocoloReporte(): string {
-  const agora = new Date();
-  const ano = String(agora.getFullYear()).slice(2);
-  const mes = String(agora.getMonth() + 1).padStart(2, "0");
-  const dia = String(agora.getDate()).padStart(2, "0");
-  const seq = String(Math.floor(1000 + Math.random() * 9000));
-  return `RPT-${ano}${mes}${dia}-${seq}`;
-}
-
 export const checklistRouter = router({
   list: checklistProcedure
     .input(z.object({ condominioId: z.number() }))
@@ -184,16 +175,8 @@ export const checklistRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      // Gerar protocolo único com retry para evitar colisão
-      let protocolo: string;
-      let tentativas = 0;
-      do {
-        protocolo = String(Math.floor(100000 + Math.random() * 900000));
-        const [existing] = await db.select({ id: checklists.id }).from(checklists).where(eq(checklists.protocolo, protocolo)).limit(1);
-        if (!existing) break;
-        tentativas++;
-      } while (tentativas < 10);
-      if (tentativas >= 10) throw new Error("Não foi possível gerar protocolo único");
+      // O banco emite o protocolo: sem sorteio, sem retry, sem colisão.
+      const protocolo = await proximoProtocolo(db, "checklist");
       
       const { itens, imagens } = input;
       const [result] = await db.insert(checklists).values({
@@ -889,7 +872,7 @@ export const checklistRouter = router({
           condominioId: input.condominioId,
           checklistId: input.checklistId,
           itemId: input.itemId,
-          protocolo: gerarProtocoloReporte(),
+          protocolo: await proximoProtocoloComData(db, "reporte", "RPT-"),
           itemDesc: input.itemDesc ?? null,
           descricao: input.descricao,
           status: input.status ?? "aberto",

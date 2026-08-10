@@ -2,6 +2,7 @@ import { z } from "zod";
 import { router, protectedProcedure, moduloUserProcedure } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
+import { proximoProtocolo } from "../../_core/protocolo";
 import { vencimentos, vencimentoAlertas, vencimentoAnexos, vencimentoEmails, vencimentoNotificacoes, vencimentoTipos, condominios } from "../../../drizzle/schema";
 import { eq, and, asc, desc, gte, sql, lte, lt } from "drizzle-orm";
 import { storagePut } from "../../storage";
@@ -63,15 +64,6 @@ function dataDoFormulario(valor: string): Date {
 }
 
 /** Protocolo do vencimento: VNC-000123, derivado do maior id da tabela. */
-async function gerarProtocoloVencimento(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-): Promise<string> {
-  const [linha] = await db
-    .select({ maximo: sql<number>`coalesce(max(${vencimentos.id}), 0)` })
-    .from(vencimentos);
-
-  return `VNC-${String(Number(linha?.maximo ?? 0) + 1).padStart(6, "0")}`;
-}
 
 /** Slug estável para o tipo de manutenção cadastrado pelo usuário. */
 function gerarSlug(valor: string): string {
@@ -280,7 +272,7 @@ export const financeiroRouter = router({
 
         const [result] = await db.insert(vencimentos).values({
           condominioId: vencimentoData.condominioId,
-          protocolo: await gerarProtocoloVencimento(db),
+          protocolo: await proximoProtocolo(db, "vencimento", { prefixo: "VNC-" }),
           tipo: vencimentoData.tipo,
           avisos: vencimentoData.avisos ?? [],
           emails: vencimentoData.emails ?? [],

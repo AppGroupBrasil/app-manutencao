@@ -4,6 +4,7 @@ import { moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { proximoProtocolo } from "../../_core/protocolo";
 import { tarefasAgendadas, tarefasExecucoes } from "../../../drizzle/schema";
 
 /**
@@ -35,13 +36,6 @@ const tarefaProcedure = moduloProcedure(
  * Sai do maior id da tabela, não de um contador à parte — assim não existe
  * estado extra para sair de sincronia, e o índice único barra colisão.
  */
-async function gerarProtocolo(db: NonNullable<Awaited<ReturnType<typeof getDb>>>): Promise<string> {
-  const [linha] = await db
-    .select({ maximo: sql<number>`coalesce(max(${tarefasAgendadas.id}), 0)` })
-    .from(tarefasAgendadas);
-
-  return `TRF-${String(Number(linha?.maximo ?? 0) + 1).padStart(6, "0")}`;
-}
 
 const RECORRENCIAS = ["unica", "diaria", "semanal", "mensal"] as const;
 const PRIORIDADES = ["baixa", "media", "alta", "urgente"] as const;
@@ -81,7 +75,7 @@ export const tarefasAgendadasRouter = router({
       if (!db) throw new Error("Database not available");
 
       const autor = autorDaRequisicao(ctx);
-      const protocolo = await gerarProtocolo(db);
+      const protocolo = await proximoProtocolo(db, "tarefa", { prefixo: "TRF-" });
       const [criada] = await db
         .insert(tarefasAgendadas)
         .values({

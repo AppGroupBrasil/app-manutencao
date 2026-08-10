@@ -128,7 +128,7 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
 /**
  * Conteúdo reaproveitado pelo portal do funcionário, que já recebe a unidade.
  *
- *  só chega pelo gestor: é o que libera o bloco de configuração de
+ * `organizacao` só chega pelo gestor: é o que libera o bloco de configuração de
  * avisos, que é decisão da unidade e não do funcionário.
  */
 export function ConteudoOrdensServico({
@@ -137,12 +137,15 @@ export function ConteudoOrdensServico({
   organizacao,
   onVoltar,
   podeCriar = true,
+  podeExcluir = true,
 }: {
   condominioId: number;
   osInicial?: number;
   organizacao?: { nome: string; autoNotificar: boolean };
   onVoltar?: () => void;
   podeCriar?: boolean;
+  /** Excluir e permissao a parte: o gestor libera por funcionario. */
+  podeExcluir?: boolean;
 }) {
   const utils = trpc.useUtils();
   const habilitado = condominioId > 0;
@@ -474,7 +477,7 @@ export function ConteudoOrdensServico({
                     >
                       <Share2 className="w-4 h-4" />
                     </Button>
-                    {podeCriar && (
+                    {podeExcluir && (
                       <Button
                         variant="ghost"
                         size="sm"

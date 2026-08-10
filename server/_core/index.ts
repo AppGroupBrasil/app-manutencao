@@ -50,6 +50,19 @@ async function startServer() {
     process.exit(1);
   }
 
+  // Migrações antes de atender: subir com o banco atrasado deixa as telas
+  // novas quebrando com "coluna não existe". `MIGRAR_AO_SUBIR=false` desliga
+  // para quem prefere aplicar por fora.
+  if (process.env.MIGRAR_AO_SUBIR !== "false") {
+    try {
+      const { aplicarMigracoesPendentes } = await import("./migracoes");
+      await aplicarMigracoesPendentes();
+    } catch (err) {
+      console.error("❌ [FATAL] Falha ao aplicar migrações:", err);
+      process.exit(1);
+    }
+  }
+
   const app = express();
   app.set("trust proxy", 1);
   const server = createServer(app);

@@ -7,6 +7,7 @@ import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getClientIp, rateLimiter } from "../../_core/rateLimit";
 import { getDb } from "../../db";
+import { proximoProtocolo } from "../../_core/protocolo";
 import { storagePut } from "../../storage";
 import { qrcodes, qrcodeRespostas } from "../../../drizzle/schema";
 
@@ -26,14 +27,6 @@ const qrcodeProcedure = moduloProcedure(
   "qrcode",
 );
 
-/** Protocolo do ponto: QRC-000123. */
-async function gerarProtocolo(db: NonNullable<Awaited<ReturnType<typeof getDb>>>): Promise<string> {
-  const [linha] = await db
-    .select({ maximo: sql<number>`coalesce(max(${qrcodes.id}), 0)` })
-    .from(qrcodes);
-
-  return `QRC-${String(Number(linha?.maximo ?? 0) + 1).padStart(6, "0")}`;
-}
 
 const MAX_IMAGENS = 5;
 const TIPOS_IMAGEM = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -72,7 +65,7 @@ export const qrcodeRouter = router({
           descricao: input.descricao,
           tipo: input.tipo ?? "local",
           token: nanoid(32),
-          protocolo: await gerarProtocolo(db),
+          protocolo: await proximoProtocolo(db, "qrcode", { prefixo: "QRC-" }),
           criadoPorId: autor.userId,
           criadoPorNome: autor.nome,
         })
@@ -219,10 +212,7 @@ export const qrcodeRouter = router({
         urls.push(url);
       }
 
-      const [{ maximo }] = await db
-        .select({ maximo: sql<number>`coalesce(max(${qrcodeRespostas.id}), 0)` })
-        .from(qrcodeRespostas);
-      const protocolo = `QRR-${String(Number(maximo ?? 0) + 1).padStart(6, "0")}`;
+      const protocolo = await proximoProtocolo(db, "qrcodeResposta", { prefixo: "QRR-" });
 
       const [resposta] = await db
         .insert(qrcodeRespostas)

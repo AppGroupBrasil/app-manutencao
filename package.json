@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "db:migrar": "tsx scripts/db/migrar.ts",
     "db:materializar-modulos": "tsx scripts/db/materializar-modulos.ts",
     "db:seed-asa": "tsx scripts/db/seed-asa.ts",
     "cap:sync": "npx cap sync",

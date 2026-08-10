@@ -53,3 +53,38 @@ export async function assegurarPermissaoFuncionario(
     });
   }
 }
+
+/**
+ * Exclusão é permissão à parte, e o padrão é negar.
+ *
+ * Criar e apagar têm consequências diferentes: quem registra uma O.S. errada
+ * corrige, quem apaga leva junto fotos, orçamentos e histórico. Por isso o
+ * gestor precisa ligar a chave por pessoa, e a ausência de linha significa não.
+ */
+export async function assegurarExclusaoFuncionario(
+  ctx: { funcionario: { id: number } | null },
+  chaveFuncao: string,
+): Promise<void> {
+  if (!ctx.funcionario) return;
+
+  const db = await getDb();
+  if (!db) return;
+
+  const [permissao] = await db
+    .select({ podeExcluir: funcionarioFuncoes.podeExcluir })
+    .from(funcionarioFuncoes)
+    .where(
+      and(
+        eq(funcionarioFuncoes.funcionarioId, ctx.funcionario.id),
+        eq(funcionarioFuncoes.funcaoKey, chaveFuncao),
+      ),
+    )
+    .limit(1);
+
+  if (permissao?.podeExcluir !== true) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Excluir não está liberado para o seu acesso.",
+    });
+  }
+}

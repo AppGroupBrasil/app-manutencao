@@ -13,14 +13,14 @@ import { toast } from "@/components/ui/sonner";
 import { FUNCOES_FUNCIONARIO } from "@shared/funcoesFuncionario";
 import { Loader2 } from "lucide-react";
 
-type Permissao = { habilitada: boolean; podeCriar: boolean };
+type Permissao = { habilitada: boolean; podeCriar: boolean; podeExcluir: boolean };
 
 /**
- * O que o funcionário vê e o que ele pode criar, função por função.
+ * O que o funcionário vê, o que ele pode criar e o que ele pode excluir.
  *
- * Tudo nasce ligado: quem cadastra alguém espera que a pessoa trabalhe. O
- * gestor desliga o que não quer — desligar "ver" faz a função sumir da tela
- * dele; desligar "criar" deixa a função visível, mas só de leitura.
+ * Ver e criar nascem ligados: quem cadastra alguém espera que a pessoa
+ * trabalhe. Excluir nasce desligado e só aparece onde apagar destrói histórico
+ * junto — hoje, ordens de serviço.
  */
 export function PermissoesFuncionario({
   funcionarioId,
@@ -42,10 +42,11 @@ export function PermissoesFuncionario({
     const mapa: Record<string, Permissao> = {};
     for (const funcao of FUNCOES_FUNCIONARIO) {
       const gravada = data.find((f) => f.funcaoKey === funcao.chave);
-      // Sem linha gravada, vale o padrão: vê e cria.
+      // Sem linha gravada, vale o padrão: vê e cria, mas não exclui.
       mapa[funcao.chave] = {
         habilitada: gravada ? gravada.habilitada : true,
         podeCriar: gravada ? gravada.podeCriar : true,
+        podeExcluir: gravada ? gravada.podeExcluir : false,
       };
     }
     setPermissoes(mapa);
@@ -63,9 +64,20 @@ export function PermissoesFuncionario({
   const alternar = (chave: string, campo: keyof Permissao, valor: boolean) =>
     setPermissoes((atual) => {
       const alvo = { ...atual[chave], [campo]: valor };
-      // Sem ver, criar não faz sentido: desligar um desliga o outro.
-      if (campo === "habilitada" && !valor) alvo.podeCriar = false;
-      if (campo === "podeCriar" && valor) alvo.habilitada = true;
+      // Sem ver, o resto não faz sentido: desligar "ver" desliga tudo.
+      if (campo === "habilitada" && !valor) {
+        alvo.podeCriar = false;
+        alvo.podeExcluir = false;
+      }
+      if (campo === "podeCriar") {
+        if (valor) alvo.habilitada = true;
+        // Quem não registra também não apaga.
+        else alvo.podeExcluir = false;
+      }
+      if (campo === "podeExcluir" && valor) {
+        alvo.habilitada = true;
+        alvo.podeCriar = true;
+      }
       return { ...atual, [chave]: alvo };
     });
 
@@ -75,7 +87,7 @@ export function PermissoesFuncionario({
         <DialogHeader>
           <DialogTitle>Permissões de {nome}</DialogTitle>
           <DialogDescription>
-            O que aparece no aplicativo dele e o que ele pode registrar.
+            O que aparece no aplicativo dele, o que ele pode registrar e o que pode excluir.
           </DialogDescription>
         </DialogHeader>
 
@@ -88,10 +100,13 @@ export function PermissoesFuncionario({
             <div className="flex items-center justify-end gap-6 pr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               <span className="w-10 text-center">Ver</span>
               <span className="w-10 text-center">Criar</span>
+              <span className="w-10 text-center">Excluir</span>
             </div>
 
             {FUNCOES_FUNCIONARIO.map((funcao) => {
-              const atual = permissoes[funcao.chave] ?? { habilitada: true, podeCriar: true };
+              const atual =
+                permissoes[funcao.chave] ??
+                { habilitada: true, podeCriar: true, podeExcluir: false };
               return (
                 <div
                   key={funcao.chave}
@@ -115,9 +130,27 @@ export function PermissoesFuncionario({
                       aria-label={`Criar em ${funcao.rotulo}`}
                     />
                   </div>
+                  <div className="w-10 flex justify-center">
+                    {funcao.temExclusao ? (
+                      <Switch
+                        checked={atual.podeExcluir}
+                        onCheckedChange={(v) => alternar(funcao.chave, "podeExcluir", v)}
+                        aria-label={`Excluir em ${funcao.rotulo}`}
+                      />
+                    ) : (
+                      <span className="text-slate-300 text-xs" aria-hidden>
+                        —
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
+
+            <p className="text-xs text-slate-500 pt-1">
+              Excluir ordem de serviço apaga junto fotos, anexos, orçamentos e histórico. Deixe
+              desligado se a equipe só precisa registrar e acompanhar.
+            </p>
 
             <Button
               className="w-full mt-2"
@@ -129,6 +162,9 @@ export function PermissoesFuncionario({
                     funcaoKey: f.chave,
                     habilitada: permissoes[f.chave]?.habilitada ?? true,
                     podeCriar: permissoes[f.chave]?.podeCriar ?? true,
+                    podeExcluir: f.temExclusao
+                      ? permissoes[f.chave]?.podeExcluir ?? false
+                      : false,
                   })),
                 })
               }

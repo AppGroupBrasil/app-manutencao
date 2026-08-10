@@ -2,6 +2,7 @@ import { publicProcedure, moduloProcedure, moduloUserProcedure, router } from ".
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
+import { proximoProtocoloComData } from "../../_core/protocolo";
 import { 
   osCategorias,
   osPrioridades,
@@ -26,6 +27,7 @@ import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "dr
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
+import { assegurarExclusaoFuncionario } from "../../_core/permissaoFuncionario";
 
 // Exige o modulo "ordens-servico" habilitado e valida que cada id recebido
 // pertence a organizacao da requisicao. `id` aponta para a OS por padrao; nas
@@ -79,6 +81,15 @@ const osProcedure = moduloProcedure(
  * funcionario mesmo quando ele tem permissao de criar O.S.
  */
 const osConfigProcedure = moduloUserProcedure("ordens-servico", escopoOs);
+
+/**
+ * Excluir O.S. leva junto fotos, anexos, orçamentos, chat e histórico. Para o
+ * funcionário, depende de o gestor ter ligado a chave de exclusão dele.
+ */
+const osExclusaoProcedure = osProcedure.use(async ({ ctx, next }) => {
+  await assegurarExclusaoFuncionario(ctx, "ordens");
+  return next({ ctx });
+});
 
 /**
  * Aviso de abertura de O.S. aos funcionários da unidade.
@@ -751,13 +762,9 @@ export const osRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
-        // Gerar protocolo baseado em timestamp (à prova de colisão)
-        const now = new Date();
-        const yy = String(now.getFullYear()).slice(-2);
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const dd = String(now.getDate()).padStart(2, '0');
-        const rand = String(Math.floor(1000 + Math.random() * 9000));
-        const protocolo = `OS-${yy}${mm}${dd}-${rand}`;
+        // O numero vem da sequence do banco: dois pedidos simultaneos nunca
+        // recebem o mesmo protocolo.
+        const protocolo = await proximoProtocoloComData(db, "os", "OS-");
         
         // Gerar tokens
         const chatToken = nanoid(32);
@@ -897,7 +904,7 @@ export const osRouter = router({
         return { success: true };
       }),
     
-    delete: osProcedure
+    delete: osExclusaoProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();

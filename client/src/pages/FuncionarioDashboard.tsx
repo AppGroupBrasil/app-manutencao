@@ -140,6 +140,7 @@ export default function FuncionarioDashboard() {
   const [isSectionRoute, routeParams] = useRoute<{ section: string }>("/dashboard/:section");
   const [funcoesHabilitadas, setFuncoesHabilitadas] = useState<string[]>([]);
   const [funcoesQueCria, setFuncoesQueCria] = useState<string[]>([]);
+  const [funcoesQueExclui, setFuncoesQueExclui] = useState<string[]>([]);
   const [selectedCondominio, setSelectedCondominio] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"condominios" | "apps" | "funcoes">("condominios");
 
@@ -194,6 +195,7 @@ export default function FuncionarioDashboard() {
         // Admin/gestor: libera todas as funções
         setFuncoesHabilitadas(Object.keys(FUNCOES_CONFIG));
         setFuncoesQueCria(Object.keys(FUNCOES_CONFIG));
+        setFuncoesQueExclui(Object.keys(FUNCOES_CONFIG));
       } else if (funcionario.funcoes) {
         const habilitadas = funcionario.funcoes
           .filter(f => f.habilitada)
@@ -203,6 +205,12 @@ export default function FuncionarioDashboard() {
         setFuncoesQueCria(
           funcionario.funcoes
             .filter(f => f.habilitada && (f as { podeCriar?: boolean }).podeCriar !== false)
+            .map(f => f.funcaoKey),
+        );
+        // Excluir e o contrario: so entra quem o gestor marcou.
+        setFuncoesQueExclui(
+          funcionario.funcoes
+            .filter(f => f.habilitada && (f as { podeExcluir?: boolean }).podeExcluir === true)
             .map(f => f.funcaoKey),
         );
       }
@@ -306,6 +314,7 @@ export default function FuncionarioDashboard() {
           <ConteudoOrdensServico
             condominioId={activeCondominioId}
             podeCriar={funcoesQueCria.includes(activeSection)}
+            podeExcluir={funcoesQueExclui.includes(activeSection)}
           />
         ) : activeSection === "qrcode" ? (
           <ConteudoQrCodes

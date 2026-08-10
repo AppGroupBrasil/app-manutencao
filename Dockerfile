@@ -42,6 +42,10 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy built artifacts from builder
 COPY --from=builder /app/dist ./dist
 
+# Migrações: o servidor aplica o que falta ao subir, então os .sql precisam
+# estar na imagem.
+COPY --from=builder /app/drizzle ./drizzle
+
 # Expose the port (Cloud Run defaults to 8080)
 ENV PORT=8080
 EXPOSE 8080

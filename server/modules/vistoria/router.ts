@@ -4,6 +4,7 @@ import { moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { proximoProtocolo, proximoProtocoloComData } from "../../_core/protocolo";
 import { generateFuncaoRapidaPDF } from "../../pdfFuncoesRapidas";
 import {
   vistorias,
@@ -143,16 +144,8 @@ export const vistoriaRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      // Gerar protocolo único com retry para evitar colisão
-      let protocolo: string;
-      let tentativas = 0;
-      do {
-        protocolo = String(Math.floor(100000 + Math.random() * 900000));
-        const [existing] = await db.select({ id: vistorias.id }).from(vistorias).where(eq(vistorias.protocolo, protocolo)).limit(1);
-        if (!existing) break;
-        tentativas++;
-      } while (tentativas < 10);
-      if (tentativas >= 10) throw new Error("Não foi possível gerar protocolo único");
+      // O banco emite o protocolo: sem sorteio, sem retry, sem colisão.
+      const protocolo = await proximoProtocolo(db, "vistoria");
       
       const [result] = await db.insert(vistorias).values({
         condominioId: input.condominioId,
@@ -620,16 +613,8 @@ export const vistoriaRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       const autor = autorDaRequisicao(ctx);
-      // Mesmo formato do Manutenção X: RPT-AAMMDD-9999.
-      const agora = new Date();
-      const protocolo = [
-        "RPT-",
-        String(agora.getFullYear()).slice(2),
-        String(agora.getMonth() + 1).padStart(2, "0"),
-        String(agora.getDate()).padStart(2, "0"),
-        "-",
-        String(Math.floor(1000 + Math.random() * 9000)),
-      ].join("");
+      // Mesmo formato do Manutenção X (RPT-AAMMDD-9999), numero vindo do banco.
+      const protocolo = await proximoProtocoloComData(db, "reporte", "RPT-");
       const [criado] = await db.insert(reportes).values({
         condominioId: input.condominioId,
         vistoriaId: input.vistoriaId,

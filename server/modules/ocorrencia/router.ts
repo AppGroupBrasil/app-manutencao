@@ -4,6 +4,7 @@ import { moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { proximoProtocolo } from "../../_core/protocolo";
 
 // Auto-criar colunas de assinatura se não existirem
 async function ensureSignatureColumns() {
@@ -119,16 +120,8 @@ export const ocorrenciaRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      // Gerar protocolo único com retry para evitar colisão
-      let protocolo: string;
-      let tentativas = 0;
-      do {
-        protocolo = String(Math.floor(100000 + Math.random() * 900000));
-        const [existing] = await db.select({ id: ocorrencias.id }).from(ocorrencias).where(eq(ocorrencias.protocolo, protocolo)).limit(1);
-        if (!existing) break;
-        tentativas++;
-      } while (tentativas < 10);
-      if (tentativas >= 10) throw new Error("Não foi possível gerar protocolo único");
+      // O banco emite o protocolo: sem sorteio, sem retry, sem colisão.
+      const protocolo = await proximoProtocolo(db, "ocorrencia");
       
       const [result] = await db.insert(ocorrencias).values({
         condominioId: input.condominioId,

@@ -14,6 +14,13 @@ export interface FuncaoFuncionario {
   rotulo: string;
   descricao: string;
   modulo: string;
+  /**
+   * Mostra a chave de "excluir" na tela de permissões.
+   *
+   * Só nas funções em que apagar destrói histórico junto (a O.S. leva fotos,
+   * orçamentos, anexos e chat). Nas demais, apagar continua embutido no "criar".
+   */
+  temExclusao?: boolean;
 }
 
 export const FUNCOES_FUNCIONARIO: readonly FuncaoFuncionario[] = [
@@ -58,6 +65,7 @@ export const FUNCOES_FUNCIONARIO: readonly FuncaoFuncionario[] = [
     rotulo: "Ordens de Serviço",
     descricao: "Abrir e acompanhar ordens de serviço",
     modulo: "ordens-servico",
+    temExclusao: true,
   },
   {
     chave: "qrcode",
