@@ -38,6 +38,8 @@ interface OSPDFData {
   // Financeiro
   valorEstimado?: number;
   valorReal?: number;
+  /** Token de leitura pública, usado no QR da folha. */
+  shareToken?: string;
   // Solicitante
   solicitanteNome?: string;
   solicitanteTipo?: string;
@@ -212,9 +214,11 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
 
   // Gerar QR Code como PNG buffer
   const baseUrl = process.env.VITE_APP_URL || "https://appmanutencao.com.br";
-  // Precisa bater com a rota real do client: quem escaneia a O.S. impressa cai
-  // na tela dela já aberta para edição.
-  const osUrl = `${baseUrl}/manutencoes/ordens-servico/${data.osId}`;
+  // Link público: quem lê o código na folha impressa está no local e quase
+  // nunca tem conta — apontar para a tela interna parava todo mundo no login.
+  const osUrl = data.shareToken
+    ? `${baseUrl}/os/${data.shareToken}`
+    : `${baseUrl}/manutencoes/ordens-servico/${data.osId}`;
   let qrBuffer: Buffer | null = null;
   try {
     qrBuffer = await QRCode.toBuffer(osUrl, {

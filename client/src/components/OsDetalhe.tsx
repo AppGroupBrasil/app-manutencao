@@ -131,8 +131,12 @@ export function OsDetalhe({
     setSalvoEm(new Date());
   };
 
-  // Mesmo endereço que o QR do PDF: a folha impressa e a tela apontam para cá.
-  const urlDaOs = `${typeof window !== "undefined" ? window.location.origin : ""}/manutencoes/ordens-servico/${ordemServicoId}`;
+  // Mesmo endereço que o QR do PDF. É link público: quem lê o código no local
+  // costuma não ter conta, e antes o celular parava na tela de login.
+  const origem = typeof window !== "undefined" ? window.location.origin : "";
+  const urlDaOs = os?.shareToken
+    ? `${origem}/os/${os.shareToken}`
+    : `${origem}/manutencoes/ordens-servico/${ordemServicoId}`;
 
   const uploadImagem = trpc.ordensServico.uploadImagem.useMutation();
   const uploadAnexo = trpc.ordensServico.uploadAnexo.useMutation();

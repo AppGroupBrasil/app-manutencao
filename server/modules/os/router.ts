@@ -1587,8 +1587,12 @@ export const osRouter = router({
           .where(eq(osTimeline.ordemServicoId, os.id))
           .orderBy(desc(osTimeline.createdAt));
         
+        // O token do chat fica de fora: quem tem o link de leitura poderia
+        // escrever no chat da O.S. pela rota pública de mensagem.
+        const { chatToken, ...publico } = os;
+
         return {
-          ...os,
+          ...publico,
           categoria,
           prioridade,
           status,
@@ -1776,6 +1780,8 @@ export const osRouter = router({
         const pdfData = {
           osId: input.osId,
           protocolo: os.protocolo || "",
+          // Alimenta o QR da folha, que é link de leitura pública.
+          shareToken: os.shareToken ?? undefined,
           titulo: os.titulo || "",
           descricao: os.descricao || "",
           responsavelPrincipalNome: os.responsavelPrincipalNome || "",
