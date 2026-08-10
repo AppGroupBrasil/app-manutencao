@@ -85,9 +85,9 @@ const FORM_VAZIO = {
   endereco: "",
 };
 
+/** Página do gestor: resolve a unidade pela sessão e entrega o conteúdo. */
 export default function OrdensServico({ osInicial }: { osInicial?: number }) {
   const [, setLocation] = useLocation();
-  const utils = trpc.useUtils();
 
   const { data: user, isLoading: carregandoUser } = trpc.auth.me.useQuery();
   const { data: organizacoes } = trpc.condominio.list.useQuery(undefined, { enabled: !!user });
@@ -95,8 +95,57 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
   const salvo = Number(localStorage.getItem(TENANT_ATIVO_KEY));
   const organizacaoAtiva =
     organizacoes?.find((c) => c.id === salvo) ?? organizacoes?.[0] ?? null;
-  const condominioId = organizacaoAtiva?.id ?? 0;
-  const habilitado = !!organizacaoAtiva;
+
+  useEffect(() => {
+    if (!carregandoUser && !user) {
+      toast.error('Sessão expirada. Faça login novamente.');
+      setLocation('/login');
+    }
+  }, [carregandoUser, user, setLocation]);
+
+  if (carregandoUser || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  return (
+    <ConteudoOrdensServico
+      condominioId={organizacaoAtiva?.id ?? 0}
+      osInicial={osInicial}
+      organizacao={
+        organizacaoAtiva
+          ? { nome: organizacaoAtiva.nome, autoNotificar: !!organizacaoAtiva.osAutoNotificar }
+          : undefined
+      }
+      onVoltar={() => setLocation('/admin/manutencoes')}
+    />
+  );
+}
+
+/**
+ * Conteúdo reaproveitado pelo portal do funcionário, que já recebe a unidade.
+ *
+ *  só chega pelo gestor: é o que libera o bloco de configuração de
+ * avisos, que é decisão da unidade e não do funcionário.
+ */
+export function ConteudoOrdensServico({
+  condominioId,
+  osInicial,
+  organizacao,
+  onVoltar,
+  podeCriar = true,
+}: {
+  condominioId: number;
+  osInicial?: number;
+  organizacao?: { nome: string; autoNotificar: boolean };
+  onVoltar?: () => void;
+  podeCriar?: boolean;
+}) {
+  const utils = trpc.useUtils();
+  const habilitado = condominioId > 0;
 
   // O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
   // isso preserva o comportamento das abas e do gráfico, que somam tudo.
@@ -131,13 +180,6 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
   const [detalheId, setDetalheId] = useState<number | null>(
     Number.isFinite(osInicial) && osInicial ? osInicial : null,
   );
-
-  useEffect(() => {
-    if (!carregandoUser && !user) {
-      toast.error("Sessão expirada. Faça login novamente.");
-      setLocation("/login");
-    }
-  }, [carregandoUser, user, setLocation]);
 
   const invalidar = async () => {
     await Promise.all([
@@ -269,31 +311,27 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
     [statusList, ordens],
   );
 
-  if (carregandoUser || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setLocation("/admin/manutencoes")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
+          {onVoltar && (
+            <Button variant="ghost" size="sm" onClick={onVoltar}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          )}
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold">Ordens de Serviço</h1>
             <p className="text-xs text-slate-500">
               {lista?.total ?? 0} ordens registradas
-              {organizacaoAtiva ? ` · ${organizacaoAtiva.nome}` : ""}
+              {organizacao ? ` · ${organizacao.nome}` : ""}
             </p>
           </div>
-          <Button size="sm" onClick={() => setModalNova(true)} disabled={!habilitado}>
-            <Plus className="w-4 h-4 mr-2" /> Nova O.S.
-          </Button>
+          {podeCriar && (
+            <Button size="sm" onClick={() => setModalNova(true)} disabled={!habilitado}>
+              <Plus className="w-4 h-4 mr-2" /> Nova O.S.
+            </Button>
+          )}
         </div>
       </header>
 
@@ -405,6 +443,7 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
                       <span className="text-xs text-slate-500">Status:</span>
                       <Select
                         value={os.statusId ? String(os.statusId) : ""}
+                        disabled={!podeCriar}
                         onValueChange={(v) =>
                           atualizar.mutate({ id: os.id, statusId: Number(v) })
                         }
@@ -435,19 +474,21 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
                     >
                       <Share2 className="w-4 h-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => {
-                        if (confirm(`Excluir a O.S. ${os.protocolo} — "${os.titulo}"?\n\nEsta ação não pode ser desfeita.`)) {
-                          excluir.mutate({ id: os.id });
-                        }
-                      }}
-                      aria-label={`Excluir O.S. ${os.protocolo}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {podeCriar && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => {
+                          if (confirm(`Excluir a O.S. ${os.protocolo} — "${os.titulo}"?\n\nEsta ação não pode ser desfeita.`)) {
+                            excluir.mutate({ id: os.id });
+                          }
+                        }}
+                        aria-label={`Excluir O.S. ${os.protocolo}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -621,57 +662,59 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
               )}
             </div>
 
-            {/* Avisos de abertura */}
-            <div className="border rounded-lg p-3 space-y-2">
-              <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
+            {/* Avisos de abertura: configuração da unidade, só o gestor vê. */}
+            {organizacao && (
+              <div className="border rounded-lg p-3 space-y-2">
+                <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
 
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={!!organizacaoAtiva?.osAutoNotificar}
-                  disabled={!habilitado || setAutoNotificar.isPending}
-                  onChange={(e) =>
-                    setAutoNotificar.mutate({ condominioId, ativo: e.target.checked })
-                  }
-                />
-                <span>
-                  <strong>Envio automático para funcionários</strong> — ao criar a O.S., a equipe
-                  desta unidade recebe notificação no aplicativo.
-                </span>
-              </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={organizacao.autoNotificar}
+                    disabled={!habilitado || setAutoNotificar.isPending}
+                    onChange={(e) =>
+                      setAutoNotificar.mutate({ condominioId, ativo: e.target.checked })
+                    }
+                  />
+                  <span>
+                    <strong>Envio automático para funcionários</strong> — ao criar a O.S., a equipe
+                    desta unidade recebe notificação no aplicativo.
+                  </span>
+                </label>
 
-              <div>
-                <p className="text-xs text-slate-500 mb-1">
-                  Notificação por e-mail: marque quem recebe. Fica salvo até desmarcar.
-                </p>
-                {(candidatos?.length ?? 0) === 0 ? (
-                  <p className="text-xs text-slate-400">Nenhum funcionário cadastrado.</p>
-                ) : (
-                  <div className="max-h-32 overflow-y-auto divide-y border rounded-md">
-                    {candidatos!.map((c) => (
-                      <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={c.notificarOsEmail}
-                          disabled={!c.email}
-                          onChange={(e) =>
-                            setNotificarEmail.mutate({
-                              funcionarioId: c.id,
-                              ativo: e.target.checked,
-                            })
-                          }
-                        />
-                        <span className="flex-1">
-                          {c.nome}
-                          {c.email ? "" : " (sem e-mail)"}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">
+                    Notificação por e-mail: marque quem recebe. Fica salvo até desmarcar.
+                  </p>
+                  {(candidatos?.length ?? 0) === 0 ? (
+                    <p className="text-xs text-slate-400">Nenhum funcionário cadastrado.</p>
+                  ) : (
+                    <div className="max-h-32 overflow-y-auto divide-y border rounded-md">
+                      {candidatos!.map((c) => (
+                        <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={c.notificarOsEmail}
+                            disabled={!c.email}
+                            onChange={(e) =>
+                              setNotificarEmail.mutate({
+                                funcionarioId: c.id,
+                                ativo: e.target.checked,
+                              })
+                            }
+                          />
+                          <span className="flex-1">
+                            {c.nome}
+                            {c.email ? "" : " (sem e-mail)"}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <Button
               className="w-full"

@@ -1,4 +1,4 @@
-import { publicProcedure, moduloUserProcedure, router } from "../../_core/trpc";
+import { publicProcedure, moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "../../db";
@@ -25,13 +25,14 @@ import {
 import { eq, and, desc, like, or, sql, gte, inArray, asc, not } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
+import { autorDaRequisicao } from "../../_core/autor";
 
 // Exige o modulo "ordens-servico" habilitado e valida que cada id recebido
 // pertence a organizacao da requisicao. `id` aponta para a OS por padrao; nas
 // rotas de cadastro auxiliar aponta para categoria/prioridade/status/setor.
 // Rotas de registro filho (responsavel, material, orcamento, imagem) ja recebem
 // `ordemServicoId`, entao ficam cobertas pelo padrao.
-const osProcedure = moduloUserProcedure(
+const osProcedure = moduloProcedure(
   "ordens-servico",
   escopoPorRegistro(
     {
@@ -66,6 +67,8 @@ const osProcedure = moduloUserProcedure(
       removeImagem: { id: via(osImagens, "ordemServicoId", ordensServico) },
     },
   ),
+  // Permissao individual do funcionario vale aqui, nao so na tela.
+  "ordens",
 );
 
 /**
@@ -735,6 +738,7 @@ export const osRouter = router({
         solicitanteTipo: z.enum(["sindico", "morador", "funcionario", "administradora"]).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -783,9 +787,9 @@ export const osRouter = router({
           manutencaoId: input.manutencaoId,
           chatToken,
           shareToken,
-          solicitanteId: ctx.user?.id,
-          solicitanteNome: input.solicitanteNome || ctx.user?.name,
-          solicitanteTipo: input.solicitanteTipo || "sindico",
+          solicitanteId: autor.userId,
+          solicitanteNome: input.solicitanteNome || autor.nome,
+          solicitanteTipo: input.solicitanteTipo || (ctx.user ? "sindico" : "funcionario"),
         }).returning();
         
         // Adicionar evento na timeline
@@ -793,8 +797,8 @@ export const osRouter = router({
           ordemServicoId: result.id,
           tipo: "criacao",
           descricao: "Ordem de serviço criada",
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
 
         // Aviso de abertura aos funcionários da unidade. Falha aqui não desfaz
@@ -834,6 +838,7 @@ export const osRouter = router({
         manutencaoId: z.number().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -858,8 +863,8 @@ export const osRouter = router({
             ordemServicoId: id,
             tipo: "status_alterado",
             descricao: `Status alterado para: ${novoStatus?.nome || "Desconhecido"}`,
-            usuarioId: ctx.user?.id,
-            usuarioNome: ctx.user?.name,
+            usuarioId: autor.userId,
+            usuarioNome: autor.nome,
             dadosAnteriores: { statusId: osAtual.statusId },
             dadosNovos: { statusId: input.statusId },
           }).returning();
@@ -906,6 +911,7 @@ export const osRouter = router({
     iniciarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -923,8 +929,8 @@ export const osRouter = router({
           ordemServicoId: input.id,
           tipo: "inicio_servico",
           descricao: "Serviço iniciado",
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -933,6 +939,7 @@ export const osRouter = router({
     finalizarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -957,8 +964,8 @@ export const osRouter = router({
           ordemServicoId: input.id,
           tipo: "fim_servico",
           descricao: `Serviço finalizado. Tempo total: ${Math.floor(tempoDecorridoMinutos / 60)}h ${tempoDecorridoMinutos % 60}min`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true, tempoDecorridoMinutos };
@@ -976,6 +983,7 @@ export const osRouter = router({
         principal: z.boolean().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -985,8 +993,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "responsavel_adicionado",
           descricao: `Responsável adicionado: ${input.nome}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -995,6 +1003,7 @@ export const osRouter = router({
     removeResponsavel: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1007,8 +1016,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "responsavel_removido",
           descricao: `Responsável removido: ${resp?.nome || "Desconhecido"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1028,6 +1037,7 @@ export const osRouter = router({
         valorUnitario: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1044,8 +1054,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "material_adicionado",
           descricao: `Material adicionado: ${input.nome} (${input.quantidade || 1} ${input.unidade || "un"})`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -1054,6 +1064,7 @@ export const osRouter = router({
     removeMaterial: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1066,8 +1077,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "material_removido",
           descricao: `Material removido: ${mat?.nome || "Desconhecido"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1084,6 +1095,7 @@ export const osRouter = router({
         anexoUrl: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1100,8 +1112,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_adicionado",
           descricao: `Orçamento adicionado: R$ ${input.valor} - ${input.fornecedor || "Sem fornecedor"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { id: result.id, success: true };
@@ -1110,13 +1122,14 @@ export const osRouter = router({
     aprovarOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
         await db.update(osOrcamentos)
           .set({
             aprovado: true,
-            aprovadoPor: ctx.user?.id,
+            aprovadoPor: autor.userId,
             dataAprovacao: new Date(),
           })
           .where(eq(osOrcamentos.id, input.id));
@@ -1128,8 +1141,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_aprovado",
           descricao: `Orçamento aprovado: R$ ${orc?.valor} - ${orc?.fornecedor || "Sem fornecedor"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1138,6 +1151,7 @@ export const osRouter = router({
     rejeitarOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number(), motivo: z.string().optional() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1152,8 +1166,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_rejeitado",
           descricao: `Orçamento rejeitado${input.motivo ? `: ${input.motivo}` : ""}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -1162,6 +1176,7 @@ export const osRouter = router({
     removeOrcamento: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1171,8 +1186,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "orcamento_removido",
           descricao: "Orçamento removido",
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1187,6 +1202,7 @@ export const osRouter = router({
         descricao: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1222,8 +1238,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "foto_adicionada",
           descricao: `Foto adicionada: ${input.tipo || "outro"}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -1232,6 +1248,7 @@ export const osRouter = router({
     removeImagem: osProcedure
       .input(z.object({ id: z.number(), ordemServicoId: z.number().optional() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1247,8 +1264,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId || imagem.ordemServicoId,
           tipo: "foto_removida",
           descricao: `Foto removida`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true };
@@ -1276,6 +1293,7 @@ export const osRouter = router({
         anexoTamanho: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1287,9 +1305,9 @@ export const osRouter = router({
         const roleMap: Record<string, string> = { admin: "sindico", user: "sindico", sindico: "sindico", morador: "morador", funcionario: "funcionario", visitante: "visitante" };
         const [result] = await db.insert(osChat).values({
           ordemServicoId: input.ordemServicoId,
-          remetenteId: ctx.user?.id,
-          remetenteNome: ctx.user?.name || "Usuário",
-          remetenteTipo: (roleMap[ctx.user?.role || ""] || "sindico") as any,
+          remetenteId: autor.userId,
+          remetenteNome: autor.nome,
+          remetenteTipo: (ctx.user ? roleMap[ctx.user.role || ""] || "sindico" : "funcionario") as any,
           mensagem: input.mensagem || null,
           anexoUrl: input.anexoUrl || null,
           anexoNome: input.anexoNome || null,
@@ -1366,6 +1384,7 @@ export const osRouter = router({
         descricao: z.string().min(1),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1373,8 +1392,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "comentario",
           descricao: input.descricao,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { id: result.id, success: true };
@@ -1515,6 +1534,7 @@ export const osRouter = router({
         endereco: z.string().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1531,8 +1551,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "localizacao_atualizada",
           descricao: `Localização atualizada: ${input.endereco || 'Coordenadas atualizadas'}`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -1550,6 +1570,7 @@ export const osRouter = router({
         tipo: z.enum(["antes", "durante", "depois", "orcamento", "outro"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1583,8 +1604,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "foto_adicionada",
           descricao: `Imagem adicionada: ${input.fileName}`,
-          usuarioId: ctx.user.id,
-          usuarioNome: ctx.user.name || "Usuario",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         }).returning();
         
         return { success: true, id: result.id, url };
@@ -1606,6 +1627,7 @@ export const osRouter = router({
     deletarImagem: osProcedure
       .input(z.object({ imagemId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1621,8 +1643,8 @@ export const osRouter = router({
           ordemServicoId: imagem.ordemServicoId,
           tipo: "foto_removida",
           descricao: `Foto removida`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -1768,6 +1790,7 @@ export const osRouter = router({
         descricao: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1817,8 +1840,8 @@ export const osRouter = router({
           mimeType: input.fileType,
           tamanho: buffer.length,
           descricao: input.descricao,
-          uploadPor: ctx.user.id,
-          uploadPorNome: ctx.user.name || "Usuário",
+          uploadPor: autor.userId,
+          uploadPorNome: autor.nome,
         }).returning();
         
         // Registrar na timeline
@@ -1826,8 +1849,8 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "anexo_adicionado",
           descricao: `Anexo adicionado: ${input.fileName}`,
-          usuarioId: ctx.user.id,
-          usuarioNome: ctx.user.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true, id: result.id, url };
@@ -1849,6 +1872,7 @@ export const osRouter = router({
     deletarAnexo: osProcedure
       .input(z.object({ anexoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
         
@@ -1864,8 +1888,8 @@ export const osRouter = router({
           ordemServicoId: anexo.ordemServicoId,
           tipo: "anexo_removido",
           descricao: `Anexo removido: ${anexo.nomeOriginal}`,
-          usuarioId: ctx.user.id,
-          usuarioNome: ctx.user.name || "Usuário",
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
         
         return { success: true };
@@ -2036,6 +2060,7 @@ export const osRouter = router({
         comentario: z.string().max(1000).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
@@ -2050,8 +2075,8 @@ export const osRouter = router({
           ordemServicoId: input.id,
           tipo: "comentario",
           descricao: `Serviço avaliado com ${input.nota} estrela(s)`,
-          usuarioId: ctx.user?.id,
-          usuarioNome: ctx.user?.name,
+          usuarioId: autor.userId,
+          usuarioNome: autor.nome,
         });
 
         return { success: true };

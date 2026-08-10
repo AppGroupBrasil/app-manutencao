@@ -6,6 +6,7 @@ import { CoreModulesPanel } from "@/components/funcionario/CoreModulesPanel";
 import { ConteudoListaTarefas } from "@/pages/ListaTarefas";
 import { ConteudoQuadroAtividades } from "@/pages/QuadroAtividades";
 import { ConteudoQrCodes } from "@/pages/QrCodes";
+import { ConteudoOrdensServico } from "@/pages/OrdensServico";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
@@ -16,6 +17,7 @@ import {
   Columns3,
   ListChecks,
   QrCode,
+  ClipboardList,
   Wrench,
   AlertTriangle, 
   Search,
@@ -75,6 +77,13 @@ const FUNCOES_CONFIG: Record<string, {
     description: "Atividades da equipe por coluna",
     route: "/dashboard/quadro",
     color: "from-indigo-500 to-blue-600",
+  },
+  ordens: {
+    icon: ClipboardList,
+    label: "Ordens de Serviço",
+    description: "Abrir e acompanhar ordens de serviço",
+    route: "/dashboard/ordens",
+    color: "from-amber-500 to-orange-600",
   },
   qrcode: {
     icon: QrCode,
@@ -293,7 +302,12 @@ export default function FuncionarioDashboard() {
   if (activeSection) {
     if (activeSectionConfig && activeCondominioId) {
       sectionContent = (
-        activeSection === "qrcode" ? (
+        activeSection === "ordens" ? (
+          <ConteudoOrdensServico
+            condominioId={activeCondominioId}
+            podeCriar={funcoesQueCria.includes(activeSection)}
+          />
+        ) : activeSection === "qrcode" ? (
           <ConteudoQrCodes
             condominioId={activeCondominioId}
             podeCriar={funcoesQueCria.includes(activeSection)}

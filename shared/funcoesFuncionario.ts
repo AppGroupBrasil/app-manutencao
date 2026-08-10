@@ -54,6 +54,12 @@ export const FUNCOES_FUNCIONARIO: readonly FuncaoFuncionario[] = [
     modulo: "quadro-atividades",
   },
   {
+    chave: "ordens",
+    rotulo: "Ordens de Serviço",
+    descricao: "Abrir e acompanhar ordens de serviço",
+    modulo: "ordens-servico",
+  },
+  {
     chave: "qrcode",
     rotulo: "QR Code",
     descricao: "Pontos e registros recebidos por leitura",
