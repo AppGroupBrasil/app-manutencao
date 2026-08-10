@@ -49,6 +49,25 @@ function numeroDoArquivo(nome: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Objetos que o código atual exige e que vieram de migrações anteriores ao
+ * baseline.
+ *
+ * O baseline é uma promessa: "tudo até 0042 já está aplicado". Se a promessa
+ * for falsa, o runner registraria esses arquivos sem executar e o sistema
+ * subiria com coluna faltando — erro que só apareceria no primeiro clique do
+ * cliente. Esta lista transforma a promessa em verificação.
+ */
+const EXIGIDOS_PELO_BASELINE: { tabela: string; coluna?: string }[] = [
+  { tabela: "condominio_funcoes" },
+  { tabela: "usuario_condominios" },
+  { tabela: "condominios", coluna: "segmento" },
+  { tabela: "users", coluna: "hierarquia" },
+  { tabela: "users", coluna: "senhaProvisoria" },
+  { tabela: "funcionarios", coluna: "hierarquia" },
+  { tabela: "funcionario_funcoes", coluna: "funcaoKey" },
+];
+
 /** Crase fora de comentário = identificador MySQL, que o Postgres não entende. */
 export function temCraseNoSql(conteudo: string): boolean {
   const semComentarios = conteudo
@@ -61,6 +80,56 @@ export interface ResultadoMigracao {
   aplicadas: string[];
   registradasComoBaseline: string[];
   jaAplicadas: number;
+}
+
+/**
+ * Confere que o banco está mesmo na altura do baseline.
+ *
+ * Banco vazio passa: é instalação nova, e as migrações do baseline seriam
+ * inúteis mesmo (o schema nasce do `drizzle-kit`). O que não pode passar é
+ * banco com dados e sem os objetos que o código já usa.
+ */
+async function conferirBaseline(
+  sql: postgres.Sql,
+  baseline: string,
+): Promise<void> {
+  const [{ existe }] = await sql<{ existe: boolean }[]>`
+    SELECT to_regclass('public.condominios') IS NOT NULL AS existe
+  `;
+  if (!existe) return;
+
+  const faltando: string[] = [];
+
+  for (const alvo of EXIGIDOS_PELO_BASELINE) {
+    if (alvo.coluna) {
+      const [linha] = await sql<{ existe: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = ${alvo.tabela}
+            AND column_name = ${alvo.coluna}
+        ) AS existe
+      `;
+      if (!linha.existe) faltando.push(`${alvo.tabela}.${alvo.coluna}`);
+      continue;
+    }
+
+    const [linha] = await sql<{ existe: boolean }[]>`
+      SELECT to_regclass(${`public.${alvo.tabela}`}) IS NOT NULL AS existe
+    `;
+    if (!linha.existe) faltando.push(alvo.tabela);
+  }
+
+  if (faltando.length > 0) {
+    throw new Error(
+      `O banco não está na altura do baseline ${baseline}: faltam ` +
+        `${faltando.join(", ")}. Aplique as migrações que faltam à mão antes ` +
+        `de seguir — registrar o baseline agora esconderia o problema até o ` +
+        `primeiro clique do cliente.`,
+    );
+  }
+
+  console.log(`[migracoes] baseline ${baseline} conferido no banco.`);
 }
 
 export interface EstadoMigracoes {
@@ -131,6 +200,10 @@ export async function aplicarMigracoesPendentes(
       `;
       const aplicadas = new Set(registradas.map((r) => r.arquivo));
       resultado.jaAplicadas = aplicadas.size;
+
+      // Só na primeira execução: depois disso o próprio runner é a fonte da
+      // verdade e a checagem seria custo por requisição de boot.
+      if (aplicadas.size === 0) await conferirBaseline(sql, baseline);
 
       for (const arquivo of arquivos) {
         if (aplicadas.has(arquivo)) continue;

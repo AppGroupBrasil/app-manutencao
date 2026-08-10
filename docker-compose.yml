@@ -25,6 +25,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Nome fixo para o deploy poder guardar a imagem anterior e voltar a ela.
+    image: app-manutencao:latest
     container_name: app-manutencao
     restart: unless-stopped
     depends_on:
@@ -103,6 +105,8 @@ services:
       PGPASSWORD: ${DB_PASSWORD}
     volumes:
       - backups:/var/backups/manutencao
+      # Somente leitura: o backup copia as fotos, não mexe nelas.
+      - uploads:/dados/uploads:ro
     networks:
       - coolify
     entrypoint:
@@ -113,7 +117,11 @@ services:
         while true; do
           TS=$$(date +%Y%m%d_%H%M%S)
           pg_dump -h app-manutencao-db -U manutencao manutencao | gzip > /var/backups/manutencao/manutencao_$$TS.sql.gz
+          # As fotos ficam em volume, fora do banco: sem esta cópia, restaurar o
+          # dump devolveria os registros apontando para imagens que não existem.
+          tar -czf /var/backups/manutencao/uploads_$$TS.tar.gz -C /dados uploads
           find /var/backups/manutencao -name 'manutencao_*.sql.gz' -mtime +30 -delete
+          find /var/backups/manutencao -name 'uploads_*.tar.gz' -mtime +30 -delete
           sleep 86400
         done
 
