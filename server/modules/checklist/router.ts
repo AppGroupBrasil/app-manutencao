@@ -5,6 +5,7 @@ import { moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { nanoid } from "nanoid";
 import { proximoProtocolo, proximoProtocoloComData } from "../../_core/protocolo";
 
 // Auto-criar colunas de assinatura se não existirem
@@ -182,6 +183,8 @@ export const checklistRouter = router({
       const [result] = await db.insert(checklists).values({
         condominioId: input.condominioId,
         protocolo,
+        // Link público de leitura, usado pelo QR do cartão e da folha.
+        shareToken: nanoid(32),
         titulo: input.titulo,
         subtitulo: input.subtitulo || null,
         descricao: input.descricao || null,

@@ -948,6 +948,8 @@ export const vistorias = pgTable("vistorias", {
   id: serial("id").primaryKey(),
   condominioId: integer("condominioId").references(() => condominios.id).notNull(),
   protocolo: varchar("protocolo", { length: 20 }).notNull().unique(),
+  /** Token do link público de leitura, usado no QR. */
+  shareToken: varchar("shareToken", { length: 64 }),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   subtitulo: varchar("subtitulo", { length: 255 }),
   descricao: text("descricao"),
@@ -1020,6 +1022,8 @@ export const manutencoes = pgTable("manutencoes", {
   id: serial("id").primaryKey(),
   condominioId: integer("condominioId").references(() => condominios.id).notNull(),
   protocolo: varchar("protocolo", { length: 20 }).notNull().unique(),
+  /** Token do link público de leitura, usado no QR. */
+  shareToken: varchar("shareToken", { length: 64 }),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   subtitulo: varchar("subtitulo", { length: 255 }),
   descricao: text("descricao"),
@@ -1098,6 +1102,8 @@ export const ocorrencias = pgTable("ocorrencias", {
   id: serial("id").primaryKey(),
   condominioId: integer("condominioId").references(() => condominios.id).notNull(),
   protocolo: varchar("protocolo", { length: 20 }).notNull().unique(),
+  /** Token do link público de leitura, usado no QR. */
+  shareToken: varchar("shareToken", { length: 64 }),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   subtitulo: varchar("subtitulo", { length: 255 }),
   descricao: text("descricao"),
@@ -1171,6 +1177,8 @@ export const checklists = pgTable("checklists", {
   id: serial("id").primaryKey(),
   condominioId: integer("condominioId").references(() => condominios.id).notNull(),
   protocolo: varchar("protocolo", { length: 20 }).notNull().unique(),
+  /** Token do link público de leitura, usado no QR. */
+  shareToken: varchar("shareToken", { length: 64 }),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   subtitulo: varchar("subtitulo", { length: 255 }),
   descricao: text("descricao"),

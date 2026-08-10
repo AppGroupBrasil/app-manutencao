@@ -31,6 +31,7 @@ const QrCodePublico = lazy(() => import("./pages/QrCodePublico"));
 const AdminOrganizacoes = lazy(() => import("./pages/AdminOrganizacoes"));
 const AdminClientes = lazy(() => import("./pages/AdminClientes"));
 const OrdemServicoPublica = lazy(() => import("./pages/OrdemServicoPublica"));
+const RegistroPublico = lazy(() => import("./pages/RegistroPublico"));
 const AdminFuncionarios = lazy(() => import("./pages/AdminFuncionarios"));
 const AdminGestores = lazy(() => import("./pages/AdminGestores"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
@@ -145,7 +146,10 @@ function Router() {
         <ExigeSenhaDefinida><Vistorias /></ExigeSenhaDefinida>
       </Route>
       {/* Formulário aberto pelo QR impresso: público, sem login. */}
-      {/* Leitura publica da O.S. pelo QR da folha impressa. */}
+      {/* Leitura pública pelo QR: O.S. e as quatro funções rápidas. */}
+      <Route path="/registro/:tipo/:token">
+        {(params) => <RegistroPublico tipo={params.tipo} token={params.token} />}
+      </Route>
       <Route path="/os/:token">{(params) => <OrdemServicoPublica token={params.token} />}</Route>
       <Route path="/qr/:token">
         {(params) => <QrCodePublico token={params.token} />}

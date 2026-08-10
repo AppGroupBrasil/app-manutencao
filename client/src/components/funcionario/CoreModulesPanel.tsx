@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
-import { AlertTriangle, ClipboardCheck, ImagePlus, Loader2, MapPin, Printer, Search, Wrench, X } from "lucide-react";
+import { BotaoQrCode } from "@/components/BotaoQrCode";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, MapPin, Printer, Search, Wrench, X } from "lucide-react";
 
 type CoreSection = "checklists" | "manutencoes" | "ocorrencias" | "vistorias";
 
@@ -23,6 +24,8 @@ type RegistroItem = {
   createdAt?: string | Date | null;
   /** Fotos anexadas; vêm de `listWithDetails`. */
   imagens?: { id: number; url: string }[];
+  /** Token do link público, usado no QR. */
+  shareToken?: string | null;
 };
 
 interface CoreModulesPanelProps {
@@ -52,6 +55,9 @@ interface SectionLayoutProps {
   /** Gera o relatório do registro; sem isto o botão não aparece. */
   onBaixarPdf?: (id: number) => void;
   baixandoPdf?: boolean;
+  /** Marca o registro como finalizado. */
+  onFinalizar?: (id: number) => void;
+  finalizando?: boolean;
 }
 
 interface FormValues {
@@ -74,6 +80,17 @@ function baixarPdfBase64(base64: string, nome: string) {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+/** Status que já contam como encerrados: não faz sentido finalizar de novo. */
+const ESTADOS_CONCLUIDOS = ["finalizada", "realizada", "concluida", "resolvida"];
+
+/** O tipo como a rota pública o conhece. */
+const TIPO_PUBLICO: Record<CoreSection, string> = {
+  checklists: "checklist",
+  manutencoes: "manutencao",
+  ocorrencias: "ocorrencia",
+  vistorias: "vistoria",
+};
 
 /** Texto do compartilhamento, no mesmo formato usado na ordem de serviço. */
 function mensagemDoRegistro(section: CoreSection, item: RegistroItem): string {
@@ -159,6 +176,8 @@ function SectionLayout({
   condominioId,
   onBaixarPdf,
   baixandoPdf,
+  onFinalizar,
+  finalizando,
 }: Readonly<SectionLayoutProps>) {
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -283,9 +302,27 @@ function SectionLayout({
               ) : null}
             </div>
 
-            {/* Mesmas ações da ordem de serviço: relatório e compartilhamento. */}
-            {(onBaixarPdf || condominioId) && (
+            {/* Mesmas ações da ordem de serviço: finalizar, relatório, QR e
+                compartilhamento. */}
+            {(onBaixarPdf || condominioId || onFinalizar) && (
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                {onFinalizar && !ESTADOS_CONCLUIDOS.includes(item.status ?? "") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={finalizando}
+                    onClick={() => onFinalizar(item.id)}
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Finalizar
+                  </Button>
+                )}
+                {item.shareToken ? (
+                  <BotaoQrCode
+                    titulo={item.titulo}
+                    url={`${typeof window !== "undefined" ? window.location.origin : ""}/registro/${TIPO_PUBLICO[section]}/${item.shareToken}`}
+                  />
+                ) : null}
                 {onBaixarPdf && (
                   <Button
                     variant="outline"
@@ -488,6 +525,13 @@ function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: 
   const gerarPdf = trpc.checklist.generatePdf.useMutation({
     onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
   });
+  const finalizar = trpc.checklist.update.useMutation({
+    onSuccess: async () => {
+      await utils.checklist.listWithDetails.invalidate({ condominioId });
+      toast.success("Registro finalizado.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao finalizar"),
+  });
   const storageKey = `checklist_saved_titles_${condominioId}`;
   const [rememberTitle, setRememberTitle] = useState(false);
   const [savedTitles, setSavedTitles] = useState<string[]>(() => {
@@ -534,6 +578,8 @@ function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: 
         baixarPdfBase64(res.pdf, `checklists-${id}.pdf`);
       }}
       baixandoPdf={gerarPdf.isPending}
+      onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
+      finalizando={finalizar.isPending}
       isSubmitting={createMutation.isPending}
       rememberTitleEnabled
       rememberTitleChecked={rememberTitle}
@@ -568,6 +614,13 @@ function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId:
   const gerarPdf = trpc.manutencao.generatePdf.useMutation({
     onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
   });
+  const finalizar = trpc.manutencao.update.useMutation({
+    onSuccess: async () => {
+      await utils.manutencao.listWithDetails.invalidate({ condominioId });
+      toast.success("Registro finalizado.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao finalizar"),
+  });
   const addImagemManutencao = trpc.manutencao.addImagem.useMutation();
   const createMutation = trpc.manutencao.create.useMutation({
     onSuccess: async () => {
@@ -592,6 +645,8 @@ function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId:
         baixarPdfBase64(res.pdf, `manutencoes-${id}.pdf`);
       }}
       baixandoPdf={gerarPdf.isPending}
+      onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
+      finalizando={finalizar.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
@@ -610,6 +665,13 @@ function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId:
   // O servidor devolve só o base64; o nome do arquivo é montado aqui.
   const gerarPdf = trpc.ocorrencia.generatePdf.useMutation({
     onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
+  });
+  const finalizar = trpc.ocorrencia.update.useMutation({
+    onSuccess: async () => {
+      await utils.ocorrencia.listWithDetails.invalidate({ condominioId });
+      toast.success("Registro finalizado.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao finalizar"),
   });
   const addImagem = trpc.ocorrencia.addImagem.useMutation();
   const createMutation = trpc.ocorrencia.create.useMutation({
@@ -635,6 +697,8 @@ function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId:
         baixarPdfBase64(res.pdf, `ocorrencias-${id}.pdf`);
       }}
       baixandoPdf={gerarPdf.isPending}
+      onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
+      finalizando={finalizar.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
@@ -660,6 +724,13 @@ function VistoriaSection({ condominioId, podeCriar }: Readonly<{ condominioId: n
   const gerarPdf = trpc.vistoria.generatePdf.useMutation({
     onError: (error) => toast.error(error.message || "Erro ao gerar o PDF"),
   });
+  const finalizar = trpc.vistoria.update.useMutation({
+    onSuccess: async () => {
+      await utils.vistoria.listWithDetails.invalidate({ condominioId });
+      toast.success("Registro finalizado.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao finalizar"),
+  });
   const addImagemVistoria = trpc.vistoria.addImagem.useMutation();
   const createMutation = trpc.vistoria.create.useMutation({
     onSuccess: async () => {
@@ -684,6 +755,8 @@ function VistoriaSection({ condominioId, podeCriar }: Readonly<{ condominioId: n
         baixarPdfBase64(res.pdf, `vistorias-${id}.pdf`);
       }}
       baixandoPdf={gerarPdf.isPending}
+      onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
+      finalizando={finalizar.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
