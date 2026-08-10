@@ -676,7 +676,7 @@ export const funcionarioRouter = router({
         // Enviar email de recuperação
         try {
           const { notifyOwner } = await import("../../_core/notification");
-          const baseUrl = process.env.VITE_APP_URL || "https://app-sindico.manus.space";
+          const baseUrl = process.env.VITE_APP_URL || "https://appmanutencao.com.br";
           const resetLink = `${baseUrl}/funcionario/redefinir-senha?token=${resetToken}`;
           
           await notifyOwner({
