@@ -1,5 +1,6 @@
 import { publicProcedure, protectedProcedure, protectedOrFuncionarioProcedure, router } from "../../_core/trpc";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "../../db";
 import { ehGestorMaster } from "../../_core/gestorMaster";
 import { CHAVES_FUNCOES_FUNCIONARIO } from "../../../shared/funcoesFuncionario";
@@ -49,6 +50,38 @@ async function assertFuncionario(ctx: CtxTenant, funcionarioId: number) {
 
   if (!registro) throw new Error("Funcionário não encontrado");
   await ctx.tenant.assert(registro.condominioId);
+}
+
+/**
+ * Usuário de login livre, a partir do nome.
+ *
+ * Dois funcionários chamados "João Silva" geravam o mesmo `joaosilva`: a busca
+ * do login devolvia o primeiro, e o segundo nunca conseguia entrar pelo
+ * usuário. O sufixo numérico resolve sem depender de índice no banco.
+ */
+async function loginUsuarioLivre(
+  tx: { select: Function },
+  nome: string,
+): Promise<string> {
+  const base =
+    nome
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toLowerCase() || "usuario";
+
+  for (let sufixo = 0; sufixo < 100; sufixo++) {
+    const candidato = sufixo === 0 ? base : `${base}${sufixo + 1}`;
+    const [existente] = await tx
+      .select({ id: funcionarios.id })
+      .from(funcionarios)
+      .where(eq(funcionarios.loginUsuario, candidato))
+      .limit(1);
+    if (!existente) return candidato;
+  }
+
+  // Cem homônimos é improvável; ainda assim, não devolvemos duplicado.
+  return `${base}${Date.now().toString(36)}`;
 }
 
 /**
@@ -169,11 +202,7 @@ export const funcionarioRouter = router({
           const fId = Number(result.id);
 
           if (senhaHash) {
-            const loginUsuario = data.nome
-              .normalize("NFD")
-              .replace(/[\u0300-\u036f]/g, "")
-              .replace(/[^a-zA-Z0-9]/g, "")
-              .toLowerCase();
+            const loginUsuario = await loginUsuarioLivre(tx, data.nome);
 
             await tx
               .update(funcionarios)
@@ -410,22 +439,28 @@ export const funcionarioRouter = router({
         const funcionario = await findFuncionarioForLogin(identificadorNormalizado);
         
         if (!funcionario) {
-          throw new Error("Usuário ou senha inválidos");
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha inválidos" });
         }
         
         if (!funcionario.loginAtivo) {
-          throw new Error("Acesso desativado. Contacte o administrador.");
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Acesso desativado. Contacte o administrador.",
+          });
         }
         
         if (!funcionario.senha) {
-          throw new Error("Senha não configurada. Contacte o administrador.");
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Senha não configurada. Contacte o administrador.",
+          });
         }
         
         const bcrypt = await import("bcryptjs");
         const senhaValida = await bcrypt.compare(input.senha, funcionario.senha);
         
         if (!senhaValida) {
-          throw new Error("Email ou senha inválidos");
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha inválidos" });
         }
         
         // Buscar funções habilitadas do funcionário

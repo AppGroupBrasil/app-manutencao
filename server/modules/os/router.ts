@@ -1764,10 +1764,6 @@ export const osRouter = router({
         const [status] = os.statusId ? await db.select().from(osStatus).where(eq(osStatus.id, os.statusId)) : [null];
         const [setor] = os.setorId ? await db.select().from(osSetores).where(eq(osSetores.id, os.setorId)) : [null];
 
-        // Buscar orçamentos
-        const orcamentos = await db.select().from(osOrcamentos)
-          .where(eq(osOrcamentos.ordemServicoId, input.osId));
-        
         // Buscar responsáveis
         const responsaveis = await db.select().from(osResponsaveis)
           .where(eq(osResponsaveis.ordemServicoId, input.osId));
