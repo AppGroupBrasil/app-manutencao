@@ -93,6 +93,37 @@ services:
       - "traefik.http.middlewares.app-manutencao-redirect-www.redirectregex.replacement=https://appmanutencao.com.br/$${1}"
       - "traefik.http.middlewares.app-manutencao-redirect-www.redirectregex.permanent=true"
 
+  # ── Disparo diário dos alertas de vencimento ──
+  #
+  # O processamento existe desde sempre, mas dependia de alguém chamar o
+  # endereço de fora. Sem isto, alerta cadastrado nunca virava e-mail.
+  # Repetir no mesmo dia é inofensivo: alerta enviado fica marcado e não sai
+  # duas vezes.
+  alertas:
+    image: alpine:3.19
+    container_name: app-manutencao-alertas
+    restart: unless-stopped
+    depends_on:
+      - app
+    env_file:
+      - .env
+    networks:
+      - coolify
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache curl >/dev/null 2>&1
+        # Espera o app subir antes da primeira volta.
+        sleep 120
+        while true; do
+          echo "[alertas] $$(date -u +%Y-%m-%dT%H:%M:%SZ) chamando o processamento"
+          curl -sS -m 120 -H "x-cron-secret: $$CRON_SECRET" \
+            http://app-manutencao:8080/api/cron/processar-alertas || echo "[alertas] falhou"
+          echo
+          sleep 21600
+        done
+
   # ── Backup diário do banco ──
   backup:
     image: postgres:16-alpine
