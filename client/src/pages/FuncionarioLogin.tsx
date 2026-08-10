@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/sonner";
+import { BotaoSuporte } from "@/components/BotaoSuporte";
 import { useCredenciaisLembradas } from "@/hooks/useCredenciaisLembradas";
 import { Building2, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
 
@@ -141,9 +142,10 @@ export default function FuncionarioLogin() {
               </a>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-100">
+            <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">
+              <BotaoSuporte />
               <p className="text-xs text-center text-slate-500">
-                Problemas para acessar? Entre em contacto com o síndico ou administrador da organização.
+                Problemas para acessar? Fale com o gestor da sua unidade ou com o nosso suporte.
               </p>
             </div>
           </CardContent>
