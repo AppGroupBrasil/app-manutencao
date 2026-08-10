@@ -1245,6 +1245,8 @@ export const tarefasAgendadas = pgTable("tarefas_agendadas", {
   id: serial("id").primaryKey(),
   condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
   protocolo: varchar("protocolo", { length: 20 }).unique(),
+  /** Token do link público de leitura, usado no QR. */
+  shareToken: varchar("shareToken", { length: 64 }),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   descricao: text("descricao"),
   funcionarioId: integer("funcionarioId"),

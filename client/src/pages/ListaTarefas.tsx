@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
+import { BotaoQrCode } from "@/components/BotaoQrCode";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import {
   ArrowLeft,
@@ -75,6 +76,44 @@ const STATUS_EXECUCAO: Record<string, { rotulo: string; cor: string; fundo: stri
   pendente: { rotulo: "Pendente", cor: "#e65100", fundo: "#fff3e0" },
   nao_executada: { rotulo: "Não executada", cor: "#c62828", fundo: "#ffebee" },
 };
+
+/** Baixa o base64 devolvido pelo servidor como arquivo. */
+function baixarPdfBase64(base64: string, nome: string) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nome;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Texto do compartilhamento, no mesmo formato das outras funções. */
+function mensagemDaTarefa(
+  tarefa: {
+    protocolo?: string | null;
+    titulo: string;
+    funcionarioNome?: string | null;
+    bloco?: string | null;
+    local?: string | null;
+    descricao?: string | null;
+  },
+  execucoes: number,
+): string {
+  return [
+    "*Tarefa*",
+    tarefa.protocolo ? `*Protocolo:* ${tarefa.protocolo}` : "",
+    `*Título:* ${tarefa.titulo}`,
+    tarefa.funcionarioNome ? `*Responsável:* ${tarefa.funcionarioNome}` : "",
+    [tarefa.bloco, tarefa.local].filter(Boolean).length
+      ? `*Local:* ${[tarefa.bloco, tarefa.local].filter(Boolean).join(" · ")}`
+      : "",
+    `*Execuções:* ${execucoes}`,
+    tarefa.descricao ? `\n${tarefa.descricao}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 const FORM_VAZIO = {
   titulo: "",
@@ -205,6 +244,11 @@ export function ConteudoListaTarefas({
       toast.success("Tarefa criada");
     },
     onError: (e) => toast.error(e.message || "Erro ao criar a tarefa"),
+  });
+
+  // Relatório de uma tarefa. O da página inteira, mais abaixo, é outro.
+  const gerarPdfDaTarefa = trpc.tarefasAgendadas.generatePdf.useMutation({
+    onError: (e) => toast.error(e.message || "Erro ao gerar o PDF"),
   });
 
   const deletar = trpc.tarefasAgendadas.deletar.useMutation({
@@ -662,6 +706,37 @@ export function ConteudoListaTarefas({
                         >
                           <CheckCircle2 className="w-4 h-4 mr-2" /> Registrar execução
                         </Button>
+
+                        {/* Mesmo rodapé das outras funções: consulta pública,
+                            relatório e compartilhamento. */}
+                        {t.shareToken ? (
+                          <BotaoQrCode
+                            titulo={t.titulo}
+                            url={`${typeof window !== "undefined" ? window.location.origin : ""}/registro/tarefa/${t.shareToken}`}
+                          />
+                        ) : null}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={gerarPdfDaTarefa.isPending}
+                          onClick={async () => {
+                            const res = await gerarPdfDaTarefa.mutateAsync({ id: t.id });
+                            baixarPdfBase64(res.pdf, `tarefa-${t.id}.pdf`);
+                          }}
+                        >
+                          {gerarPdfDaTarefa.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Printer className="w-4 h-4 mr-2" />
+                          )}
+                          PDF
+                        </Button>
+                        <BotaoCompartilhar
+                          condominioId={condominioId}
+                          mensagem={mensagemDaTarefa(t, daTarefa.length)}
+                          rotulo="Compartilhar"
+                        />
+
                         <Button
                           variant="ghost"
                           size="sm"

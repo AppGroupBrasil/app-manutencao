@@ -4,8 +4,9 @@ import { moduloProcedure, router } from "../../_core/trpc";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
+import { nanoid } from "nanoid";
 import { proximoProtocolo } from "../../_core/protocolo";
-import { tarefasAgendadas, tarefasExecucoes } from "../../../drizzle/schema";
+import { condominios, tarefasAgendadas, tarefasExecucoes } from "../../../drizzle/schema";
 
 /**
  * Lista de Tarefas — espelha `tarefas_agendadas` do Manutenção X.
@@ -81,6 +82,8 @@ export const tarefasAgendadasRouter = router({
         .values({
           ...input,
           protocolo,
+          // Link público de leitura, usado pelo QR do cartão.
+          shareToken: nanoid(32),
           recorrencia: input.recorrencia ?? "unica",
           diasSemana: input.diasSemana ?? [],
           prioridade: input.prioridade ?? "media",
@@ -128,6 +131,72 @@ export const tarefasAgendadasRouter = router({
 
       await db.delete(tarefasAgendadas).where(eq(tarefasAgendadas.id, input.id));
       return { success: true };
+    }),
+
+  /**
+   * Relatório da tarefa, no mesmo formato das outras funções.
+   *
+   * Traz as execuções junto: numa tarefa recorrente, o que interessa a quem
+   * cobra o serviço é o histórico de quem fez e quando.
+   */
+  generatePdf: tarefaProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const [tarefa] = await db
+        .select()
+        .from(tarefasAgendadas)
+        .where(eq(tarefasAgendadas.id, input.id));
+      if (!tarefa) throw new Error("Tarefa não encontrada");
+
+      const [organizacao] = await db
+        .select()
+        .from(condominios)
+        .where(eq(condominios.id, tarefa.condominioId));
+
+      const execucoes = await db
+        .select()
+        .from(tarefasExecucoes)
+        .where(eq(tarefasExecucoes.tarefaId, input.id))
+        .orderBy(desc(tarefasExecucoes.createdAt));
+
+      const historico = execucoes
+        .map(
+          (e) =>
+            `${new Date(e.createdAt).toLocaleDateString("pt-BR")} — ${e.status ?? "registrada"}` +
+            (e.observacao ? `: ${e.observacao}` : ""),
+        )
+        .join("\n");
+
+      const { generateFuncaoRapidaPDF } = await import("../../pdfFuncoesRapidas");
+
+      const pdfBuffer = await generateFuncaoRapidaPDF({
+        // O gerador não conhece "tarefa"; checklist é o formato mais próximo,
+        // com título, local, responsável e observações.
+        tipo: "checklist",
+        protocolo: tarefa.protocolo ?? "",
+        titulo: tarefa.titulo,
+        subtitulo: tarefa.funcionarioNome,
+        descricao: tarefa.descricao,
+        observacoes: historico || null,
+        status: tarefa.recorrencia ?? "unica",
+        prioridade: tarefa.prioridade,
+        responsavelNome: tarefa.funcionarioNome,
+        localizacao: [tarefa.bloco, tarefa.local].filter(Boolean).join(" · ") || null,
+        createdAt: tarefa.createdAt,
+        dataAgendada: tarefa.dataEspecifica ? new Date(tarefa.dataEspecifica) : null,
+        condominioNome: organizacao?.nome || "Organização",
+        condominioLogo: organizacao?.logoUrl,
+        cabecalhoLogoUrl: organizacao?.cabecalhoLogoUrl,
+        cabecalhoNomeCondominio: organizacao?.cabecalhoNomeCondominio,
+        cabecalhoNomeSindico: organizacao?.cabecalhoNomeSindico,
+        rodapeTexto: organizacao?.rodapeTexto,
+        rodapeContato: organizacao?.rodapeContato,
+      });
+
+      return { pdf: pdfBuffer.toString("base64") };
     }),
 
   // ── Execuções ──

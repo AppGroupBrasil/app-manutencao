@@ -22,9 +22,10 @@ import {
   ocorrenciaImagens,
   vistorias,
   vistoriaImagens,
+  tarefasAgendadas,
 } from "../../../drizzle/schema";
 
-const TIPOS = ["checklist", "manutencao", "ocorrencia", "vistoria"] as const;
+const TIPOS = ["checklist", "manutencao", "ocorrencia", "vistoria", "tarefa"] as const;
 type Tipo = (typeof TIPOS)[number];
 
 const MAPA = {
@@ -32,6 +33,8 @@ const MAPA = {
   manutencao: { tabela: manutencoes, imagens: manutencaoImagens, fk: "manutencaoId", rotulo: "Manutenção" },
   ocorrencia: { tabela: ocorrencias, imagens: ocorrenciaImagens, fk: "ocorrenciaId", rotulo: "Ocorrência" },
   vistoria: { tabela: vistorias, imagens: vistoriaImagens, fk: "vistoriaId", rotulo: "Vistoria" },
+  // A tarefa não guarda imagem própria; o campo fica vazio na consulta.
+  tarefa: { tabela: tarefasAgendadas, imagens: null, fk: "", rotulo: "Tarefa" },
 } as const;
 
 export const registroPublicoRouter = router({
@@ -55,11 +58,15 @@ export const registroPublicoRouter = router({
 
       const linhas = registro as Record<string, unknown>;
 
-      const imagens = await db
-        .select({ id: alvo.imagens.id, url: alvo.imagens.url })
-        .from(alvo.imagens)
-        // A coluna de ligação muda de nome em cada tabela; o mapa acima diz qual é.
-        .where(eq((alvo.imagens as unknown as Record<string, never>)[alvo.fk], linhas.id as number));
+      const imagens = alvo.imagens
+        ? await db
+            .select({ id: alvo.imagens.id, url: alvo.imagens.url })
+            .from(alvo.imagens)
+            // A coluna de ligação muda de nome em cada tabela; o mapa diz qual é.
+            .where(
+              eq((alvo.imagens as unknown as Record<string, never>)[alvo.fk], linhas.id as number),
+            )
+        : [];
 
       return {
         tipo: input.tipo,
@@ -69,7 +76,8 @@ export const registroPublicoRouter = router({
         descricao: (linhas.descricao as string | null) ?? null,
         status: (linhas.status as string | null) ?? null,
         prioridade: (linhas.prioridade as string | null) ?? null,
-        localizacao: (linhas.localizacao as string | null) ?? null,
+        localizacao:
+          ((linhas.localizacao ?? linhas.local) as string | null) ?? null,
         criadoEm: (linhas.createdAt as Date | null) ?? null,
         imagens,
       };
