@@ -1,0 +1,75 @@
+name: Configurar disparo dos alertas
+
+# Grava o CRON_SECRET no .env do servidor e sobe o app e o serviço de alertas.
+#
+# Sem essa chave, o processamento dos avisos de vencimento fica desligado: a
+# rota `/api/cron/processar-alertas` recusa toda chamada. O segredo é sorteado
+# no próprio servidor e nunca aparece no log — nem aqui, nem no console de quem
+# dispara o workflow.
+on:
+  workflow_dispatch:
+
+env:
+  APP_PATH: /opt/app-manutencao
+
+jobs:
+  configurar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      # Chave já definida é preservada: sobrescrever faria o container de
+      # alertas ficar com o valor antigo até o próximo reinício dele.
+      - name: Gravar o segredo no .env
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && \
+             if grep -q '^CRON_SECRET=.\\+' .env; then \
+               echo 'CRON_SECRET já estava definido; mantido'; \
+             else \
+               cp .env .env.bak-\$(date +%Y%m%d_%H%M%S) && \
+               grep -v '^CRON_SECRET=' .env > .env.novo || true; \
+               echo \"CRON_SECRET=\$(openssl rand -hex 24)\" >> .env.novo && \
+               mv .env.novo .env && \
+               echo 'CRON_SECRET sorteado e gravado'; \
+             fi"
+
+      - name: Subir o app e o serviço de alertas
+        run: |
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && \
+             docker compose up -d --no-build --force-recreate app alertas"
+
+      - name: Esperar ficar saudável
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "for i in \$(seq 1 24); do \
+               estado=\$(docker inspect -f '{{.State.Health.Status}}' app-manutencao 2>/dev/null || echo ausente); \
+               echo \"tentativa \$i: \$estado\"; \
+               [ \"\$estado\" = healthy ] && exit 0; \
+               sleep 5; \
+             done; \
+             docker logs --tail 60 app-manutencao; exit 1"
+
+      # Prova real: chama o processamento com a chave gravada e mostra só o
+      # resumo devolvido. Repetir é inofensivo — alerta enviado fica marcado.
+      - name: Conferir o processamento de alertas
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && \
+             docker compose exec -T app node -e \"
+               fetch('http://127.0.0.1:8080/api/cron/processar-alertas', { headers: { 'x-cron-secret': process.env.CRON_SECRET } })
+                 .then(r => r.json())
+                 .then(j => console.log('resposta:', JSON.stringify({ ok: j.success, enviados: j.totalEnviados, erros: j.totalErros, organizacoes: j.condominiosProcessados, erro: j.error })))
+                 .catch(e => { console.error('falhou:', e.message); process.exit(1); })
+             \""
