@@ -2,49 +2,13 @@ import { z } from "zod";
 import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { funcoesPersonalizadas, registrosPersonalizados } from "../../../drizzle/schema";
-import { router, protectedProcedure, publicProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, publicProcedure, escopoProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import crypto from "crypto";
 
 function generateShareToken(): string {
   return crypto.randomBytes(16).toString("hex");
 }
-
-// Auto-criar tabela se não existir
-async function ensureTable() {
-  const db = await getDb();
-  if (!db) return;
-  try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS funcoes_personalizadas (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        condominioId INT NOT NULL,
-        userId INT,
-        nome VARCHAR(255) NOT NULL,
-        descricao TEXT,
-        icone VARCHAR(100) NOT NULL DEFAULT 'ClipboardList',
-        cor VARCHAR(50) NOT NULL DEFAULT '#3B82F6',
-        camposAtivos JSON NOT NULL,
-        camposObrigatorios JSON NOT NULL,
-        ativo BOOLEAN DEFAULT true,
-        ordem INT DEFAULT 0,
-        shareToken VARCHAR(64),
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-        FOREIGN KEY (condominioId) REFERENCES condominios(id) ON DELETE CASCADE,
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL
-      )
-    `);
-    // Garantir coluna shareToken em tabelas já existentes
-    try {
-      await db.execute(sql`ALTER TABLE funcoes_personalizadas ADD COLUMN shareToken VARCHAR(64)`);
-    } catch { /* coluna já existe */ }
-  } catch (e) {
-    // Table may already exist - ignore
-  }
-}
-
-// Run on import
-ensureTable();
 
 // Campos disponíveis para personalização
 export const CAMPOS_DISPONIVEIS = [
@@ -66,6 +30,9 @@ export const CAMPOS_DISPONIVEIS = [
   { key: "assinaturaTecnico", label: "Assinatura Técnico", descricao: "Assinatura digital do técnico", tipo: "assinatura" },
   { key: "assinaturaSolicitante", label: "Assinatura Solicitante", descricao: "Assinatura digital do solicitante", tipo: "assinatura" },
 ] as const;
+
+/** Rotas por `id`: a função precisa ser de uma organização do solicitante. */
+const funcaoProcedure = escopoProcedure(escopoPorRegistro({ id: direto(funcoesPersonalizadas) }));
 
 export const funcoesPersonalizadasRouter = router({
   // Listar campos disponíveis
@@ -120,7 +87,7 @@ export const funcoesPersonalizadasRouter = router({
     }),
 
   // Obter função específica
-  obter: protectedProcedure
+  obter: funcaoProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -171,7 +138,7 @@ export const funcoesPersonalizadasRouter = router({
     }),
 
   // Atualizar função existente
-  atualizar: protectedProcedure
+  atualizar: funcaoProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().min(1).optional(),
@@ -206,7 +173,7 @@ export const funcoesPersonalizadasRouter = router({
     }),
 
   // Deletar função
-  deletar: protectedProcedure
+  deletar: funcaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -219,7 +186,7 @@ export const funcoesPersonalizadasRouter = router({
     }),
 
   // Duplicar função existente
-  duplicar: protectedProcedure
+  duplicar: funcaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -249,16 +216,12 @@ export const funcoesPersonalizadasRouter = router({
   // ==================== ENDPOINTS PÚBLICOS ====================
 
   // Gerar shareToken para uma função existente que não tem
-  gerarShareToken: protectedProcedure
+  gerarShareToken: funcaoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       
-      // Adicionar coluna se não existir
-      try {
-        await db.execute(sql`ALTER TABLE funcoes_personalizadas ADD COLUMN IF NOT EXISTS shareToken VARCHAR(64)`);
-      } catch { /* column may already exist */ }
       
       const token = generateShareToken();
       await db.update(funcoesPersonalizadas)
@@ -275,10 +238,6 @@ export const funcoesPersonalizadasRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       
-      // Garantir coluna existe
-      try {
-        await db.execute(sql`ALTER TABLE funcoes_personalizadas ADD COLUMN IF NOT EXISTS shareToken VARCHAR(64)`);
-      } catch { /* */ }
       
       const [funcao] = await db.select()
         .from(funcoesPersonalizadas)

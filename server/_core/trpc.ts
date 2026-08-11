@@ -31,6 +31,25 @@ const t = initTRPC.context<TrpcContext>().create({
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
+
+/**
+ * Rota pública que grava (comentário em item compartilhado, evento de timeline).
+ *
+ * Quem escreve por ali não tem conta, então não há nada a bloquear além do
+ * endereço de origem: sem teto, um script enche a caixa de entrada do cliente
+ * com o link que ele mesmo divulgou. Leitura segue livre.
+ */
+export const publicWriteProcedure = t.procedure.use(async ({ ctx, next, path, type }) => {
+  if (type === "mutation") {
+    const { getClientIp, rateLimiter } = await import("./rateLimit");
+    rateLimiter.check(`publico:${path}:${getClientIp(ctx.req)}`, {
+      maxAttempts: 20,
+      windowMs: 15 * 60 * 1000,
+      blockDurationMs: 15 * 60 * 1000,
+    });
+  }
+  return next();
+});
 /** Chamadas server-side e testes de composição de middleware. */
 export const createCallerFactory = t.createCallerFactory;
 
@@ -74,7 +93,21 @@ const requireUser = t.middleware(async opts => {
   });
 });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+/**
+ * Confere qualquer `condominioId` que chegue pelo input.
+ *
+ * A maior parte das rotas ainda recebe o tenant por input e confia nele. Com
+ * mais de um cliente na mesma base, trocar o número na chamada bastava para ler
+ * a organização do vizinho. Aqui a conferência passa a valer para toda rota
+ * autenticada, sem depender de cada router lembrar de chamar `tenant.assert`.
+ */
+const assegurarTenantDoInput = t.middleware(async ({ ctx, next, getRawInput }) => {
+  const solicitado = lerCondominioIdDoInput(await getRawInput());
+  if (solicitado != null) await ctx.tenant.assert(solicitado);
+  return next();
+});
+
+export const protectedProcedure = t.procedure.use(requireUser).use(assegurarTenantDoInput);
 
 // Middleware que aceita user OU funcionário autenticado
 const requireUserOrFuncionario = t.middleware(async opts => {
@@ -89,7 +122,9 @@ const requireUserOrFuncionario = t.middleware(async opts => {
   return next({ ctx });
 });
 
-export const protectedOrFuncionarioProcedure = t.procedure.use(requireUserOrFuncionario);
+export const protectedOrFuncionarioProcedure = t.procedure
+  .use(requireUserOrFuncionario)
+  .use(assegurarTenantDoInput);
 
 // Middleware que exige funcionário autenticado
 const requireFuncionario = t.middleware(async opts => {
@@ -158,7 +193,11 @@ export const adminMasterProcedure = t.procedure.use(
 function lerCondominioIdDoInput(raw: unknown): number | null {
   if (!raw || typeof raw !== 'object') return null;
   const valor = (raw as Record<string, unknown>).condominioId;
-  return typeof valor === 'number' ? valor : null;
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
+  // Alguns routers declaram o campo com `z.coerce.number()`: o valor chega
+  // como texto e passaria sem conferência se olhássemos só o tipo `number`.
+  if (typeof valor === 'string' && /^\d+$/.test(valor)) return Number.parseInt(valor, 10);
+  return null;
 }
 
 /**
@@ -251,6 +290,20 @@ export function moduloProcedure(
     if (chaveFuncao) {
       await assegurarPermissaoFuncionario(ctx, chaveFuncao, type === "mutation");
     }
+    return next({ ctx });
+  });
+}
+
+/**
+ * Usuário autenticado + escopo por registro, sem portão de módulo.
+ *
+ * Para rotas que operam por `id` e não pertencem a um módulo ligável — modelos,
+ * status, links de compartilhamento e afins. Sem isto, o `id` é um número
+ * adivinhável que atravessa a fronteira entre clientes.
+ */
+export function escopoProcedure(escopo: VerificadorEscopo) {
+  return protectedProcedure.use(async ({ ctx, next, path, getRawInput }) => {
+    await assegurarEscopo(ctx, escopo, path, getRawInput);
     return next({ ctx });
   });
 }

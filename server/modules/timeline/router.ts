@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, moduloUserProcedure, publicProcedure } from "../../_core/trpc";
+import { router, moduloUserProcedure, publicProcedure, publicWriteProcedure } from "../../_core/trpc";
 import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { proximoProtocoloComData } from "../../_core/protocolo";
@@ -1250,7 +1250,7 @@ export const timelineRouter = router({
         };
       }),
 
-    registarVisualizacao: publicProcedure
+    registarVisualizacao: publicWriteProcedure
       .input(z.object({
         token: z.string(),
         compartilhamentoId: z.number().optional(),
@@ -1286,7 +1286,7 @@ export const timelineRouter = router({
       }),
 
     // Toggle membro associado à timeline (via link público)
-    toggleMembroAssociado: publicProcedure
+    toggleMembroAssociado: publicWriteProcedure
       .input(z.object({
         token: z.string(),
         membroId: z.number(),
@@ -1344,7 +1344,7 @@ export const timelineRouter = router({
     // ==================== TIMELINE - AÇÕES PÚBLICAS (via link com permissão) ====================
     
     // Adicionar comentário/evento via link público
-    adicionarEventoPublico: publicProcedure
+    adicionarEventoPublico: publicWriteProcedure
       .input(z.object({
         token: z.string(),
         tipo: z.enum(["comentario"]).default("comentario"),
@@ -1376,7 +1376,7 @@ export const timelineRouter = router({
       }),
 
     // Adicionar imagem via link público
-    adicionarImagemPublica: publicProcedure
+    adicionarImagemPublica: publicWriteProcedure
       .input(z.object({
         token: z.string(),
         url: z.string(),
@@ -1434,7 +1434,7 @@ export const timelineRouter = router({
       }),
 
     // Atualizar timeline via link público (permissão editar)
-    atualizarPublico: publicProcedure
+    atualizarPublico: publicWriteProcedure
       .input(z.object({
         token: z.string(),
         descricao: z.string().optional(),
@@ -1509,7 +1509,7 @@ export const timelineRouter = router({
       }),
 
     // Alterar categorização via link público (qualquer permissão exceto visualizar)
-    alterarCategorizacao: publicProcedure
+    alterarCategorizacao: publicWriteProcedure
       .input(z.object({
         token: z.string(),
         categorizacao: z.enum(["recebido", "encaminhado", "em_analise", "em_execucao", "aguardando_resposta", "finalizado", "reaberto"]),
@@ -1550,7 +1550,7 @@ export const timelineRouter = router({
       }),
 
     // Enviar mensagem no chat da timeline
-    enviarMensagemChat: publicProcedure
+    enviarMensagemChat: publicWriteProcedure
       .input(z.object({
         token: z.string(),
         autorNome: z.string().min(1),

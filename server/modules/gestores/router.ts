@@ -95,17 +95,40 @@ export const gestoresRouter = router({
       .from(users)
       .where(inArray(users.id, idsUsuarios));
 
-    return contas.map((conta) => ({
-      ...conta,
-      unidades: vinculos
+    // Dono de organização: é o topo da hierarquia, e a tela o fixa em primeiro.
+    const donos = await db
+      .select({ sindicoId: condominios.sindicoId })
+      .from(condominios)
+      .where(inArray(condominios.id, idsOrg));
+    const idsDonos = new Set(donos.map((d) => d.sindicoId).filter((id): id is number => !!id));
+
+    const lista = contas.map((conta) => {
+      const unidades = vinculos
         .filter((v) => v.userId === conta.id)
         .map((v) => ({
           id: v.condominioId,
           nome: v.organizacao,
           papel: v.papel,
           ativo: v.ativo,
-        })),
-    }));
+        }));
+
+      return {
+        ...conta,
+        unidades,
+        // Master é dono da organização ou chefe: a conta que não pode ser
+        // bloqueada nem removida, sob pena de ninguém mais administrar nada.
+        master: idsDonos.has(conta.id) || unidades.some((u) => u.papel === "chefe"),
+        dono: idsDonos.has(conta.id),
+      };
+    });
+
+    // Ordem fixa: o master primeiro, depois em ordem alfabética. Sem isto a
+    // lista sai na ordem do banco e o topo da hierarquia cai no meio.
+    return lista.sort((a, b) => {
+      if (a.dono !== b.dono) return a.dono ? -1 : 1;
+      if (a.master !== b.master) return a.master ? -1 : 1;
+      return (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR");
+    });
   }),
 
   criar: protectedProcedure
@@ -172,6 +195,7 @@ export const gestoresRouter = router({
       if (!db) throw new Error("Database not available");
       await assertPodeGerenciar(ctx);
       await assertGestorAlcancavel(ctx, input.id);
+      if (input.bloqueado === true) await assertNaoEhDono(input.id, "bloquear");
 
       // Mapeamento explícito: a coluna é `phone`, e um spread com `telefone`
       // não é rejeitado pelo TypeScript nem chega ao banco.
@@ -259,6 +283,7 @@ export const gestoresRouter = router({
       if (input.id === ctx.user.id) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode excluir a própria conta." });
       }
+      await assertNaoEhDono(input.id, "remover");
 
       const idsOrg = await ctx.tenant.ids();
       await db
@@ -302,6 +327,30 @@ export const gestoresRouter = router({
       return { contaExcluida: false };
     }),
 });
+
+/**
+ * Dono da organização não se bloqueia nem se remove.
+ *
+ * É a conta no topo da hierarquia: sem ela ninguém mais cria gestor, redefine
+ * senha ou abre unidade — e o estrago só se desfaz direto no banco.
+ */
+async function assertNaoEhDono(userId: number, acao: "bloquear" | "remover") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [dono] = await db
+    .select({ id: condominios.id })
+    .from(condominios)
+    .where(eq(condominios.sindicoId, userId))
+    .limit(1);
+
+  if (dono) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `Não é possível ${acao} o gestor master da organização.`,
+    });
+  }
+}
 
 /** Só é editável quem tem vínculo com alguma organização do solicitante. */
 async function assertGestorAlcancavel(

@@ -761,7 +761,6 @@ Tipo: ${tipoLabel}
 Data de Vencimento: ${dataVenc.toLocaleDateString('pt-BR')}
 Status: ${statusLabel}
 ${venc[0].fornecedor ? `Fornecedor: ${venc[0].fornecedor}` : ''}
-${venc[0].valor ? `Valor: R$ ${venc[0].valor}` : ''}
 ${venc[0].descricao ? `\nDescrição: ${venc[0].descricao}` : ''}
 ${venc[0].observacoes ? `\nObservações: ${venc[0].observacoes}` : ''}
 
@@ -873,7 +872,6 @@ Este é um alerta automático sobre o seguinte vencimento:
 📅 Data de Vencimento: ${dataVenc.toLocaleDateString('pt-BR')}
 ⏰ Status: ${statusLabel}
 ${vencimento.fornecedor ? `🏢 Fornecedor: ${vencimento.fornecedor}` : ''}
-${vencimento.valor ? `💰 Valor: R$ ${vencimento.valor}` : ''}
 ${vencimento.descricao ? `\n📝 Descrição: ${vencimento.descricao}` : ''}
 ${vencimento.observacoes ? `\n💬 Observações: ${vencimento.observacoes}` : ''}
 
@@ -1231,7 +1229,6 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
         <th>Fornecedor</th>
         <th>Vencimento</th>
         <th>Dias</th>
-        <th>Valor</th>
         <th>Status</th>
       </tr>
     </thead>
@@ -1251,7 +1248,6 @@ Para gerenciar suas notificações, acesse a Agenda de Vencimentos no painel.
             <td>${item.fornecedor || '-'}</td>
             <td>${dataVenc.toLocaleDateString('pt-BR')}</td>
             <td><span class="badge ${statusBadge}">${diasText}</span></td>
-            <td>${item.valor ? `R$ ${item.valor}` : '-'}</td>
             <td>${item.status}</td>
           </tr>
         `;

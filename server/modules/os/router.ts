@@ -865,10 +865,14 @@ export const osRouter = router({
           .where(eq(ordensServico.id, id));
         
         if (!osAtual) throw new Error("Ordem de serviço não encontrada");
-        
-        await db.update(ordensServico)
-          .set(updates)
-          .where(eq(ordensServico.id, id));
+
+        // Sem campo nenhum para gravar, o drizzle estoura com "No values to
+        // set" — e a tela mostra erro interno num salvamento que não mudou nada.
+        if (Object.keys(updates).length > 0) {
+          await db.update(ordensServico)
+            .set(updates)
+            .where(eq(ordensServico.id, id));
+        }
         
         // Registar mudança de status na timeline
         if (input.statusId && input.statusId !== osAtual.statusId) {

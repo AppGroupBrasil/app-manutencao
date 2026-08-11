@@ -1,9 +1,13 @@
 ﻿
 import { z } from "zod";
-import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { publicProcedure, protectedProcedure, escopoProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { apps, appModulos, condominios } from "../../../drizzle/schema";
 import { eq, desc, asc, and, sql } from "drizzle-orm";
+
+/** Rotas por `id`: o app precisa ser de uma organização do solicitante. */
+const appProcedure = escopoProcedure(escopoPorRegistro({ id: direto(apps), appId: direto(apps) }));
 
 export const appsRouter = router({
   // Listar apps do condomÃ­nio
@@ -19,7 +23,7 @@ export const appsRouter = router({
     }),
 
   // Obter app por ID com mÃ³dulos
-  getById: protectedProcedure
+  getById: appProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -88,7 +92,7 @@ export const appsRouter = router({
     }),
 
   // Atualizar app
-  update: protectedProcedure
+  update: appProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().optional(),
@@ -142,7 +146,7 @@ export const appsRouter = router({
     }),
 
   // Excluir app
-  delete: protectedProcedure
+  delete: appProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

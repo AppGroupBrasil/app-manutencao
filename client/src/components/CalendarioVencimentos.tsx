@@ -300,9 +300,6 @@ export default function CalendarioVencimentos({ vencimentos, onVencimentoClick }
                       {v.fornecedor && (
                         <div className="text-sm text-gray-500">{v.fornecedor}</div>
                       )}
-                      {v.valor && (
-                        <div className="text-sm font-medium text-gray-700">R$ {v.valor}</div>
-                      )}
                     </div>
                     <Badge variant={v.status === 'ativo' ? 'default' : 'secondary'}>
                       {v.status}

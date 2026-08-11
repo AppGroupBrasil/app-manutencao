@@ -2,34 +2,11 @@ import { z } from "zod";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { checklistModelos } from "../../../drizzle/schema";
-import { router, protectedProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, escopoProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 
-// Auto-criar tabela se não existir
-async function ensureTable() {
-  const db = await getDb();
-  if (!db) return;
-  try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS checklist_modelos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        condominioId INT NOT NULL,
-        userId INT,
-        nome VARCHAR(255) NOT NULL,
-        descricao TEXT,
-        itens JSON NOT NULL,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-        FOREIGN KEY (condominioId) REFERENCES condominios(id) ON DELETE CASCADE,
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL
-      )
-    `);
-  } catch (e) {
-    // Table may already exist - ignore
-  }
-}
-
-// Run on import
-ensureTable();
+/** Rotas por `id`: o registro precisa ser de uma organização do solicitante. */
+const modeloProcedure = escopoProcedure(escopoPorRegistro({ id: direto(checklistModelos) }));
 
 export const checklistModelosRouter = router({
   // Listar modelos de checklist de um condomínio
@@ -74,7 +51,7 @@ export const checklistModelosRouter = router({
     }),
 
   // Atualizar modelo existente
-  atualizar: protectedProcedure
+  atualizar: modeloProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().min(1).optional(),
@@ -102,7 +79,7 @@ export const checklistModelosRouter = router({
     }),
 
   // Deletar modelo
-  deletar: protectedProcedure
+  deletar: modeloProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -115,7 +92,7 @@ export const checklistModelosRouter = router({
     }),
 
   // Obter modelo específico
-  obter: protectedProcedure
+  obter: modeloProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();

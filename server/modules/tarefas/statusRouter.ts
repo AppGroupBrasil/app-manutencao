@@ -3,7 +3,11 @@ import { z } from "zod";
 import { eq, asc, and, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { statusPersonalizados } from "../../../drizzle/schema";
-import { router, protectedProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, escopoProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
+
+/** Rotas por `id`: o registro precisa ser de uma organização do solicitante. */
+const statusProcedure = escopoProcedure(escopoPorRegistro({ id: direto(statusPersonalizados) }));
 
 export const statusPersonalizadosRouter = router({
   // Listar status personalizados
@@ -92,7 +96,7 @@ export const statusPersonalizadosRouter = router({
     }),
 
   // Atualizar status
-  atualizar: protectedProcedure
+  atualizar: statusProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().optional(),
@@ -111,7 +115,7 @@ export const statusPersonalizadosRouter = router({
     }),
 
   // Deletar status (soft delete)
-  deletar: protectedProcedure
+  deletar: statusProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

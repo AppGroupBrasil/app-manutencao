@@ -3,7 +3,11 @@ import { z } from "zod";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { camposRapidosTemplates } from "../../../drizzle/schema";
-import { router, protectedProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, escopoProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
+
+/** Rotas por `id`: o registro precisa ser de uma organização do solicitante. */
+const templateProcedure = escopoProcedure(escopoPorRegistro({ id: direto(camposRapidosTemplates) }));
 
 export const camposRapidosTemplatesRouter = router({
   // Listar templates por tipo de campo
@@ -90,7 +94,7 @@ export const camposRapidosTemplatesRouter = router({
     }),
 
   // Usar template (incrementar contador)
-  usar: protectedProcedure
+  usar: templateProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -107,7 +111,7 @@ export const camposRapidosTemplatesRouter = router({
     }),
 
   // Marcar como favorito
-  toggleFavorito: protectedProcedure
+  toggleFavorito: templateProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -128,7 +132,7 @@ export const camposRapidosTemplatesRouter = router({
     }),
 
   // Deletar template (soft delete)
-  deletar: protectedProcedure
+  deletar: templateProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

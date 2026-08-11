@@ -7,6 +7,27 @@ import { TRPCError } from "@trpc/server";
 
 const hierarquiaValues = ["admin_master", "admin", "responsavel", "funcionario"] as const;
 
+/**
+ * Alcance de quem não é da plataforma: só a conta que ele mesmo criou.
+ *
+ * Estas rotas comparam apenas o nível hierárquico, e o nível é global. Sem esta
+ * conferência, o gestor de um cliente bloqueia, exclui ou rebaixa a conta de
+ * outro cliente — basta que ela esteja um degrau abaixo dele. `listar` já
+ * filtrava assim; as mutações ficaram de fora.
+ */
+function assegurarAlcance(
+  ctx: { user: { id: number } | null },
+  alvo: { id: number; criadoPorUserId: number | null },
+  nivelDeQuemPede: number,
+) {
+  if (nivelDeQuemPede >= HIERARQUIA_NIVEL.admin_master) return;
+  if (alvo.criadoPorUserId === ctx.user!.id) return;
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: "Esta conta não foi criada por você.",
+  });
+}
+
 export const hierarquiaRouter = router({
   // ==================== LISTAR USUÁRIOS DA MINHA HIERARQUIA ====================
   listar: protectedProcedure
@@ -160,6 +181,7 @@ export const hierarquiaRouter = router({
       if (nivelAlvo >= meuNivel) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Você só pode bloquear usuários de hierarquia inferior." });
       }
+      assegurarAlcance(ctx, alvo, meuNivel);
 
       await db.update(users).set({
         bloqueado: input.bloqueado,
@@ -186,6 +208,7 @@ export const hierarquiaRouter = router({
       if (nivelAlvo >= meuNivel) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Você só pode excluir usuários de hierarquia inferior." });
       }
+      assegurarAlcance(ctx, alvo, meuNivel);
 
       await db.delete(users).where(eq(users.id, input.userId));
       return { success: true };
@@ -211,6 +234,7 @@ export const hierarquiaRouter = router({
       if (nivelAlvo >= meuNivel || nivelNovo >= meuNivel) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Operação não permitida para sua hierarquia." });
       }
+      assegurarAlcance(ctx, alvo, meuNivel);
 
       const roleMap: Record<string, "user" | "admin" | "sindico" | "morador" | "master"> = {
         admin_master: "master",
@@ -258,6 +282,7 @@ export const hierarquiaRouter = router({
       if (alvo.id !== ctx.user!.id && nivelAlvo >= meuNivel) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão para ver este usuário." });
       }
+      if (alvo.id !== ctx.user!.id) assegurarAlcance(ctx, alvo, meuNivel);
 
       return alvo;
     }),

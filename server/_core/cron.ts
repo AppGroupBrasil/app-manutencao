@@ -150,7 +150,6 @@ Este é um alerta automático sobre o seguinte vencimento:
 📅 Data de Vencimento: ${dataVenc.toLocaleDateString('pt-BR')}
 ⏰ Status: ${statusLabel}
 ${vencimento.fornecedor ? `🏢 Fornecedor: ${vencimento.fornecedor}` : ''}
-${vencimento.valor ? `💰 Valor: R$ ${vencimento.valor}` : ''}
 ${vencimento.descricao ? `\n📝 Descrição: ${vencimento.descricao}` : ''}
 ${vencimento.observacoes ? `\n💬 Observações: ${vencimento.observacoes}` : ''}
 

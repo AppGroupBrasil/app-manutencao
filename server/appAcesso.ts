@@ -1,4 +1,5 @@
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, escopoProcedure, router } from "./_core/trpc";
+import { direto, escopoPorRegistro, via } from "./_core/escopoRegistro";
 import { z } from "zod";
 import { getDb } from "./db";
 import { 
@@ -35,11 +36,29 @@ async function verificarSenha(senha: string, hash: string): Promise<boolean> {
   return bcrypt.compare(senha, hash);
 }
 
+/**
+ * Códigos e utilizadores do app pertencem a um `app`, que pertence a uma
+ * organização. O `id` aqui aponta ora para o código, ora para o utilizador —
+ * daí os overrides por rota.
+ */
+const acessoProcedure = escopoProcedure(
+  escopoPorRegistro(
+    { appId: direto(apps) },
+    {
+      desativarCodigo: { id: via(appCodigosAcesso, "appId", apps) },
+      reativarCodigo: { id: via(appCodigosAcesso, "appId", apps) },
+      atualizarUsuario: { id: via(appUsuarios, "appId", apps) },
+      redefinirSenhaUsuario: { id: via(appUsuarios, "appId", apps) },
+      removerUsuario: { id: via(appUsuarios, "appId", apps) },
+    },
+  ),
+);
+
 export const appAcessoRouter = router({
   // ==================== CÓDIGOS DE ACESSO ====================
   
   // Gerar novo código de acesso para um app
-  gerarCodigo: protectedProcedure
+  gerarCodigo: acessoProcedure
     .input(z.object({
       appId: z.number(),
       descricao: z.string().optional(),
@@ -73,7 +92,7 @@ export const appAcessoRouter = router({
     }),
   
   // Listar códigos de acesso de um app
-  listarCodigos: protectedProcedure
+  listarCodigos: acessoProcedure
     .input(z.object({ appId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -84,7 +103,7 @@ export const appAcessoRouter = router({
     }),
   
   // Desativar código de acesso
-  desativarCodigo: protectedProcedure
+  desativarCodigo: acessoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -96,7 +115,7 @@ export const appAcessoRouter = router({
     }),
   
   // Reativar código de acesso
-  reativarCodigo: protectedProcedure
+  reativarCodigo: acessoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -110,7 +129,7 @@ export const appAcessoRouter = router({
   // ==================== UTILIZADORES ====================
   
   // Cadastrar novo utilizador
-  cadastrarUsuario: protectedProcedure
+  cadastrarUsuario: acessoProcedure
     .input(z.object({
       appId: z.number(),
       nome: z.string().min(2),
@@ -147,7 +166,7 @@ export const appAcessoRouter = router({
     }),
   
   // Listar utilizadores de um app
-  listarUsuarios: protectedProcedure
+  listarUsuarios: acessoProcedure
     .input(z.object({ appId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -168,7 +187,7 @@ export const appAcessoRouter = router({
     }),
   
   // Atualizar utilizador
-  atualizarUsuario: protectedProcedure
+  atualizarUsuario: acessoProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().min(2).optional(),
@@ -184,7 +203,7 @@ export const appAcessoRouter = router({
     }),
   
   // Redefinir senha de utilizador
-  redefinirSenhaUsuario: protectedProcedure
+  redefinirSenhaUsuario: acessoProcedure
     .input(z.object({
       id: z.number(),
       novaSenha: z.string().min(6),
@@ -200,7 +219,7 @@ export const appAcessoRouter = router({
     }),
   
   // Remover utilizador
-  removerUsuario: protectedProcedure
+  removerUsuario: acessoProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -515,7 +534,7 @@ export const appAcessoRouter = router({
   // ==================== LOG DE ACESSOS ====================
   
   // Listar log de acessos de um app
-  listarLogAcessos: protectedProcedure
+  listarLogAcessos: acessoProcedure
     .input(z.object({ 
       appId: z.number(),
       limite: z.number().default(50),

@@ -25,6 +25,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import {
   ArrowLeft,
+  Crown,
   KeyRound,
   Loader2,
   Lock,
@@ -47,6 +48,10 @@ type Gestor = {
   senhaProvisoria: boolean;
   ultimoAcesso: Date | string | null;
   unidades: { id: number; nome: string; papel: string; ativo: boolean }[];
+  /** Dono da organização ou gestor-chefe. */
+  master?: boolean;
+  /** Dono da organização: fica fixo no topo e não pode ser bloqueado. */
+  dono?: boolean;
 };
 
 export default function AdminGestores() {
@@ -110,13 +115,22 @@ export default function AdminGestores() {
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     const lista = (gestores ?? []) as Gestor[];
-    if (!termo) return lista;
-    return lista.filter(
-      (g) =>
-        (g.nome ?? "").toLowerCase().includes(termo) ||
-        (g.email ?? "").toLowerCase().includes(termo) ||
-        g.unidades.some((u) => u.nome.toLowerCase().includes(termo)),
-    );
+    const visiveis = !termo
+      ? lista
+      : lista.filter(
+          (g) =>
+            (g.nome ?? "").toLowerCase().includes(termo) ||
+            (g.email ?? "").toLowerCase().includes(termo) ||
+            g.unidades.some((u) => u.nome.toLowerCase().includes(termo)),
+        );
+
+    // O topo da hierarquia fica em primeiro mesmo com a busca ativa; o servidor
+    // já devolve nessa ordem, aqui é só garantia depois do filtro.
+    return [...visiveis].sort((a, b) => {
+      if (!!a.dono !== !!b.dono) return a.dono ? -1 : 1;
+      if (!!a.master !== !!b.master) return a.master ? -1 : 1;
+      return (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR");
+    });
   }, [gestores, busca]);
 
   function abrirCriacao() {
@@ -217,10 +231,17 @@ export default function AdminGestores() {
         ) : (
           <div className="space-y-2">
             {filtrados.map((g) => (
-              <Card key={g.id}>
+              <Card key={g.id} className={g.dono ? "border-indigo-300 bg-indigo-50/40" : undefined}>
                 <CardContent className="py-3 flex flex-wrap items-start gap-2">
                   <div className="mr-auto min-w-[200px]">
-                    <p className="font-medium text-slate-800">{g.nome ?? "(sem nome)"}</p>
+                    <p className="font-medium text-slate-800 flex items-center gap-2">
+                      {g.nome ?? "(sem nome)"}
+                      {g.dono && (
+                        <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white">
+                          <Crown className="w-3 h-3 mr-1" /> Gestor master
+                        </Badge>
+                      )}
+                    </p>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
                       {g.email && <span>{g.email}</span>}
                       {g.telefone && <span>{g.telefone}</span>}
@@ -259,27 +280,33 @@ export default function AdminGestores() {
                   >
                     <KeyRound className="w-4 h-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    title={g.bloqueado ? "Desbloquear" : "Bloquear"}
-                    disabled={atualizar.isPending}
-                    onClick={() => atualizar.mutate({ id: g.id, bloqueado: !g.bloqueado })}
-                  >
-                    {g.bloqueado ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700"
-                    title="Excluir"
-                    disabled={remover.isPending}
-                    onClick={() => {
-                      if (confirm(`Remover ${g.nome ?? g.email} das suas unidades?`)) remover.mutate({ id: g.id });
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {/* O master não se bloqueia nem se remove: sem ele ninguém
+                      mais administra a organização. O servidor recusa também. */}
+                  {!g.dono && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title={g.bloqueado ? "Desbloquear" : "Bloquear"}
+                        disabled={atualizar.isPending}
+                        onClick={() => atualizar.mutate({ id: g.id, bloqueado: !g.bloqueado })}
+                      >
+                        {g.bloqueado ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        title="Excluir"
+                        disabled={remover.isPending}
+                        onClick={() => {
+                          if (confirm(`Remover ${g.nome ?? g.email} das suas unidades?`)) remover.mutate({ id: g.id });
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </>
+                  )}
                     </>
                   )}
                 </CardContent>

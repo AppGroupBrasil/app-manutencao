@@ -2,45 +2,17 @@ import { z } from "zod";
 import { eq, and, desc, sql, like, or } from "drizzle-orm";
 import { getDb } from "../../db";
 import { registrosPersonalizados, funcoesPersonalizadas } from "../../../drizzle/schema";
-import { router, protectedProcedure, publicProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, publicProcedure, escopoProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 
-// Auto-criar tabela se não existir
-async function ensureTable() {
-  const db = await getDb();
-  if (!db) return;
-  try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS registros_personalizados (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        funcaoId INT NOT NULL,
-        condominioId INT NOT NULL,
-        userId INT,
-        protocolo VARCHAR(50),
-        dados JSON NOT NULL,
-        imagens JSON,
-        checklistItems JSON,
-        assinaturas JSON,
-        status VARCHAR(50) DEFAULT 'aberto',
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-        FOREIGN KEY (funcaoId) REFERENCES funcoes_personalizadas(id) ON DELETE CASCADE,
-        FOREIGN KEY (condominioId) REFERENCES condominios(id),
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL,
-        INDEX idx_funcao (funcaoId),
-        INDEX idx_protocolo (protocolo),
-        INDEX idx_condominio (condominioId)
-      )
-    `);
-  } catch (e) {
-    // Table may already exist
-  }
-}
-
-ensureTable();
+/** Rotas por `id`: o registro precisa ser de uma organização do solicitante. */
+const registroProcedure = escopoProcedure(
+  escopoPorRegistro({ id: direto(registrosPersonalizados), funcaoId: direto(funcoesPersonalizadas) }),
+);
 
 export const registrosPersonalizadosRouter = router({
   // Criar registro
-  criar: protectedProcedure
+  criar: registroProcedure
     .input(z.object({
       funcaoId: z.number(),
       condominioId: z.number(),
@@ -71,7 +43,7 @@ export const registrosPersonalizadosRouter = router({
     }),
 
   // Listar registros de uma função (colunas leves para evitar sort memory overflow)
-  listar: protectedProcedure
+  listar: registroProcedure
     .input(z.object({
       funcaoId: z.number(),
       busca: z.string().optional(),
@@ -120,7 +92,7 @@ export const registrosPersonalizadosRouter = router({
     }),
 
   // Contar registros
-  contar: protectedProcedure
+  contar: registroProcedure
     .input(z.object({
       funcaoId: z.number(),
     }))
@@ -138,7 +110,7 @@ export const registrosPersonalizadosRouter = router({
     }),
 
   // Obter registro específico
-  obter: protectedProcedure
+  obter: registroProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -152,7 +124,7 @@ export const registrosPersonalizadosRouter = router({
     }),
 
   // Atualizar status
-  atualizarStatus: protectedProcedure
+  atualizarStatus: registroProcedure
     .input(z.object({
       id: z.number(),
       status: z.string(),
@@ -169,7 +141,7 @@ export const registrosPersonalizadosRouter = router({
     }),
 
   // Deletar registro
-  deletar: protectedProcedure
+  deletar: registroProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

@@ -4,27 +4,9 @@ import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { proximoProtocoloComData } from "../../_core/protocolo";
 import { tarefasSimples, compartilhamentosEquipe, membrosEquipe } from "../../../drizzle/schema";
-import { router, protectedProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, escopoProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { TRPCError } from "@trpc/server";
-
-// Auto-criar colunas extras se não existirem
-async function ensureExtraColumns() {
-  const db = await getDb();
-  if (!db) return;
-  const cols = [
-    "ALTER TABLE tarefas_simples ADD COLUMN prazoConclusao TIMESTAMP NULL",
-    "ALTER TABLE tarefas_simples ADD COLUMN custoEstimado VARCHAR(50) NULL",
-    "ALTER TABLE tarefas_simples ADD COLUMN nivelUrgencia ENUM('baixo','medio','alto','critico') NULL",
-    "ALTER TABLE tarefas_simples ADD COLUMN anexos JSON NULL",
-    "ALTER TABLE tarefas_simples ADD COLUMN qrcode VARCHAR(500) NULL",
-    "ALTER TABLE tarefas_simples ADD COLUMN assinaturaTecnico TEXT NULL",
-    "ALTER TABLE tarefas_simples ADD COLUMN assinaturaSolicitante TEXT NULL",
-  ];
-  for (const ddl of cols) {
-    try { await db.execute(sql.raw(ddl)); } catch { /* column may already exist */ }
-  }
-}
-ensureExtraColumns();
 
 // Schema para imagem com legenda (compatível com formato antigo string[])
 const imagemSchema = z.union([
@@ -45,6 +27,9 @@ function normalizarImagens(imagens: any[]): { url: string; legenda?: string }[] 
     return { url: img.url, legenda: img.legenda || '' };
   });
 }
+
+/** Rotas por `id`: a tarefa precisa ser de uma organização do solicitante. */
+const tarefaProcedure = escopoProcedure(escopoPorRegistro({ id: direto(tarefasSimples) }));
 
 export const tarefasSimplesRouter = router({
   // Gerar protocolo Ãºnico
@@ -139,7 +124,7 @@ export const tarefasSimplesRouter = router({
     }),
 
   // Atualizar tarefa simples
-  atualizar: protectedProcedure
+  atualizar: tarefaProcedure
     .input(z.object({
       id: z.number(),
       titulo: z.string().optional(),
@@ -220,7 +205,7 @@ export const tarefasSimplesRouter = router({
     }),
 
   // Enviar uma tarefa especÃ­fica
-  enviar: protectedProcedure
+  enviar: tarefaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -232,7 +217,7 @@ export const tarefasSimplesRouter = router({
     }),
 
   // Concluir tarefa
-  concluir: protectedProcedure
+  concluir: tarefaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -244,7 +229,7 @@ export const tarefasSimplesRouter = router({
     }),
 
   // Reabrir tarefa
-  reabrir: protectedProcedure
+  reabrir: tarefaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -310,7 +295,7 @@ export const tarefasSimplesRouter = router({
     }),
 
   // Obter uma tarefa especÃ­fica
-  obter: protectedProcedure
+  obter: tarefaProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -322,7 +307,7 @@ export const tarefasSimplesRouter = router({
     }),
 
   // Deletar tarefa
-  deletar: protectedProcedure
+  deletar: tarefaProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -332,7 +317,7 @@ export const tarefasSimplesRouter = router({
     }),
 
   // Compartilhar tarefa
-  compartilhar: protectedProcedure
+  compartilhar: tarefaProcedure
     .input(z.object({
       tarefaId: z.number(),
       membrosIds: z.array(z.number()),

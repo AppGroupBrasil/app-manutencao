@@ -24,7 +24,8 @@ import {
   membrosEquipe 
 } from "../../../drizzle/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { publicProcedure, protectedProcedure, protectedOrFuncionarioProcedure, router } from "../../_core/trpc";
+import { publicProcedure, protectedProcedure, protectedOrFuncionarioProcedure, escopoProcedure, publicWriteProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 
@@ -57,6 +58,17 @@ async function registrarAtividadeLink(
   }).returning();
 }
 
+/**
+ * Rotas por id de link: o link precisa ser de uma organização do solicitante.
+ * Duas rotas chamam o campo de `linkId`; ambos apontam para a mesma tabela.
+ */
+const linkProcedure = escopoProcedure(
+  escopoPorRegistro({ id: direto(linksCompartilhaveis), linkId: direto(linksCompartilhaveis) }),
+);
+
+/** Rotas por `id` de comentário. */
+const comentarioProcedure = escopoProcedure(escopoPorRegistro({ id: direto(comentariosItem) }));
+
 export const linkCompartilhavelRouter = router({
   list: protectedOrFuncionarioProcedure
     .input(z.object({ condominioId: z.number(), tipo: z.enum(["vistoria", "manutencao", "ocorrencia", "checklist"]).optional() }))
@@ -72,7 +84,7 @@ export const linkCompartilhavelRouter = router({
         .orderBy(desc(linksCompartilhaveis.createdAt));
     }),
 
-  get: protectedOrFuncionarioProcedure
+  get: linkProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -148,7 +160,7 @@ export const linkCompartilhavelRouter = router({
       return { id: result.id, token };
     }),
 
-  update: protectedOrFuncionarioProcedure
+  update: linkProcedure
     .input(z.object({
       id: z.number(),
       editavel: z.boolean().optional(),
@@ -184,7 +196,7 @@ export const linkCompartilhavelRouter = router({
       return { success: true };
     }),
 
-  delete: protectedOrFuncionarioProcedure
+  delete: linkProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -207,7 +219,7 @@ export const linkCompartilhavelRouter = router({
       return { success: true };
     }),
 
-  compartilhar: protectedOrFuncionarioProcedure
+  compartilhar: linkProcedure
     .input(z.object({
       linkId: z.number(),
       membroId: z.number().optional(),
@@ -264,7 +276,7 @@ export const linkCompartilhavelRouter = router({
       };
     }),
 
-  historicoCompartilhamentos: protectedOrFuncionarioProcedure
+  historicoCompartilhamentos: linkProcedure
     .input(z.object({ linkId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -452,7 +464,7 @@ export const comentarioRouter = router({
       return comentariosComAnexos;
     }),
 
-  create: publicProcedure
+  create: publicWriteProcedure
     .input(z.object({
       itemId: z.number(),
       itemTipo: z.enum(["vistoria", "manutencao", "ocorrencia", "checklist"]),
@@ -522,7 +534,7 @@ export const comentarioRouter = router({
       return { id: comentarioId };
     }),
 
-  delete: protectedProcedure
+  delete: comentarioProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -538,7 +550,7 @@ export const comentarioRouter = router({
       return { success: true };
     }),
 
-  marcarLido: protectedProcedure
+  marcarLido: comentarioProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -555,7 +567,7 @@ export const comentarioRouter = router({
       return { success: true };
     }),
 
-  responder: publicProcedure
+  responder: publicWriteProcedure
     .input(z.object({
       comentarioId: z.number(),
       autorNome: z.string().min(1),

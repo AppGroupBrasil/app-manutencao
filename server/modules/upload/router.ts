@@ -7,6 +7,33 @@ import { storagePut } from "../../storage";
  * Pasta de quem enviou. Funcionário não tem linha em `users`, então entra com
  * prefixo próprio para não cair na pasta de um usuário qualquer.
  */
+/**
+ * Pasta pedida pelo client, reduzida ao que é seguro virar caminho.
+ *
+ * O valor entra na chave do arquivo; sem filtrar, `../..` sairia da pasta de
+ * uploads e gravaria por cima de arquivos da aplicação.
+ */
+function pastaSegura(bruto: string): string {
+  const limpo = bruto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9/_-]+/g, "-")
+    .split("/")
+    .map((parte) => parte.replace(/^[-_]+|[-_]+$/g, ""))
+    .filter((parte) => parte && parte !== "." && parte !== "..")
+    .slice(0, 2)
+    .join("/");
+
+  return limpo || "uploads";
+}
+
+/** Extensão só com letra e número; o nome do arquivo vem do client. */
+function extensaoSegura(bruto: string): string {
+  const limpa = bruto.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
+  return limpa || "bin";
+}
+
 function pastaDoAutor(ctx: {
   user: { id: number } | null;
   funcionario: { id: number } | null;
@@ -65,9 +92,9 @@ export const uploadRouter = router({
       
       // Generate unique file key - usar extensão correta após compressão
       const originalExt = fileName.split(".").pop() || "jpg";
-      const finalExt = finalContentType === "image/jpeg" ? "jpg" : originalExt;
+      const finalExt = extensaoSegura(finalContentType === "image/jpeg" ? "jpg" : originalExt);
       const uniqueId = nanoid(10);
-      const fileKey = `${folder}/${pastaDoAutor(ctx)}/${uniqueId}.${finalExt}`;
+      const fileKey = `${pastaSegura(folder)}/${pastaDoAutor(ctx)}/${uniqueId}.${finalExt}`;
       
       // Upload to storage
       try {
@@ -115,9 +142,9 @@ export const uploadRouter = router({
       }
       
       // Generate unique file key
-      const ext = fileName.split(".").pop() || "bin";
+      const ext = extensaoSegura(fileName.split(".").pop() || "bin");
       const uniqueId = nanoid(10);
-      const fileKey = `${folder}/${pastaDoAutor(ctx)}/${uniqueId}.${ext}`;
+      const fileKey = `${pastaSegura(folder)}/${pastaDoAutor(ctx)}/${uniqueId}.${ext}`;
       
       // Upload to S3
       const { url } = await storagePut(fileKey, buffer, fileType);

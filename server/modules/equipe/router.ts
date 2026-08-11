@@ -10,9 +10,13 @@ import {
   notificacoesVisualizacao
 } from "../../../drizzle/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
+import { publicProcedure, protectedProcedure, escopoProcedure, router } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { getSessionCookieOptions } from "../../_core/cookies";
 import { ENV } from "../../_core/env";
+
+/** Rotas por `id`: o membro precisa ser de uma organização do solicitante. */
+const membroProcedure = escopoProcedure(escopoPorRegistro({ id: direto(membrosEquipe) }));
 
 export const equipeRouter = router({
   list: protectedProcedure
@@ -28,7 +32,7 @@ export const equipeRouter = router({
         .orderBy(membrosEquipe.nome);
     }),
 
-  get: protectedProcedure
+  get: membroProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -77,7 +81,7 @@ export const equipeRouter = router({
       return { id: result.id };
     }),
 
-  update: protectedProcedure
+  update: membroProcedure
     .input(z.object({
       id: z.number(),
       nome: z.string().min(1).optional(),
@@ -114,7 +118,7 @@ export const equipeRouter = router({
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: membroProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();

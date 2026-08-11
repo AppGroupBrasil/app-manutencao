@@ -294,8 +294,21 @@ function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function normalizeKey(relKey: string): string {
-  return relKey.replace(/^\/+/, "");
+/**
+ * Chave relativa, sem barra inicial e sem escapar da pasta base.
+ *
+ * A chave é montada com dados que vêm do client (a pasta do upload, por
+ * exemplo). Sem tirar os `..`, um `folder: "../.."` gravaria por cima de
+ * arquivos da aplicação — o `path.join` do armazenamento local resolveria o
+ * caminho de bom grado.
+ */
+export function normalizeKey(relKey: string): string {
+  const partes = relKey
+    .split(/[\\/]+/)
+    .filter((parte) => parte !== "" && parte !== "." && parte !== "..");
+
+  if (partes.length === 0) throw new Error("Caminho de arquivo inválido.");
+  return partes.join("/");
 }
 
 // ==================== API PÚBLICA ====================

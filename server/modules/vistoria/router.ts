@@ -57,20 +57,6 @@ const vistoriaProcedure = moduloProcedure(
   "vistorias",
 );
 
-// Auto-criar colunas de assinatura se não existirem
-async function ensureSignatureColumns() {
-  const db = await getDb();
-  if (!db) return;
-  const cols = [
-    "ALTER TABLE vistorias ADD COLUMN assinaturaTecnico TEXT NULL",
-    "ALTER TABLE vistorias ADD COLUMN assinaturaSolicitante TEXT NULL",
-  ];
-  for (const ddl of cols) {
-    try { await db.execute(sql.raw(ddl)); } catch { /* column may already exist */ }
-  }
-}
-ensureSignatureColumns();
-
 export const vistoriaRouter = router({
   list: vistoriaProcedure
     .input(z.object({ condominioId: z.number() }))

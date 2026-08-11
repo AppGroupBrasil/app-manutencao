@@ -7,19 +7,6 @@ import { getDb } from "../../db";
 import { nanoid } from "nanoid";
 import { proximoProtocolo } from "../../_core/protocolo";
 
-// Auto-criar colunas de assinatura se não existirem
-async function ensureSignatureColumns() {
-  const db = await getDb();
-  if (!db) return;
-  const cols = [
-    "ALTER TABLE ocorrencias ADD COLUMN assinaturaTecnico TEXT NULL",
-    "ALTER TABLE ocorrencias ADD COLUMN assinaturaSolicitante TEXT NULL",
-  ];
-  for (const ddl of cols) {
-    try { await db.execute(sql.raw(ddl)); } catch { /* column may already exist */ }
-  }
-}
-ensureSignatureColumns();
 import { generateFuncaoRapidaPDF } from "../../pdfFuncoesRapidas";
 import { 
   ocorrencias, 

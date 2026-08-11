@@ -1,8 +1,12 @@
 ﻿import { z } from "zod";
-import { router, protectedProcedure } from "../../_core/trpc";
+import { router, protectedProcedure, escopoProcedure } from "../../_core/trpc";
+import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { eq, and } from "drizzle-orm";
 import { valoresSalvos } from "../../../drizzle/schema";
+
+/** Rota por `id`: o valor precisa ser de uma organização do solicitante. */
+const valorProcedure = escopoProcedure(escopoPorRegistro({ id: direto(valoresSalvos) }));
 
 export const valoresSalvosRouter = router({
     list: protectedProcedure
@@ -106,7 +110,7 @@ export const valoresSalvosRouter = router({
         return { id: result.id, isNew: true };
       }),
 
-    delete: protectedProcedure
+    delete: valorProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
