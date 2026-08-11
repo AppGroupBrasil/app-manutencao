@@ -124,6 +124,35 @@ services:
           sleep 21600
         done
 
+  # ── Faxina semanal das fotos órfãs ──
+  #
+  # O upload grava a foto antes de o registro ser salvo: formulário abandonado
+  # deixa arquivo que ninguém mais alcança. A varredura só apaga o que nenhuma
+  # coluna do banco referencia e o que tem mais de 7 dias — foto recente pode
+  # estar num formulário ainda aberto.
+  limpeza:
+    image: app-manutencao:latest
+    container_name: app-manutencao-limpeza
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://manutencao:${DB_PASSWORD}@app-manutencao-db:5432/manutencao
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - coolify
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sleep 300
+        while true; do
+          node dist/limpar-imagens.js --apagar || echo "[limpeza] falhou"
+          sleep 604800
+        done
+
   # ── Backup diário do banco ──
   backup:
     image: postgres:16-alpine

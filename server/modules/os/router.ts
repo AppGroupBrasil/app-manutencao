@@ -61,9 +61,6 @@ const escopoOs = escopoPorRegistro(
     // Nestas, `id` e o registro filho e `ordemServicoId` ja garante o escopo.
     removeResponsavel: { id: via(osResponsaveis, "ordemServicoId", ordensServico) },
     removeMaterial: { id: via(osMateriais, "ordemServicoId", ordensServico) },
-    removeOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-    aprovarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
-    rejeitarOrcamento: { id: via(osOrcamentos, "ordemServicoId", ordensServico) },
     removeImagem: { id: via(osImagens, "ordemServicoId", ordensServico) },
   },
 );
@@ -1000,7 +997,9 @@ export const osRouter = router({
      * não-final e deixa o motivo na linha do tempo — reabertura sem motivo é a
      * que ninguém consegue explicar depois.
      */
-    reabrir: osProcedure
+    // Reabrir desfaz o fechamento de uma ordem: é decisão de quem responde pela
+    // unidade, não de quem executa. `osConfigProcedure` não aceita funcionário.
+    reabrir: osConfigProcedure
       .input(z.object({ id: z.number(), motivo: z.string().min(3).max(500) }))
       .mutation(async ({ input, ctx }) => {
         const autor = autorDaRequisicao(ctx);
@@ -1153,115 +1152,6 @@ export const osRouter = router({
           ordemServicoId: input.ordemServicoId,
           tipo: "material_removido",
           descricao: `Material removido: ${mat?.nome || "Desconhecido"}`,
-          usuarioId: autor.userId,
-          usuarioNome: autor.nome,
-        }).returning();
-        
-        return { success: true };
-      }),
-
-    // ========== ORÇAMENTOS ==========
-    addOrcamento: osProcedure
-      .input(z.object({
-        ordemServicoId: z.number(),
-        fornecedor: z.string().optional(),
-        descricao: z.string().optional(),
-        valor: z.string(),
-        dataValidade: z.string().optional(),
-        anexoUrl: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const autor = autorDaRequisicao(ctx);
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        
-        const [result] = await db.insert(osOrcamentos).values({
-          ordemServicoId: input.ordemServicoId,
-          fornecedor: input.fornecedor,
-          descricao: input.descricao,
-          valor: input.valor,
-          dataValidade: input.dataValidade ? new Date(input.dataValidade) : undefined,
-          anexoUrl: input.anexoUrl,
-        }).returning();
-        
-        await db.insert(osTimeline).values({
-          ordemServicoId: input.ordemServicoId,
-          tipo: "orcamento_adicionado",
-          descricao: `Orçamento adicionado: R$ ${input.valor} - ${input.fornecedor || "Sem fornecedor"}`,
-          usuarioId: autor.userId,
-          usuarioNome: autor.nome,
-        });
-        
-        return { id: result.id, success: true };
-      }),
-    
-    aprovarOrcamento: osProcedure
-      .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        const autor = autorDaRequisicao(ctx);
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        
-        await db.update(osOrcamentos)
-          .set({
-            aprovado: true,
-            aprovadoPor: autor.userId,
-            dataAprovacao: new Date(),
-          })
-          .where(eq(osOrcamentos.id, input.id));
-        
-        const [orc] = await db.select().from(osOrcamentos)
-          .where(eq(osOrcamentos.id, input.id));
-        
-        await db.insert(osTimeline).values({
-          ordemServicoId: input.ordemServicoId,
-          tipo: "orcamento_aprovado",
-          descricao: `Orçamento aprovado: R$ ${orc?.valor} - ${orc?.fornecedor || "Sem fornecedor"}`,
-          usuarioId: autor.userId,
-          usuarioNome: autor.nome,
-        }).returning();
-        
-        return { success: true };
-      }),
-    
-    rejeitarOrcamento: osProcedure
-      .input(z.object({ id: z.number(), ordemServicoId: z.number(), motivo: z.string().optional() }))
-      .mutation(async ({ input, ctx }) => {
-        const autor = autorDaRequisicao(ctx);
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        
-        await db.update(osOrcamentos)
-          .set({
-            aprovado: false,
-            motivoRejeicao: input.motivo,
-          })
-          .where(eq(osOrcamentos.id, input.id));
-        
-        await db.insert(osTimeline).values({
-          ordemServicoId: input.ordemServicoId,
-          tipo: "orcamento_rejeitado",
-          descricao: `Orçamento rejeitado${input.motivo ? `: ${input.motivo}` : ""}`,
-          usuarioId: autor.userId,
-          usuarioNome: autor.nome,
-        });
-        
-        return { success: true };
-      }),
-
-    removeOrcamento: osProcedure
-      .input(z.object({ id: z.number(), ordemServicoId: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        const autor = autorDaRequisicao(ctx);
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        
-        await db.delete(osOrcamentos).where(eq(osOrcamentos.id, input.id));
-        
-        await db.insert(osTimeline).values({
-          ordemServicoId: input.ordemServicoId,
-          tipo: "orcamento_removido",
-          descricao: "Orçamento removido",
           usuarioId: autor.userId,
           usuarioNome: autor.nome,
         }).returning();

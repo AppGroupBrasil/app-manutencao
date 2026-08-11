@@ -39,9 +39,6 @@ const FuncionarioRecuperarSenha = lazy(() => import("./pages/FuncionarioRecupera
 const FuncionarioRedefinirSenha = lazy(() => import("./pages/FuncionarioRedefinirSenha"));
 
 // Public/shared pages — lazy loaded
-const MagazineViewer = lazy(() => import("./pages/MagazineViewer"));
-const Templates = lazy(() => import("./pages/Templates"));
-const TransitionEffects = lazy(() => import("./pages/TransitionEffects"));
 const Votar = lazy(() => import("./pages/Votar"));
 const ItemCompartilhadoPage = lazy(() => import("./pages/ItemCompartilhadoPage").then(m => ({ default: m.ItemCompartilhadoPage })));
 const Contrato = lazy(() => import("./pages/Contrato"));
@@ -49,8 +46,6 @@ const Apresentacao = lazy(() => import("./pages/Apresentacao"));
 const CadastroMorador = lazy(() => import("./pages/CadastroMorador"));
 const AssembleiaPublica = lazy(() => import("./pages/AssembleiaPublica"));
 const NotificacaoPublicaPage = lazy(() => import("./pages/NotificacaoPublicaPage"));
-const LandingApp = lazy(() => import("./pages/LandingApp"));
-const LandingRevista = lazy(() => import("./pages/LandingRevista"));
 const LandingRelatorio = lazy(() => import("./pages/LandingRelatorio"));
 const MoradorLogin = lazy(() => import("./pages/MoradorLogin"));
 const MoradorDashboard = lazy(() => import("./pages/MoradorDashboard"));
@@ -61,10 +56,7 @@ const MembroEsqueciSenha = lazy(() => import("./pages/MembroEsqueciSenha"));
 const MembroRedefinirSenha = lazy(() => import("./pages/MembroRedefinirSenha"));
 const CompartilhadoPage = lazy(() => import("./pages/CompartilhadoPage"));
 const TimelineVisualizarPage = lazy(() => import("./pages/TimelineVisualizarPage"));
-const AppViewer = lazy(() => import("./pages/AppViewer"));
-const AppView = lazy(() => import("./pages/AppView"));
 const PublicoView = lazy(() => import("./pages/PublicoView"));
-const ItemRevistaPublico = lazy(() => import("./pages/ItemRevistaPublico"));
 const FuncaoPublicaFormPage = lazy(() => import("./pages/FuncaoPublicaFormPage"));
 const TermosDeUsoPage = lazy(() => import("./pages/TermosDeUsoPage"));
 const PoliticaPrivacidadePage = lazy(() => import("./pages/PoliticaPrivacidadePage"));
@@ -174,17 +166,9 @@ function Router() {
       <Route path="/privacidade" component={PoliticaPrivacidadePage} />
 
       {/* ===== ROTAS PÚBLICAS ===== */}
-      <Route path="/templates" component={Templates} />
       <Route path="/contrato" component={Contrato} />
       <Route path="/apresentacao" component={Apresentacao} />
-      <Route path="/transicoes" component={TransitionEffects} />
-      <Route path="/app" component={LandingApp} />
-      <Route path="/revista" component={LandingRevista} />
       <Route path="/relatorio" component={LandingRelatorio} />
-      <Route path="/revista/:shareLink/item/:tipo/:itemId" component={ItemRevistaPublico} />
-      <Route path="/revista/:shareLink" component={MagazineViewer} />
-      <Route path="/app/:shareLink" component={AppViewer} />
-      <Route path="/meuapp/:id" component={AppView} />
 
       {/* Votação */}
       <Route path="/votar/:id" component={Votar} />

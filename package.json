@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx watch server/_core/index.ts",
-    "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:./vite --external:./vite.js && pnpm build:migrar && pnpm build:admin && pnpm build:senha && pnpm build:email",
+    "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:./vite --external:./vite.js && pnpm build:migrar && pnpm build:admin && pnpm build:senha && pnpm build:email && pnpm build:limpeza",
     "build:migrar": "esbuild scripts/db/migrar.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/migrar.js",
     "build:admin": "esbuild scripts/db/criar-admin-plataforma.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/admin-plataforma.js",
     "build:email": "esbuild scripts/testar-email.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/testar-email.js",
@@ -27,7 +27,9 @@
     "cap:build:android": "pnpm build:client && npx cap sync android",
     "cap:build:ios": "pnpm build:client && npx cap sync ios",
     "cap:open:android": "npx cap open android",
-    "cap:open:ios": "npx cap open ios"
+    "cap:open:ios": "npx cap open ios",
+    "db:limpar-imagens": "tsx scripts/db/limpar-imagens-orfas.ts",
+    "build:limpeza": "esbuild scripts/db/limpar-imagens-orfas.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/limpar-imagens.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

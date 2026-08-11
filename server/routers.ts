@@ -87,8 +87,6 @@ import { qrcodeRouter } from "./modules/qrcode/router";
 
 export const appRouter = router({
   system: systemRouter,
-  appAcesso: appAcessoRouter,
-  recuperacaoSenha: recuperacaoSenhaRouter,
   
   auth: authRouter,
 
@@ -98,7 +96,6 @@ export const appRouter = router({
   registroPublico: registroPublicoRouter,
 
     // ==================== REVISTAS ====================
-  revista: revistaRouter,
 
   // ==================== AVISOS ====================
   aviso: avisoRouter,
@@ -107,7 +104,6 @@ export const appRouter = router({
   funcionario: funcionarioRouter,
 
   // ==================== EVENTOS ====================
-  evento: eventoRouter,
 
   // ==================== VOTAÇÕES ====================
   votacao: votacaoRouter,
@@ -122,16 +118,13 @@ export const appRouter = router({
   achadoPerdido: achadoPerdidoRouter,
 
   // ==================== APPS PERSONALIZADOS ====================
-  apps: appsRouter,
 
   // ==================== MORADORES ====================
   morador: moradorRouter,
 
   // ==================== TELEFONES ÚTEIS ====================
-  telefone: telefoneRouter,
 
   // ==================== LINKS ÚTEIS ====================
-  link: linkRouter,
 
   // ==================== PUBLICIDADE ====================
   publicidade: publicidadeRouter,
@@ -143,7 +136,6 @@ export const appRouter = router({
   notificacao: notificacaoRouter,
 
   // ==================== PREFERÊNCIAS DE NOTIFICAÇÃO ====================
-  preferenciaNotificacao: preferenciaNotificacaoRouter,
 
   // ==================== REALIZAÇÕES ====================
   realizacao: realizacaoRouter,
@@ -155,53 +147,38 @@ export const appRouter = router({
   aquisicao: aquisicaoRouter,
 
   // ==================== ANTES E DEPOIS ====================
-  antesDepois: antesDepoisRouter,
 
 
 
   // ==================== CLASSIFICADOS (CRUD COMPLETO) ====================
-  classificadoCrud: classificadoCrudRouter,
 
   // ==================== ANUNCIANTES ====================
-  anunciante: anuncianteRouter,
 
   // ==================== ANÚCIOS ====================
-  anuncio: anuncioRouter,
 
   // ==================== VAGAS DE ESTACIONAMENTO ====================
-  vagaEstacionamento: vagaEstacionamentoRouter,
 
   // ==================== MODERAÇÃO DE CLASSIFICADOS ====================
-  moderacao: moderacaoRouter,
 
   // ==================== COMUNICADOS ====================
-  comunicado: comunicadoRouter,
 
   // ==================== GALERIA DE FOTOS ====================
   album: albumRouter,
 
-  foto: fotoRouter,
 
   // ==================== DICAS DE SEGURANÇA ====================
-  seguranca: segurancaRouter,
 
   // ==================== REGRAS E NORMAS ====================
-  regras: regrasInstRouter,
 
   // ==================== IMAGENS DE REALIZAÇÕES ====================
-  imagemRealizacao: imagemRealizacaoRouter,
 
   // ==================== IMAGENS DE MELHORIAS ====================
-  imagemMelhoria: imagemMelhoriaRouter,
 
   // ==================== IMAGENS DE AQUISIÇÕES ====================
-  imagemAquisicao: imagemAquisicaoRouter,
 
   // ==================== IMAGENS DE ACHADOS E PERDIDOS ====================
-  imagemAchadoPerdido: imagemAchadoPerdidoRouter,
 
   // ==================== IMAGENS E ANEXOS DE VAGAS ====================
-  imagemVaga: imagemVagaRouter,
 
   // ==================== FAVORITOS ====================
   favorito: favoritoRouter,
@@ -219,13 +196,11 @@ export const appRouter = router({
   checklist: checklistRouter,
 
   // Painel de Controlo - Estatísticas Agregadas
-  painelControlo: painelControloRouter,
 
   // ==================== MEMBROS DA EQUIPE ====================
   membroEquipe: equipeRouter,
 
   // ==================== EQUIPES (Grupos de Funcionários) ====================
-  equipes: equipesRouter,
 
   // ==================== LINKS COMPARTILHÁVEIS ====================
   linkCompartilhavel: linkCompartilhavelRouter,
@@ -237,49 +212,35 @@ export const appRouter = router({
   comentario: comentarioRouter,
 
   // ==================== DESTAQUES ====================
-  destaque: destaqueRouter,
 
   // ==================== PÁGINAS 100% PERSONALIZADAS ====================
-  paginaCustom: paginaCustomRouter,
 
   // ==================== AGENDA DE VENCIMENTOS ====================
   vencimentos: financeiroRouter.vencimentos,
 
   // ==================== E-MAILS DE VENCIMENTOS ====================
-  vencimentoEmails: financeiroRouter.vencimentoEmails,
 
   // ==================== NOTIFICAÇÕES DE VENCIMENTOS ====================
-  vencimentoNotificacoes: financeiroRouter.vencimentoNotificacoes,
 
   // ==================== DISPARO AUTOMÁTICO DE E-MAILS ====================
-  alertasAutomaticos: financeiroRouter.alertasAutomaticos,
 
   // ==================== RELATÓRIO DE VENCIMENTOS EM PDF ====================
-  vencimentosRelatorio: financeiroRouter.vencimentosRelatorio,
 
   // Dashboard de Vencimentos com gráficos
-  vencimentosDashboard: financeiroRouter.vencimentosDashboard,
 
   // ==================== NOTIFICAÇÕES PUSH ====================
-  pushNotifications: pushNotificationsRouter,
 
   // ==================== LEMBRETES AGENDADOS ====================
-  lembretes: lembreteRouter,
 
   // ==================== HISTÓRICO DE NOTIFICAÇÕES ====================
-  historicoNotificacoes: historicoNotificacoesRouter,
 
   // ==================== CONFIGURAÇÕES DE EMAIL ====================
-  configEmail: configEmailRouter,
   
   // ==================== CONFIGURAÇÕES PUSH (VAPID) ====================
-  configPush: configPushRouter,
   
   // ==================== TEMPLATES DE NOTIFICAÇÃO ====================
-  templatesNotificacao: templatesNotificacaoRouter,
 
   // ==================== TIPOS DE INFRAÇÃO ====================
-  tiposInfracao: tiposInfracaoRouter,
 
   // ==================== NOTIFICAÇÕES DE INFRAÇÃO ====================
   notificacoesInfracao: notificacoesInfracaoRouter,
@@ -288,7 +249,6 @@ export const appRouter = router({
   respostasInfracao: respostasInfracaoRouter,
   
   // ==================== RELATÓRIO DE INFRAÇÕES ====================
-  relatorioInfracoes: relatorioInfracoesRouter,
 
   // ==================== FUNÇÕES POR CONDOMÍNIO (ADMIN) ====================
   funcoesCondominio: funcoesCondominioRouter,
@@ -297,7 +257,6 @@ export const appRouter = router({
   valoresSalvos: valoresSalvosRouter,
 
   // Router de Relatório Consolidado Profissional
-  relatorioConsolidado: relatorioConsolidadoRouter,
 
   // ==================== ORDENS DE SERVIÇO ====================
   ordensServico: osRouter,
@@ -312,7 +271,6 @@ export const appRouter = router({
   dicaSeguranca: dicasSegurancaRouter,
 
   // ==================== INSCRIÇÃO REVISTA ====================
-  inscricaoRevista: inscricaoRevistaRouter,
 
   // ==================== TAREFAS SIMPLES ====================
   tarefasSimples: tarefasSimplesRouter,
@@ -325,32 +283,25 @@ export const appRouter = router({
   camposRapidosTemplates: camposRapidosTemplatesRouter,
 
   // ==================== ADMINISTRAÇÃO DE USUÁRIOS ====================
-  adminUsuarios: adminUsuariosRouter,
 
   // ==================== HISTÓRICO DE ATIVIDADES ====================
-  historicoAtividades: historicoAtividadesRouter,
 
   timeline: timelineRouter,
 
   // ==================== TEMPLATES DE CHECKLIST ====================
   checklistTemplate: checklistTemplateRouter,
   // ==================== MÓDULO FINANCEIRO (VENCIMENTOS) ====================
-  financeiro: financeiroRouter,
 
   // ==================== CONFIG FINANCEIRO (ADMIN - PAGAMENTOS) ====================
-  adminFinanceiro: adminFinanceiroRouter,
 
   // ==================== CONFIGURAÇÃO DE CAMPOS POR FUNÇÃO ====================
   fieldSettings: fieldSettingsRouter,
 
   // ==================== LEITURA DE MEDIDORES ====================
-  leituraMedidores: leituraMedidoresRouter,
 
   // ==================== CONTROLE DE PRAGAS ====================
-  controlePragas: controlePragasRouter,
 
   // ==================== JARDINAGEM ====================
-  jardinagem: jardinagemRouter,
 
   // ==================== MODELOS DE CHECKLIST ====================
   // Permite salvar checklists como modelos/templates para reutilização
@@ -361,13 +312,10 @@ export const appRouter = router({
   registrosPersonalizados: registrosPersonalizadosRouter,
 
   // ==================== PERMISSÕES DE MÓDULOS POR FUNCIONÁRIO ====================
-  permissoes: permissoesRouter,
 
   // ==================== TEMPLATES POR SEGMENTO ====================
-  templatesCategorias: templatesCategoriasRouter,
 
   // ==================== HIERARQUIA DE USUÁRIOS ====================
-  hierarquia: hierarquiaRouter,
 
   // Gestores das unidades (users + usuario_condominios), com escopo de tenant.
   gestores: gestoresRouter,

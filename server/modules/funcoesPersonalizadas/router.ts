@@ -23,7 +23,6 @@ export const CAMPOS_DISPONIVEIS = [
   { key: "responsavelId", label: "Responsável", descricao: "Membro da equipe responsável", tipo: "select" },
   { key: "itensChecklist", label: "Checklist", descricao: "Lista de itens a verificar", tipo: "checklist" },
   { key: "prazoConclusao", label: "Prazo de Conclusão", descricao: "Data limite para conclusão", tipo: "data" },
-  { key: "custoEstimado", label: "Custo Estimado", descricao: "Valor estimado (R$)", tipo: "moeda" },
   { key: "nivelUrgencia", label: "Nível de Urgência", descricao: "Baixo, Médio, Alto, Crítico", tipo: "select" },
   { key: "anexos", label: "Anexos", descricao: "Documentos e arquivos anexos", tipo: "arquivos" },
   { key: "qrcode", label: "QR Code", descricao: "Leitura de QR Code", tipo: "qrcode" },

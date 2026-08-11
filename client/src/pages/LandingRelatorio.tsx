@@ -123,11 +123,6 @@ export default function LandingRelatorio() {
                     Criar Meu Relatório
                   </Button>
                 </Link>
-                <Link href="/demo-layouts">
-                  <Button size="lg" variant="outline">
-                    Ver Demonstração
-                  </Button>
-                </Link>
               </div>
             </div>
             

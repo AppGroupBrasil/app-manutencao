@@ -95,9 +95,12 @@ function lerArquivoBase64(arquivo: File): Promise<string> {
 export function OsDetalhe({
   ordemServicoId,
   condominioId,
+  podeReabrir = true,
 }: {
   ordemServicoId: number;
   condominioId: number;
+  /** Reabrir é do gestor da unidade; o servidor recusa o funcionário. */
+  podeReabrir?: boolean;
 }) {
   const utils = trpc.useUtils();
 
@@ -357,7 +360,7 @@ export function OsDetalhe({
           {os.dataFim ? `Finalizada em ${formatarDataHora(os.dataFim)}` : "Finalizar serviço"}
         </Button>
         {/* Só aparece depois de encerrada; o motivo fica na linha do tempo. */}
-        {os.dataFim && (
+        {os.dataFim && podeReabrir && (
           <Button
             variant="outline"
             size="sm"

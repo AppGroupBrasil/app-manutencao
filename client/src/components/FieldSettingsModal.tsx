@@ -83,8 +83,6 @@ const fieldIcons: Record<string, React.ElementType> = {
   itensChecklist: ListChecks,
   // Novos campos
   prazo_conclusao: Calendar,
-  custo_estimado: DollarSign,
-  custo_real: DollarSign,
   fornecedor: Building2,
   equipamento_ativo: Briefcase,
   garantia: ShieldCheck,

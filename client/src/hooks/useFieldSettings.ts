@@ -81,7 +81,6 @@ export function useFieldSettings({
         assinatura_digital: false,
         anexos: false,
         nivel_urgencia: false,
-        custo_estimado: false,
       };
       return checklistDefaults[fieldKey] ?? false;
     }
@@ -122,8 +121,6 @@ export function useFieldSettings({
         edicao_imagem: false,
         geolocalizacao: false,
         prazo_conclusao: false,
-        custo_estimado: false,
-        custo_real: false,
         nivel_urgencia: false,
         anexos: false,
         qrcode: false,
@@ -152,8 +149,6 @@ export function useFieldSettings({
         controle_tempo: false,
         geolocalizacao: false,
         prazo_conclusao: false,
-        custo_estimado: false,
-        custo_real: false,
         nivel_urgencia: true,
         anexos: false,
         qrcode: false,

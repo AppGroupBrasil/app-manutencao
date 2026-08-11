@@ -140,6 +140,7 @@ export function ConteudoOrdensServico({
   onVoltar,
   podeCriar = true,
   podeExcluir = true,
+  ehGestor = true,
 }: {
   condominioId: number;
   osInicial?: number;
@@ -148,6 +149,8 @@ export function ConteudoOrdensServico({
   podeCriar?: boolean;
   /** Excluir e permissao a parte: o gestor libera por funcionario. */
   podeExcluir?: boolean;
+  /** Falso no portal do funcionário: esconde o que é decisão do gestor. */
+  ehGestor?: boolean;
 }) {
   const utils = trpc.useUtils();
   const v = useVocabulario();
@@ -740,7 +743,7 @@ export function ConteudoOrdensServico({
             <DialogTitle>{tituloDetalhe}</DialogTitle>
           </DialogHeader>
           {detalheId !== null && (
-            <OsDetalhe ordemServicoId={detalheId} condominioId={condominioId} />
+            <OsDetalhe ordemServicoId={detalheId} condominioId={condominioId} podeReabrir={ehGestor} />
           )}
         </DialogContent>
       </Dialog>

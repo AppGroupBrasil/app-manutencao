@@ -67,7 +67,6 @@ const CAMPOS_INFO: Record<string, { label: string; tipo: string; descricao: stri
   responsavelId: { label: "Responsável", tipo: "select", descricao: "Membro da equipe responsável" },
   itensChecklist: { label: "Checklist", tipo: "checklist", descricao: "Lista de itens a verificar" },
   prazoConclusao: { label: "Prazo de Conclusão", tipo: "data", descricao: "Data limite para conclusão" },
-  custoEstimado: { label: "Custo Estimado", tipo: "moeda", descricao: "Valor estimado (R$)" },
   nivelUrgencia: { label: "Nível de Urgência", tipo: "select", descricao: "Baixo, Médio, Alto, Crítico" },
   anexos: { label: "Anexos", tipo: "arquivos", descricao: "Documentos e arquivos anexos" },
   qrcode: { label: "QR Code", tipo: "qrcode", descricao: "Leitura de QR Code" },
@@ -560,18 +559,6 @@ export default function FuncaoPublicaFormPage() {
         <div key={campoKey} className="space-y-2">
           <Label className="flex items-center gap-1"><CalendarIcon className="w-4 h-4" /> {info.label} {requiredMark}</Label>
           <Input type="date" value={formValues[campoKey] || ""} onChange={e => setFormValues(prev => ({ ...prev, [campoKey]: e.target.value }))} />
-        </div>
-      );
-    }
-
-    if (info.tipo === "moeda") {
-      return (
-        <div key={campoKey} className="space-y-2">
-          <Label className="flex items-center gap-1"><DollarSign className="w-4 h-4" /> {info.label} {requiredMark}</Label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
-            <Input type="number" step="0.01" min="0" value={formValues[campoKey] || ""} onChange={e => setFormValues(prev => ({ ...prev, [campoKey]: e.target.value }))} className="pl-10" placeholder="0,00" />
-          </div>
         </div>
       );
     }

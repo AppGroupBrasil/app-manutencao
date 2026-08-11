@@ -39,7 +39,6 @@ import {
   BookmarkPlus,
   FolderOpen,
   CalendarClock,
-  DollarSign,
   Gauge,
   Paperclip,
   QrCode,
@@ -345,7 +344,6 @@ export function TarefasSimplesModal({
 
   // Estados para campos extras de manutenção
   const [prazoConclusao, setPrazoConclusao] = useState("");
-  const [custoEstimado, setCustoEstimado] = useState("");
   const [nivelUrgencia, setNivelUrgencia] = useState<"baixo" | "medio" | "alto" | "critico">("medio");
   const [anexos, setAnexos] = useState<{ nome: string; url: string }[]>([]);
   const [qrcode, setQrcode] = useState("");
@@ -700,7 +698,6 @@ export function TarefasSimplesModal({
       // Campos extras comuns
       const camposExtras = {
         prazoConclusao: prazoConclusao || undefined,
-        custoEstimado: custoEstimado || undefined,
         nivelUrgencia: nivelUrgencia || undefined,
         anexos: anexos.length > 0 ? anexos : undefined,
         qrcode: qrcode || undefined,
@@ -759,7 +756,6 @@ export function TarefasSimplesModal({
         setPrioridade("media");
         setResponsavelId("");
         setPrazoConclusao("");
-        setCustoEstimado("");
         setNivelUrgencia("medio");
         setAnexos([]);
         setQrcode("");
@@ -1065,10 +1061,10 @@ export function TarefasSimplesModal({
           </div>
           )}
 
-          {/* Prazo de Conclusão e Custo Estimado */}
-          {(isFieldEnabled("prazo_conclusao") || isFieldEnabled("custo_estimado")) && (
+          {/* Prazo de conclusão. O sistema não trabalha com valores. */}
+          {isFieldEnabled("prazo_conclusao") && (
           <div className="grid grid-cols-2 gap-4">
-            {isFieldEnabled("prazo_conclusao") && (
+            {(
             <div className="space-y-2">
               <Label className="text-gray-700 font-medium flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-orange-500" />
@@ -1078,21 +1074,6 @@ export function TarefasSimplesModal({
                 type="date"
                 value={prazoConclusao}
                 onChange={(e) => setPrazoConclusao(e.target.value)}
-                className="border-gray-200 focus:border-orange-400 focus:ring-orange-400"
-              />
-            </div>
-            )}
-            {isFieldEnabled("custo_estimado") && (
-            <div className="space-y-2">
-              <Label className="text-gray-700 font-medium flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-green-500" />
-                Custo Estimado
-              </Label>
-              <Input
-                type="text"
-                placeholder="R$ 0,00"
-                value={custoEstimado}
-                onChange={(e) => setCustoEstimado(e.target.value)}
                 className="border-gray-200 focus:border-orange-400 focus:ring-orange-400"
               />
             </div>

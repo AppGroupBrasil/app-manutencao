@@ -326,6 +326,7 @@ export default function FuncionarioDashboard() {
             condominioId={activeCondominioId}
             podeCriar={funcoesQueCria.includes(activeSection)}
             podeExcluir={funcoesQueExclui.includes(activeSection)}
+            ehGestor={false}
           />
         ) : activeSection === "qrcode" ? (
           <ConteudoQrCodes
