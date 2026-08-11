@@ -6,9 +6,18 @@ import { sendBulkEmail } from "./email";
 
 // Chave secreta para autenticar chamadas do cron job
 const CRON_SECRET = process.env.CRON_SECRET;
-if (!CRON_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error('CRON_SECRET environment variable is required in production');
+const EM_PRODUCAO = process.env.NODE_ENV === 'production';
+
+// Sem chave em produção, o disparo de alertas fica desligado — antes daqui isto
+// era um `throw` na importação, e uma variável esquecida no servidor derrubava o
+// sistema inteiro no boot em vez de desligar só os alertas.
+if (!CRON_SECRET && EM_PRODUCAO) {
+  console.error(
+    '[CRON] CRON_SECRET ausente: o processamento de alertas de vencimento fica ' +
+      'desligado até a variável ser definida no servidor.',
+  );
 }
+
 const DEV_CRON_SECRET = 'dev-cron-secret'; // Fallback apenas para desenvolvimento local
 
 export function registerCronRoutes(app: Express) {
@@ -19,8 +28,15 @@ export function registerCronRoutes(app: Express) {
       // Verificar autenticação via header ou query param
       const authHeader = req.headers["x-cron-secret"] as string;
       const querySecret = req.query.secret as string;
+
+      if (!CRON_SECRET && EM_PRODUCAO) {
+        return res.status(503).json({
+          error: "Processamento de alertas desligado: CRON_SECRET não configurado.",
+        });
+      }
+
       const effectiveSecret = CRON_SECRET || DEV_CRON_SECRET;
-      
+
       if (authHeader !== effectiveSecret && querySecret !== effectiveSecret) {
         console.log("[CRON] Tentativa de acesso não autorizada");
         return res.status(401).json({ error: "Não autorizado" });
