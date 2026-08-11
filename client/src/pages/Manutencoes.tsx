@@ -792,15 +792,17 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
 
   return (
     <Dialog open onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+      {/* Cabeçalho e rodapé fixos, miolo rolando: com o diálogo inteiro
+          rolando, os botões ficavam presos no fim de um formulário longo. */}
+      <DialogContent className="flex max-h-[92vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
         {isLoading || !item || !rascunho ? (
-          <div className="py-16 text-center">
+          <div className="px-6 py-16 text-center">
             <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
           </div>
         ) : (
           <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+            <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
+              <DialogTitle className="flex items-center gap-2 pr-8">
                 <span className="font-mono text-sm text-slate-500">#{item.protocolo}</span>
                 {item.titulo}
               </DialogTitle>
@@ -809,7 +811,7 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4">
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-4">
               <div className="flex flex-wrap gap-2">
                 {STATUS.filter((s) => s !== rascunho.status).slice(0, 4).map((s) => (
                   <Button
@@ -961,9 +963,13 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
               </div>
             </div>
 
-            <DialogFooter className="flex-wrap gap-2">
+            {/* Linha em vez de coluna invertida: com `flex-col-reverse` mais
+                quebra, os botões viravam colunas por cima do histórico e o
+                Salvar saía da tela. */}
+            <DialogFooter className="shrink-0 flex-row flex-wrap items-center justify-end gap-2 border-t bg-background px-6 py-3">
               <Button
                 variant="ghost"
+                size="sm"
                 className="text-red-600 hover:text-red-700 mr-auto"
                 disabled={remover.isPending}
                 onClick={() => {
@@ -974,14 +980,14 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
               >
                 <Trash2 className="w-4 h-4 mr-1" /> Excluir
               </Button>
-              <Button variant="outline" onClick={() => recarregar()}>
+              <Button variant="outline" size="sm" onClick={() => recarregar()}>
                 <RefreshCw className="w-4 h-4 mr-1" /> Atualizar
               </Button>
-              <Button variant="outline" disabled={gerarPdf.isPending} onClick={() => gerarPdf.mutate({ id })}>
+              <Button variant="outline" size="sm" disabled={gerarPdf.isPending} onClick={() => gerarPdf.mutate({ id })}>
                 {gerarPdf.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FileDown className="w-4 h-4 mr-1" />}
                 PDF
               </Button>
-              <Button onClick={salvar} disabled={atualizar.isPending}>
+              <Button size="sm" onClick={salvar} disabled={atualizar.isPending}>
                 {atualizar.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando…</> : "Salvar"}
               </Button>
             </DialogFooter>

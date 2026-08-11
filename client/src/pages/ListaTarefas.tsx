@@ -698,7 +698,9 @@ export function ConteudoListaTarefas({
                         <span>{daTarefa.length} execução(ões)</span>
                       </div>
 
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                      {/* Sem quebra de linha, a fileira de ações passava da
+                          largura do cartão e sumia da tela no celular. */}
+                      <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
                         <Button
                           variant="outline"
                           size="sm"

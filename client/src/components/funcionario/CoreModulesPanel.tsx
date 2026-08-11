@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { BotaoQrCode } from "@/components/BotaoQrCode";
-import { AlertTriangle, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, MapPin, Printer, Search, Wrench, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, MapPin, Printer, Search, Trash2, Wrench, X } from "lucide-react";
 
 type CoreSection = "checklists" | "manutencoes" | "ocorrencias" | "vistorias";
 
@@ -58,6 +58,9 @@ interface SectionLayoutProps {
   /** Marca o registro como finalizado. */
   onFinalizar?: (id: number) => void;
   finalizando?: boolean;
+  /** Apaga o registro; sem isto a lixeira não aparece. */
+  onExcluir?: (id: number) => void;
+  excluindo?: boolean;
 }
 
 interface FormValues {
@@ -178,6 +181,8 @@ function SectionLayout({
   baixandoPdf,
   onFinalizar,
   finalizando,
+  onExcluir,
+  excluindo,
 }: Readonly<SectionLayoutProps>) {
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -304,7 +309,7 @@ function SectionLayout({
 
             {/* Mesmas ações da ordem de serviço: finalizar, relatório, QR e
                 compartilhamento. */}
-            {(onBaixarPdf || condominioId || onFinalizar) && (
+            {(onBaixarPdf || condominioId || onFinalizar || onExcluir) && (
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
                 {onFinalizar && !ESTADOS_CONCLUIDOS.includes(item.status ?? "") && (
                   <Button
@@ -345,6 +350,26 @@ function SectionLayout({
                     rotulo="Compartilhar"
                   />
                 ) : null}
+                {onExcluir && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                    disabled={excluindo}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Excluir "${item.titulo}" (protocolo #${item.protocolo})? Fotos e histórico vão junto.`,
+                        )
+                      ) {
+                        onExcluir(item.id);
+                      }
+                    }}
+                    aria-label={`Excluir ${item.titulo}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -532,6 +557,14 @@ function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: 
     },
     onError: (error) => toast.error(error.message || "Erro ao finalizar"),
   });
+  const excluir = trpc.checklist.delete.useMutation({
+    onSuccess: async () => {
+      await utils.checklist.listWithDetails.invalidate({ condominioId });
+      await utils.checklist.list.invalidate({ condominioId });
+      toast.success("Registro excluído.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao excluir"),
+  });
   const storageKey = `checklist_saved_titles_${condominioId}`;
   const [rememberTitle, setRememberTitle] = useState(false);
   const [savedTitles, setSavedTitles] = useState<string[]>(() => {
@@ -580,6 +613,8 @@ function ChecklistSection({ condominioId, podeCriar }: Readonly<{ condominioId: 
       baixandoPdf={gerarPdf.isPending}
       onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
       finalizando={finalizar.isPending}
+      onExcluir={podeCriar ? (id) => excluir.mutate({ id }) : undefined}
+      excluindo={excluir.isPending}
       isSubmitting={createMutation.isPending}
       rememberTitleEnabled
       rememberTitleChecked={rememberTitle}
@@ -621,6 +656,14 @@ function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId:
     },
     onError: (error) => toast.error(error.message || "Erro ao finalizar"),
   });
+  const excluir = trpc.manutencao.delete.useMutation({
+    onSuccess: async () => {
+      await utils.manutencao.listWithDetails.invalidate({ condominioId });
+      await utils.manutencao.list.invalidate({ condominioId });
+      toast.success("Registro excluído.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao excluir"),
+  });
   const addImagemManutencao = trpc.manutencao.addImagem.useMutation();
   const createMutation = trpc.manutencao.create.useMutation({
     onSuccess: async () => {
@@ -647,6 +690,8 @@ function ManutencaoSection({ condominioId, podeCriar }: Readonly<{ condominioId:
       baixandoPdf={gerarPdf.isPending}
       onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
       finalizando={finalizar.isPending}
+      onExcluir={podeCriar ? (id) => excluir.mutate({ id }) : undefined}
+      excluindo={excluir.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
@@ -672,6 +717,14 @@ function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId:
       toast.success("Registro finalizado.");
     },
     onError: (error) => toast.error(error.message || "Erro ao finalizar"),
+  });
+  const excluir = trpc.ocorrencia.delete.useMutation({
+    onSuccess: async () => {
+      await utils.ocorrencia.listWithDetails.invalidate({ condominioId });
+      await utils.ocorrencia.list.invalidate({ condominioId });
+      toast.success("Registro excluído.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao excluir"),
   });
   const addImagem = trpc.ocorrencia.addImagem.useMutation();
   const createMutation = trpc.ocorrencia.create.useMutation({
@@ -699,6 +752,8 @@ function OcorrenciaSection({ condominioId, podeCriar }: Readonly<{ condominioId:
       baixandoPdf={gerarPdf.isPending}
       onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
       finalizando={finalizar.isPending}
+      onExcluir={podeCriar ? (id) => excluir.mutate({ id }) : undefined}
+      excluindo={excluir.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
@@ -731,6 +786,14 @@ function VistoriaSection({ condominioId, podeCriar }: Readonly<{ condominioId: n
     },
     onError: (error) => toast.error(error.message || "Erro ao finalizar"),
   });
+  const excluir = trpc.vistoria.delete.useMutation({
+    onSuccess: async () => {
+      await utils.vistoria.listWithDetails.invalidate({ condominioId });
+      await utils.vistoria.list.invalidate({ condominioId });
+      toast.success("Registro excluído.");
+    },
+    onError: (error) => toast.error(error.message || "Erro ao excluir"),
+  });
   const addImagemVistoria = trpc.vistoria.addImagem.useMutation();
   const createMutation = trpc.vistoria.create.useMutation({
     onSuccess: async () => {
@@ -757,6 +820,8 @@ function VistoriaSection({ condominioId, podeCriar }: Readonly<{ condominioId: n
       baixandoPdf={gerarPdf.isPending}
       onFinalizar={(id) => finalizar.mutate({ id, status: "finalizada" })}
       finalizando={finalizar.isPending}
+      onExcluir={podeCriar ? (id) => excluir.mutate({ id }) : undefined}
+      excluindo={excluir.isPending}
       isSubmitting={createMutation.isPending}
       onSubmit={async (values) => {
         const { imagens, ...dados } = values;
