@@ -122,11 +122,6 @@ export default function LandingApp() {
                     Criar Meu App Agora
                   </Button>
                 </Link>
-                <Link href="/demo-layouts">
-                  <Button size="lg" variant="outline">
-                    Ver Demonstração
-                  </Button>
-                </Link>
               </div>
             </div>
             
