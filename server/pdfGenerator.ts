@@ -522,7 +522,7 @@ export async function generateRevistaPDF(revista: RevistaData): Promise<Buffer> 
   // ==================== MENSAGEM DO SÍNDICO ====================
   if (revista.mensagemSindico) {
     checkNewPage(80, true);
-    drawSectionHeader('Palavra do Síndico', colors.primary);
+    drawSectionHeader('Palavra do Gerente', colors.primary);
     
     // Card elegante
     drawCard(margin, yPos, contentWidth, 65, colors.primary);

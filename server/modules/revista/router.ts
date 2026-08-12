@@ -515,9 +515,9 @@ export const revistaRouter = router({
           condominioLogo: condominio.logoUrl || undefined,
           estilo: input.estilo || 'classico',
           mensagemSindico: mensagem ? {
-            titulo: mensagem.titulo || "Mensagem do Síndico",
+            titulo: mensagem.titulo || "Mensagem do Gerente",
             mensagem: mensagem.mensagem || "",
-            nomeSindico: mensagem.nomeSindico || "Síndico",
+            nomeSindico: mensagem.nomeSindico || "Gerente",
             fotoSindico: mensagem.fotoSindicoUrl || undefined,
             assinatura: mensagem.assinatura || undefined,
           } : undefined,

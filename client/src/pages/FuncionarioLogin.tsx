@@ -50,7 +50,7 @@ export default function FuncionarioLogin() {
             <Building2 className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Entrar no Sistema</h1>
-          <p className="text-slate-500 mt-1">Síndico, administrador ou funcionário</p>
+          <p className="text-slate-500 mt-1">Gerente, administrador ou funcionário</p>
         </div>
 
         {/* Card de Login */}

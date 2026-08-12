@@ -46,7 +46,7 @@ export default function SindicoLogin() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-4 shadow-lg">
             <Building2 className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">Acesso Síndico / Administrador</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Acesso Gerente / Administrador</h1>
           <p className="text-slate-500 mt-1">Entre com seu e-mail e senha</p>
         </div>
 
