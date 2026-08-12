@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
 import { PainelPendencias } from "@/components/PainelPendencias";
+import { CalendarioGeral } from "@/components/CalendarioGeral";
 import { Loader2, LogOut, Building2, Users, UserCog, Wrench, AlertTriangle, Briefcase } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
@@ -84,6 +85,10 @@ export default function AdminDashboard() {
                 : "Sem organização vinculada"}
           </p>
         </div>
+
+        {/* Em destaque, antes de tudo: o que vence e quando. Cada dia leva à
+            função de onde o item veio. */}
+        <CalendarioGeral condominioId={organizacaoAtiva?.id ?? 0} compacto />
 
         {/* Atalho único para o que espera resposta, de todas as funções. */}
         <PainelPendencias condominioId={organizacaoAtiva?.id ?? 0} />

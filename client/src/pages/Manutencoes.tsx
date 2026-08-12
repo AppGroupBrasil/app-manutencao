@@ -25,6 +25,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { BotaoQrCode } from "@/components/BotaoQrCode";
+import { useBuscaInicial } from "@/hooks/useBuscaInicial";
 import {
   ArrowLeft,
   CalendarDays,
@@ -169,7 +170,7 @@ export default function Manutencoes() {
     const salvo = Number(localStorage.getItem(TENANT_ATIVO_KEY));
     return Number.isFinite(salvo) && salvo > 0 ? salvo : null;
   });
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useState(useBuscaInicial());
   const [filtroStatus, setFiltroStatus] = useState<Status | "todos">("todos");
   const [novaAberta, setNovaAberta] = useState(false);
   const [detalheId, setDetalheId] = useState<number | null>(null);

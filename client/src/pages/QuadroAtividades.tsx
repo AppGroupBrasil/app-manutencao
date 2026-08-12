@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
+import { useBuscaInicial } from "@/hooks/useBuscaInicial";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -171,7 +172,7 @@ export function ConteudoQuadroAtividades({
   const habilitado = condominioId > 0;
 
   const [comoFunciona, setComoFunciona] = useState(false);
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useState(useBuscaInicial());
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
   const [filtroRotina, setFiltroRotina] = useState("todas");
   const [visao, setVisao] = useState<"kanban" | "lista">("kanban");

@@ -28,6 +28,8 @@ import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
 import { assegurarExclusaoFuncionario } from "../../_core/permissaoFuncionario";
+import { ehGestorMaster } from "../../_core/gestorMaster";
+import { TRPCError } from "@trpc/server";
 
 // Exige o modulo "ordens-servico" habilitado e valida que cada id recebido
 // pertence a organizacao da requisicao. `id` aponta para a OS por padrao; nas
@@ -166,6 +168,88 @@ async function notificarAberturaDeOS(
       .filter(Boolean)
       .join("\n"),
   });
+}
+
+/**
+ * Fluxo com prazo, programação e baixa confirmada.
+ *
+ * Cinco etapas fixas, na ordem: o gestor da unidade abre com data máxima
+ * (`solicitada`), o gerente marca o dia e a equipe (`programada`), a equipe dá
+ * baixa (`baixa_pedida`), o gestor confere (`baixa_confirmada`) e o gerente
+ * encerra (`finalizada`).
+ *
+ * São fixas de propósito. O status colorido da O.S. continua configurável por
+ * unidade, mas trava de fluxo não pode depender de um texto que o cliente
+ * renomeia — se "Concluída" virasse outra coisa, a trava iria junto.
+ */
+const ETAPA = {
+  solicitada: "solicitada",
+  programada: "programada",
+  baixaPedida: "baixa_pedida",
+  baixaConfirmada: "baixa_confirmada",
+  finalizada: "finalizada",
+} as const;
+
+/** A unidade usa o fluxo? Desligado, nada nesta seção entra em ação. */
+async function fluxoLigado(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  condominioId: number,
+): Promise<boolean> {
+  const [org] = await db
+    .select({ ligado: condominios.osFluxoConfirmacao })
+    .from(condominios)
+    .where(eq(condominios.id, condominioId))
+    .limit(1);
+  return !!org?.ligado;
+}
+
+/** Carrega a O.S. e diz se a unidade dela está no fluxo. */
+async function osComFluxo(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  id: number,
+) {
+  const [os] = await db.select().from(ordensServico).where(eq(ordensServico.id, id));
+  if (!os) throw new TRPCError({ code: "NOT_FOUND", message: "Ordem de serviço não encontrada" });
+  return { os, ligado: await fluxoLigado(db, os.condominioId) };
+}
+
+/**
+ * Programar e finalizar são do gerente (gestor-chefe ou dono da organização).
+ *
+ * É o pedido do cliente: quem distribui a agenda e fecha a ordem é uma pessoa
+ * só, e o gestor de unidade responde pela conferência. Vale apenas onde o fluxo
+ * está ligado — nas outras unidades, qualquer gestor continua finalizando.
+ */
+async function exigirGerente(ctx: { user: { id: number } | null }, acao: string) {
+  if (!ctx.user || !(await ehGestorMaster(ctx.user.id))) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `Apenas o gerente ${acao}.`,
+    });
+  }
+}
+
+/** Registra o passo na linha do tempo, que é onde a auditoria vive. */
+async function registrarEtapa(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  ordemServicoId: number,
+  descricao: string,
+  autor: { userId: number | null; nome: string },
+) {
+  // O enum da timeline é fechado; "status_alterado" é o que descreve o passo
+  // sem exigir migration de tipo só pelo rótulo.
+  await db.insert(osTimeline).values({
+    ordemServicoId,
+    tipo: "status_alterado",
+    descricao,
+    usuarioId: autor.userId,
+    usuarioNome: autor.nome,
+  });
+}
+
+function formatarDia(dia: string): string {
+  const [ano, mes, d] = dia.split("-");
+  return `${d}/${mes}/${ano}`;
 }
 
 export const osRouter = router({
@@ -719,6 +803,10 @@ export const osRouter = router({
           .where(eq(osImagens.ordemServicoId, os.id))
           .orderBy(asc(osImagens.ordem));
         
+        // A tela precisa saber se a unidade usa o fluxo para decidir os botões;
+        // sem isto ela mostraria "Finalizar" onde o certo é "Dar baixa".
+        const fluxoConfirmacao = await fluxoLigado(db, os.condominioId);
+
         return {
           ...os,
           categoria,
@@ -730,6 +818,7 @@ export const osRouter = router({
           orcamentos,
           timeline,
           imagens,
+          fluxoConfirmacao,
         };
       }),
     
@@ -753,12 +842,24 @@ export const osRouter = router({
         manutencaoId: z.number().optional(),
         solicitanteNome: z.string().optional(),
         solicitanteTipo: z.enum(["sindico", "morador", "funcionario", "administradora"]).optional(),
+        /** Data máxima de finalização (`AAAA-MM-DD`); obrigatória no fluxo. */
+        prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
+
+        // Unidade no fluxo: sem prazo a O.S. não entra no calendário e não
+        // cobra ninguém, então ela não pode nascer sem prazo.
+        const ligado = await fluxoLigado(db, input.condominioId);
+        if (ligado && !input.prazoLimite) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Informe a data máxima de finalização.",
+          });
+        }
+
         // O numero vem da sequence do banco: dois pedidos simultaneos nunca
         // recebem o mesmo protocolo.
         const protocolo = await proximoProtocoloComData(db, "os", "OS-");
@@ -803,6 +904,9 @@ export const osRouter = router({
           solicitanteId: autor.userId,
           solicitanteNome: input.solicitanteNome || autor.nome,
           solicitanteTipo: input.solicitanteTipo || (ctx.user ? "sindico" : "funcionario"),
+          prazoLimite: input.prazoLimite,
+          // Fora do fluxo a etapa fica nula: é o que preserva a O.S. de sempre.
+          etapa: ligado ? ETAPA.solicitada : null,
         }).returning();
         
         // Adicionar evento na timeline
@@ -953,19 +1057,358 @@ export const osRouter = router({
         return { success: true };
       }),
     
+    /**
+     * Programa o dia do serviço e, se vier, designa a equipe.
+     *
+     * É o passo 3 do fluxo: o gerente distribui a agenda. Serve também para
+     * reprogramar — o calendário chama a mesma rota quando a data muda, e cada
+     * mudança fica na linha do tempo com quem mexeu.
+     */
+    programar: osConfigProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          dataProgramada: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          /** Funcionários que executam; os já designados continuam. */
+          responsaveisIds: z.array(z.number()).optional(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { os, ligado } = await osComFluxo(db, input.id);
+        if (!ligado) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Esta unidade não usa o fluxo com programação.",
+          });
+        }
+        await exigirGerente(ctx, "programa a data do serviço");
+
+        const reprogramando = !!os.dataProgramada;
+
+        await db
+          .update(ordensServico)
+          .set({
+            dataProgramada: input.dataProgramada,
+            // Reprogramar não puxa a O.S. de volta se a equipe já deu baixa:
+            // a data muda, a etapa fica onde está.
+            etapa:
+              os.etapa === ETAPA.solicitada || !os.etapa ? ETAPA.programada : os.etapa,
+          })
+          .where(eq(ordensServico.id, input.id));
+
+        // Equipe: só acrescenta quem falta, para não apagar quem já estava.
+        const designados: string[] = [];
+        if (input.responsaveisIds?.length) {
+          const jaTem = await db
+            .select({ funcionarioId: osResponsaveis.funcionarioId })
+            .from(osResponsaveis)
+            .where(eq(osResponsaveis.ordemServicoId, input.id));
+          const existentes = new Set(jaTem.map((r) => r.funcionarioId));
+
+          const pessoas = await db
+            .select()
+            .from(funcionarios)
+            .where(
+              and(
+                eq(funcionarios.condominioId, os.condominioId),
+                inArray(funcionarios.id, input.responsaveisIds),
+              ),
+            );
+
+          for (const pessoa of pessoas) {
+            if (existentes.has(pessoa.id)) continue;
+            await db.insert(osResponsaveis).values({
+              ordemServicoId: input.id,
+              nome: pessoa.nome,
+              cargo: pessoa.cargo,
+              email: pessoa.email,
+              telefone: pessoa.telefone,
+              funcionarioId: pessoa.id,
+            });
+            designados.push(pessoa.nome);
+          }
+        }
+
+        const detalhe = designados.length ? ` · equipe: ${designados.join(", ")}` : "";
+        await registrarEtapa(
+          db,
+          input.id,
+          `${reprogramando ? "Serviço reprogramado" : "Serviço programado"} para ${formatarDia(
+            input.dataProgramada,
+          )}${detalhe}`,
+          autor,
+        );
+
+        return { success: true };
+      }),
+
+    /**
+     * Corrige a data máxima combinada.
+     *
+     * O prazo é obrigatório na abertura, e errar a digitação acontece. Sem esta
+     * rota, o único jeito de consertar seria apagar a O.S. e abrir outra —
+     * perdendo protocolo, fotos e histórico. Fica em `osConfigProcedure`: é o
+     * combinado entre gestor e gerente, não algo que a equipe muda.
+     */
+    definirPrazo: osConfigProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { os } = await osComFluxo(db, input.id);
+
+        await db
+          .update(ordensServico)
+          .set({ prazoLimite: input.prazoLimite })
+          .where(eq(ordensServico.id, input.id));
+
+        await registrarEtapa(
+          db,
+          input.id,
+          os.prazoLimite
+            ? `Data máxima alterada de ${formatarDia(os.prazoLimite)} para ${formatarDia(input.prazoLimite)}`
+            : `Data máxima definida: ${formatarDia(input.prazoLimite)}`,
+          autor,
+        );
+
+        return { success: true };
+      }),
+
+    /**
+     * Baixa da equipe: "fiz o serviço".
+     *
+     * Não encerra a O.S. — encaminha para a conferência do gestor. Quem dá
+     * baixa é quem foi designado; o gerente também pode, para não travar a
+     * unidade em que a equipe não usa o sistema.
+     */
+    darBaixa: osProcedure
+      .input(z.object({ id: z.number(), observacao: z.string().max(1000).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { os, ligado } = await osComFluxo(db, input.id);
+        if (!ligado) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Esta unidade não usa baixa com confirmação.",
+          });
+        }
+        // Só de "programada" sai baixa. Sem esta trava, dois caminhos ruins se
+        // abriam: baixa em serviço que o gerente nunca programou, e baixa em
+        // ordem já confirmada — que apagaria a conferência do gestor.
+        if (os.etapa !== ETAPA.programada) {
+          const motivo =
+            os.etapa === ETAPA.baixaPedida
+              ? "A baixa já foi dada e aguarda confirmação."
+              : os.etapa === ETAPA.baixaConfirmada
+                ? "A baixa já foi confirmada e aguarda o gerente finalizar."
+                : os.etapa === ETAPA.finalizada || os.dataFim
+                  ? "Esta ordem já está finalizada."
+                  : "O gerente ainda não programou a data deste serviço.";
+          throw new TRPCError({ code: "BAD_REQUEST", message: motivo });
+        }
+        if (os.dataFim) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Esta ordem já está finalizada." });
+        }
+
+        if (ctx.funcionario) {
+          const designado = await db
+            .select({ id: osResponsaveis.id })
+            .from(osResponsaveis)
+            .where(
+              and(
+                eq(osResponsaveis.ordemServicoId, input.id),
+                eq(osResponsaveis.funcionarioId, ctx.funcionario.id),
+              ),
+            )
+            .limit(1);
+          if (designado.length === 0) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Só quem foi designado para esta ordem pode dar baixa.",
+            });
+          }
+        } else {
+          await exigirGerente(ctx, "dá baixa no lugar da equipe");
+        }
+
+        await db
+          .update(ordensServico)
+          .set({
+            baixaEm: new Date(),
+            baixaPorId: autor.userId,
+            baixaPorNome: autor.nome,
+            baixaObservacao: input.observacao?.trim() || null,
+            etapa: ETAPA.baixaPedida,
+            // Quem executou pode ter esquecido de apertar "Iniciar": sem data de
+            // início, o tempo do serviço sairia vazio no relatório.
+            dataInicio: os.dataInicio ?? new Date(),
+          })
+          .where(eq(ordensServico.id, input.id));
+
+        await registrarEtapa(
+          db,
+          input.id,
+          `Baixa dada pela equipe${input.observacao?.trim() ? `: ${input.observacao.trim()}` : ""}`,
+          autor,
+        );
+
+        return { success: true };
+      }),
+
+    /** Conferência do gestor da unidade: passo 4, antes de o gerente fechar. */
+    confirmarBaixa: osConfigProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { os, ligado } = await osComFluxo(db, input.id);
+        if (!ligado) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Esta unidade não usa confirmação de baixa." });
+        }
+        if (os.etapa !== ETAPA.baixaPedida) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Só há o que confirmar depois de a equipe dar baixa.",
+          });
+        }
+
+        await db
+          .update(ordensServico)
+          .set({
+            baixaConfirmadaEm: new Date(),
+            baixaConfirmadaPorId: autor.userId,
+            baixaConfirmadaPorNome: autor.nome,
+            etapa: ETAPA.baixaConfirmada,
+          })
+          .where(eq(ordensServico.id, input.id));
+
+        await registrarEtapa(db, input.id, "Baixa confirmada pelo gestor da unidade", autor);
+
+        return { success: true };
+      }),
+
+    /**
+     * Devolve a baixa para a equipe, com motivo.
+     *
+     * Sem isto, o gestor que recebe um serviço malfeito só tem dois caminhos
+     * ruins: confirmar o que está errado ou deixar a O.S. parada sem explicação.
+     */
+    devolverBaixa: osConfigProcedure
+      .input(z.object({ id: z.number(), motivo: z.string().min(3).max(500) }))
+      .mutation(async ({ input, ctx }) => {
+        const autor = autorDaRequisicao(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { os, ligado } = await osComFluxo(db, input.id);
+        if (!ligado) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Esta unidade não usa confirmação de baixa." });
+        }
+        if (os.etapa !== ETAPA.baixaPedida) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Só é possível devolver uma baixa que está aguardando confirmação.",
+          });
+        }
+
+        await db
+          .update(ordensServico)
+          .set({
+            baixaEm: null,
+            baixaPorId: null,
+            baixaPorNome: null,
+            baixaObservacao: null,
+            etapa: ETAPA.programada,
+          })
+          .where(eq(ordensServico.id, input.id));
+
+        await registrarEtapa(
+          db,
+          input.id,
+          `Baixa devolvida para a equipe: ${input.motivo.trim()}`,
+          autor,
+        );
+
+        return { success: true };
+      }),
+
+    /**
+     * A unidade usa o fluxo com prazo e confirmação?
+     *
+     * O portal do funcionário não lê `condominios` — ele não tem sessão de
+     * usuário. Sem esta resposta, a tela dele pediria uma O.S. sem prazo e só
+     * descobriria a exigência no erro do servidor.
+     */
+    configFluxo: osProcedure
+      .input(z.object({ condominioId: z.number() }))
+      .query(async ({ ctx }) => {
+        const db = await getDb();
+        if (!db) return { fluxoConfirmacao: false };
+        return { fluxoConfirmacao: await fluxoLigado(db, ctx.condominioId) };
+      }),
+
+    /** Liga o fluxo nesta unidade. Muda quem finaliza, então é do gerente. */
+    setFluxoConfirmacao: osConfigProcedure
+      .input(z.object({ condominioId: z.number(), ativo: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+        await exigirGerente(ctx, "liga ou desliga o fluxo de confirmação");
+
+        await db
+          .update(condominios)
+          .set({ osFluxoConfirmacao: input.ativo })
+          .where(eq(condominios.id, input.condominioId));
+
+        return { success: true };
+      }),
+
     finalizarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
+
         const [os] = await db.select().from(ordensServico)
           .where(eq(ordensServico.id, input.id));
-        
+
         if (!os) throw new Error("Ordem de serviço não encontrada");
+
+        // No fluxo, finalizar é o último passo e é do gerente: a equipe dá
+        // baixa, o gestor confere, e só então a ordem fecha.
+        const comFluxo = await fluxoLigado(db, os.condominioId);
+        if (comFluxo) {
+          await exigirGerente(ctx, "finaliza a ordem de serviço");
+          if (os.etapa !== ETAPA.baixaConfirmada) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                os.etapa === ETAPA.baixaPedida
+                  ? "A baixa ainda precisa ser confirmada pelo gestor da unidade."
+                  : "A equipe ainda não deu baixa neste serviço.",
+            });
+          }
+        }
+
         if (!os.dataInicio) throw new Error("Esta ordem de serviço ainda não foi iniciada");
-        
+
         const dataFim = new Date();
         let tempoDecorridoMinutos = 0;
         
@@ -974,9 +1417,13 @@ export const osRouter = router({
         }
         
         await db.update(ordensServico)
-          .set({ dataFim, tempoDecorridoMinutos })
+          .set({
+            dataFim,
+            tempoDecorridoMinutos,
+            etapa: comFluxo ? ETAPA.finalizada : os.etapa,
+          })
           .where(eq(ordensServico.id, input.id));
-        
+
         await db.insert(osTimeline).values({
           ordemServicoId: input.id,
           tipo: "fim_servico",
@@ -1026,12 +1473,29 @@ export const osRouter = router({
           .orderBy(asc(osStatus.ordem))
           .limit(1);
 
+        // No fluxo, reabrir devolve a ordem para a equipe: a data programada
+        // continua, mas a baixa e a conferência anteriores saem do caminho —
+        // senão a O.S. voltaria já pronta para o gerente fechar de novo.
+        const noFluxo = await fluxoLigado(db, os.condominioId);
+
         await db
           .update(ordensServico)
           .set({
             dataFim: null,
             tempoDecorridoMinutos: null,
             statusId: statusAberto?.id ?? os.statusId,
+            ...(noFluxo
+              ? {
+                  etapa: ETAPA.programada,
+                  baixaEm: null,
+                  baixaPorId: null,
+                  baixaPorNome: null,
+                  baixaObservacao: null,
+                  baixaConfirmadaEm: null,
+                  baixaConfirmadaPorId: null,
+                  baixaConfirmadaPorNome: null,
+                }
+              : {}),
           })
           .where(eq(ordensServico.id, input.id));
 

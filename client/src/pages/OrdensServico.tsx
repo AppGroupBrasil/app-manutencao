@@ -77,6 +77,35 @@ function Etiqueta({ texto, cor }: { texto?: string | null; cor?: string | null }
   );
 }
 
+/** Etapas do fluxo com confirmação de baixa, com a cor de cada uma. */
+const ETAPA_OS: Record<string, { rotulo: string; cor: string; fundo: string }> = {
+  solicitada: { rotulo: "Aguardando programação", cor: "#92400e", fundo: "#fef3c7" },
+  programada: { rotulo: "Programada", cor: "#1e40af", fundo: "#dbeafe" },
+  baixa_pedida: { rotulo: "Baixa a confirmar", cor: "#7c2d12", fundo: "#ffedd5" },
+  baixa_confirmada: { rotulo: "A finalizar", cor: "#4c1d95", fundo: "#ede9fe" },
+  finalizada: { rotulo: "Finalizada", cor: "#166534", fundo: "#dcfce7" },
+};
+
+/** Dia em `AAAA-MM-DD` como o brasileiro lê. */
+function formatarDia(dia?: string | null): string {
+  if (!dia) return "—";
+  const [ano, mes, d] = dia.split("-");
+  return `${d}/${mes}/${ano}`;
+}
+
+/** Quanto falta para a data máxima — ou quanto já passou dela. */
+function textoDoPrazo(prazo: string, encerrada: boolean): { texto: string; classe: string } {
+  const hoje = new Date();
+  hoje.setHours(12, 0, 0, 0);
+  const alvo = new Date(`${prazo}T12:00:00`);
+  const dias = Math.round((alvo.getTime() - hoje.getTime()) / 86_400_000);
+
+  if (encerrada) return { texto: `prazo era ${formatarDia(prazo)}`, classe: "text-slate-500" };
+  if (dias < 0) return { texto: `${Math.abs(dias)} dia(s) além do prazo`, classe: "text-red-600 font-medium" };
+  if (dias === 0) return { texto: "prazo é hoje", classe: "text-amber-700 font-medium" };
+  return { texto: `prazo em ${dias} dia(s)`, classe: "text-slate-500" };
+}
+
 const FORM_VAZIO = {
   titulo: "",
   descricao: "",
@@ -85,6 +114,8 @@ const FORM_VAZIO = {
   statusId: "",
   setorId: "",
   endereco: "",
+  /** Data máxima de finalização; obrigatória nas unidades com o fluxo. */
+  prazoLimite: "",
 };
 
 /** Página do gestor: resolve a unidade pela sessão e entrega o conteúdo. */
@@ -119,7 +150,11 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
       osInicial={osInicial}
       organizacao={
         organizacaoAtiva
-          ? { nome: organizacaoAtiva.nome, autoNotificar: !!organizacaoAtiva.osAutoNotificar }
+          ? {
+              nome: organizacaoAtiva.nome,
+              autoNotificar: !!organizacaoAtiva.osAutoNotificar,
+              fluxoConfirmacao: !!organizacaoAtiva.osFluxoConfirmacao,
+            }
           : undefined
       }
       onVoltar={() => setLocation('/admin/manutencoes')}
@@ -144,7 +179,7 @@ export function ConteudoOrdensServico({
 }: {
   condominioId: number;
   osInicial?: number;
-  organizacao?: { nome: string; autoNotificar: boolean };
+  organizacao?: { nome: string; autoNotificar: boolean; fluxoConfirmacao: boolean };
   onVoltar?: () => void;
   podeCriar?: boolean;
   /** Excluir e permissao a parte: o gestor libera por funcionario. */
@@ -155,6 +190,15 @@ export function ConteudoOrdensServico({
   const utils = trpc.useUtils();
   const v = useVocabulario();
   const habilitado = condominioId > 0;
+  // Unidade no fluxo do gerente: muda o prazo obrigatório e o rótulo da etapa.
+  // O gestor recebe a resposta junto da organização; o portal do funcionário
+  // não tem essa lista, então pergunta ao servidor.
+  const { data: configFluxo } = trpc.ordensServico.configFluxo.useQuery(
+    { condominioId },
+    { enabled: habilitado && !organizacao },
+  );
+  const fluxoConfirmacao =
+    organizacao?.fluxoConfirmacao ?? !!configFluxo?.fluxoConfirmacao;
 
   // O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
   // isso preserva o comportamento das abas e do gráfico, que somam tudo.
@@ -228,6 +272,18 @@ export function ConteudoOrdensServico({
   const setAutoNotificar = trpc.ordensServico.setAutoNotificar.useMutation({
     onSuccess: () => utils.condominio.list.invalidate(),
     onError: (e) => toast.error(e.message || "Erro ao salvar a configuração"),
+  });
+
+  // A chave do fluxo e quem pode virá-la: só o gerente vê o controle.
+  const { data: podeGerenciar } = trpc.gestores.podeGerenciar.useQuery(undefined, {
+    enabled: ehGestor,
+  });
+  const setFluxo = trpc.ordensServico.setFluxoConfirmacao.useMutation({
+    onSuccess: async () => {
+      await utils.condominio.list.invalidate();
+      toast.success("Fluxo atualizado nesta unidade");
+    },
+    onError: (e) => toast.error(e.message || "Erro ao salvar o fluxo"),
   });
 
   const setNotificarEmail = trpc.ordensServico.setNotificarEmail.useMutation({
@@ -438,6 +494,35 @@ export function ConteudoOrdensServico({
                     {os.categoria?.nome && <span>{os.categoria.nome}</span>}
                   </div>
 
+                  {/* Fluxo: a etapa e as duas datas que a governam. Só aparece
+                      na unidade que ligou o fluxo — o cartão dos outros clientes
+                      continua igual. */}
+                  {os.etapa && (
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span
+                        className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                        style={{
+                          color: ETAPA_OS[os.etapa]?.cor ?? "#475569",
+                          backgroundColor: ETAPA_OS[os.etapa]?.fundo ?? "#f1f5f9",
+                        }}
+                      >
+                        {ETAPA_OS[os.etapa]?.rotulo ?? os.etapa}
+                      </span>
+                      {os.dataProgramada ? (
+                        <span className="text-xs text-slate-500">
+                          programada para {formatarDia(os.dataProgramada)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-700">sem data programada</span>
+                      )}
+                      {os.prazoLimite && (
+                        <span className={`text-xs ${textoDoPrazo(os.prazoLimite, !!os.dataFim).classe}`}>
+                          {textoDoPrazo(os.prazoLimite, !!os.dataFim).texto}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-500">Status:</span>
@@ -625,6 +710,24 @@ export function ConteudoOrdensServico({
               </div>
             </div>
 
+            {/* Prazo: é ele que coloca a O.S. no calendário e cobra o gerente. */}
+            <div>
+              <Label>
+                Data máxima de finalização
+                {fluxoConfirmacao ? "" : " (opcional)"}
+              </Label>
+              <Input
+                type="date"
+                value={form.prazoLimite}
+                onChange={(e) => setForm({ ...form, prazoLimite: e.target.value })}
+              />
+              {fluxoConfirmacao && (
+                <p className="text-xs text-slate-500 mt-1">
+                  O gerente usa esta data para programar o serviço no calendário.
+                </p>
+              )}
+            </div>
+
             {/* Responsáveis */}
             <div className="border rounded-lg p-3 space-y-2">
               <span className="text-sm font-medium">Responsáveis pela O.S.</span>
@@ -660,6 +763,26 @@ export function ConteudoOrdensServico({
             {organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
                 <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
+
+                {/* Ligar o fluxo muda quem finaliza, então é decisão do gerente. */}
+                {podeGerenciar && (
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={fluxoConfirmacao}
+                      disabled={!habilitado || setFluxo.isPending}
+                      onChange={(e) =>
+                        setFluxo.mutate({ condominioId, ativo: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <strong>Fluxo com prazo e confirmação de baixa</strong> — a O.S. nasce com data
+                      máxima, o gerente programa o dia e a equipe, a equipe dá baixa, o gestor
+                      confirma e o gerente finaliza.
+                    </span>
+                  </label>
+                )}
 
                 <label className="flex items-start gap-2 text-sm">
                   <input
@@ -712,7 +835,12 @@ export function ConteudoOrdensServico({
 
             <Button
               className="w-full"
-              disabled={criar.isPending || form.titulo.trim().length < 3 || !habilitado}
+              disabled={
+                criar.isPending ||
+                form.titulo.trim().length < 3 ||
+                !habilitado ||
+                (fluxoConfirmacao && !form.prazoLimite)
+              }
               onClick={() =>
                 criar.mutate({
                   condominioId,
@@ -722,6 +850,7 @@ export function ConteudoOrdensServico({
                   prioridadeId: form.prioridadeId ? Number(form.prioridadeId) : undefined,
                   statusId: form.statusId ? Number(form.statusId) : undefined,
                   endereco: form.endereco.trim() || undefined,
+                  prazoLimite: form.prazoLimite || undefined,
                 })
               }
             >
@@ -743,7 +872,7 @@ export function ConteudoOrdensServico({
             <DialogTitle>{tituloDetalhe}</DialogTitle>
           </DialogHeader>
           {detalheId !== null && (
-            <OsDetalhe ordemServicoId={detalheId} condominioId={condominioId} podeReabrir={ehGestor} />
+            <OsDetalhe ordemServicoId={detalheId} condominioId={condominioId} ehGestor={ehGestor} />
           )}
         </DialogContent>
       </Dialog>

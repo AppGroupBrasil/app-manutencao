@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { BotaoQrCode } from "@/components/BotaoQrCode";
+import { useBuscaInicial } from "@/hooks/useBuscaInicial";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -1208,7 +1209,7 @@ export default function Vistorias() {
   const condominioId = organizacaoAtiva?.id ?? 0;
   const habilitado = !!organizacaoAtiva;
 
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useState(useBuscaInicial());
   const [modalNova, setModalNova] = useState(false);
   const [form, setForm] = useState({ titulo: "", tipo: "rotina", localizacao: "", itens: [""] });
 

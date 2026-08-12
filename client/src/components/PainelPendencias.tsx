@@ -52,6 +52,9 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
     { condominioId },
     { enabled: habilitado },
   );
+  // Cada etapa do fluxo espera uma pessoa: o gerente só é cobrado do que é dele.
+  const { data: podeGerenciar } = trpc.gestores.podeGerenciar.useQuery();
+  const ehGerente = !!podeGerenciar;
 
   const linhas = useMemo(() => {
     // Status marcado como `isFinal` encerra a O.S.; o resto continua na mesa
@@ -61,10 +64,41 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       (os) => !os.statusId || !idsFinais.has(os.statusId),
     ).length;
 
+    // Fluxo com confirmação de baixa: cada etapa espera uma pessoa diferente, e
+    // é isso que a faixa precisa dizer — quem está devendo o próximo passo.
+    const naEtapa = (etapa: string) =>
+      (ordens?.items ?? []).filter((os) => os.etapa === etapa).length;
+    const aguardandoProgramacao = naEtapa("solicitada");
+    const baixaAConfirmar = naEtapa("baixa_pedida");
+    const aFinalizar = naEtapa("baixa_confirmada");
+
     const vencidos = vencimentos?.vencidos ?? 0;
     const proximos = vencimentos?.proximos ?? 0;
 
     return [
+      // Programar e finalizar são passos do gerente: mostrar essas linhas ao
+      // gestor da unidade seria cobrar dele algo que o sistema não deixa fazer.
+      {
+        chave: "os-programar",
+        rotulo: "Serviços a programar",
+        total: ehGerente ? aguardandoProgramacao : 0,
+        detalhe: "o gestor pediu; falta marcar a data e a equipe",
+        destino: "/manutencoes/calendario",
+      },
+      {
+        chave: "os-confirmar",
+        rotulo: "Baixas a confirmar",
+        total: baixaAConfirmar,
+        detalhe: "a equipe deu baixa e espera a conferência do gestor",
+        destino: "/manutencoes/ordens-servico",
+      },
+      {
+        chave: "os-finalizar",
+        rotulo: "Ordens a finalizar",
+        total: ehGerente ? aFinalizar : 0,
+        detalhe: "baixa confirmada, aguardando o gerente encerrar",
+        destino: "/manutencoes/ordens-servico",
+      },
       {
         chave: "os",
         rotulo: "Ordens de Serviço",
@@ -128,6 +162,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
     respostasQr,
     tarefas,
     execucoes,
+    ehGerente,
   ]);
 
   const carregando = carregandoOS || carregandoVenc || carregandoManut;

@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
 import { toast } from "@/components/ui/sonner";
-import { ArrowLeft, CalendarClock, ClipboardCheck, ClipboardList, Columns3, ListChecks, Loader2, QrCode, Wrench } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Columns3, ListChecks, Loader2, QrCode, Wrench } from "lucide-react";
 
 const TENANT_ATIVO_KEY = "condominio_ativo";
 
@@ -93,6 +93,13 @@ export default function AdminManutencoes() {
 
       <main className="max-w-3xl mx-auto px-4 py-6">
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          {/* Primeiro quadrado: é a visão que responde "o que vence quando". */}
+          <CardQuadrado
+            icone={<CalendarDays className="w-6 h-6 text-blue-600" />}
+            titulo="Calendário"
+            descricao="tudo com data, de todas as funções"
+            onClick={() => setLocation("/manutencoes/calendario")}
+          />
           <CardQuadrado
             icone={<ClipboardList className="w-6 h-6 text-sky-500" />}
             titulo={v.ordensServico}

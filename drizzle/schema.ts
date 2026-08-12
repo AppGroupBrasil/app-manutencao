@@ -176,6 +176,12 @@ export const condominios = pgTable("condominios", {
   modoEscuroPadrao: boolean("modoEscuroPadrao").default(false),
   // Ao abrir uma O.S., notifica todos os funcionários da unidade no aplicativo.
   osAutoNotificar: boolean("osAutoNotificar").default(false).notNull(),
+  /**
+   * Liga o fluxo com prazo, programação e baixa confirmada nas O.S. desta
+   * unidade. Desligada, a O.S. funciona como sempre — é o que mantém os outros
+   * clientes intactos.
+   */
+  osFluxoConfirmacao: boolean("osFluxoConfirmacao").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -2249,6 +2255,28 @@ export const ordensServico = pgTable("ordens_servico", {
   // Avaliação do serviço concluído, como no Manutenção X
   avaliacaoNota: integer("avaliacaoNota"),
   avaliacaoComentario: text("avaliacaoComentario"),
+
+  /**
+   * Fluxo com prazo, programação e baixa confirmada.
+   *
+   * Só vale nas unidades com `condominios.osFluxoConfirmacao`. `etapa` nula é
+   * O.S. do jeito antigo: abre, executa e o gestor finaliza.
+   */
+  /** Data máxima de finalização, pedida por quem abre a O.S. */
+  prazoLimite: date("prazoLimite"),
+  /** Dia em que o gerente marcou o serviço para ser feito. */
+  dataProgramada: date("dataProgramada"),
+  /** solicitada | programada | baixa_pedida | baixa_confirmada | finalizada */
+  etapa: varchar("etapa", { length: 20 }),
+  /** Baixa dada pela equipe designada. */
+  baixaEm: timestamp("baixaEm"),
+  baixaPorId: integer("baixaPorId"),
+  baixaPorNome: varchar("baixaPorNome", { length: 255 }),
+  baixaObservacao: text("baixaObservacao"),
+  /** Conferência do gestor da unidade sobre a baixa da equipe. */
+  baixaConfirmadaEm: timestamp("baixaConfirmadaEm"),
+  baixaConfirmadaPorId: integer("baixaConfirmadaPorId"),
+  baixaConfirmadaPorNome: varchar("baixaConfirmadaPorNome", { length: 255 }),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),

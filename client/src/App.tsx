@@ -21,6 +21,7 @@ const Manutencoes = lazy(() => import("./pages/Manutencoes"));
 const AdminManutencoes = lazy(() => import("./pages/AdminManutencoes"));
 const OrdensServico = lazy(() => import("./pages/OrdensServico"));
 const AgendaVencimentos = lazy(() => import("./pages/AgendaVencimentos"));
+const Calendario = lazy(() => import("./pages/Calendario"));
 const Checklists = lazy(() => import("./pages/Checklists"));
 const ListaTarefas = lazy(() => import("./pages/ListaTarefas"));
 const Vistorias = lazy(() => import("./pages/Vistorias"));
@@ -127,6 +128,10 @@ function Router() {
       </Route>
       <Route path="/manutencoes/vencimentos">
         <ExigeSenhaDefinida><AgendaVencimentos /></ExigeSenhaDefinida>
+      </Route>
+      {/* Calendário único: tudo que tem data, de todas as funções. */}
+      <Route path="/manutencoes/calendario">
+        <ExigeSenhaDefinida><Calendario /></ExigeSenhaDefinida>
       </Route>
       <Route path="/manutencoes/checklists">
         <ExigeSenhaDefinida><Checklists /></ExigeSenhaDefinida>

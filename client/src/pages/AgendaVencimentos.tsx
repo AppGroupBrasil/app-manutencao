@@ -23,6 +23,7 @@ import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { RegistroVencimento, rotuloStatus } from "@/components/RegistroVencimento";
 import { CalendarioManutencoes } from "@/components/CalendarioManutencoes";
+import { useBuscaInicial } from "@/hooks/useBuscaInicial";
 import {
   ArrowLeft,
   Bell,
@@ -137,7 +138,7 @@ export default function AgendaVencimentos() {
   const habilitado = !!organizacaoAtiva;
 
   const [visao, setVisao] = useState<"lista" | "calendario">("lista");
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useState(useBuscaInicial());
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroSituacao, setFiltroSituacao] = useState<"todos" | SituacaoVisual>("todos");
   const [modalAberto, setModalAberto] = useState(false);

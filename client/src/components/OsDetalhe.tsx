@@ -14,6 +14,7 @@ import { toast } from "@/components/ui/sonner";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Calendar,
+  CalendarClock,
   Camera,
   CheckCircle2,
   FileText,
@@ -88,6 +89,293 @@ function lerArquivoBase64(arquivo: File): Promise<string> {
   });
 }
 
+/** Rótulo e cor de cada etapa do fluxo, na ordem em que acontecem. */
+const ETAPAS: Record<string, { rotulo: string; cor: string; fundo: string }> = {
+  solicitada: { rotulo: "Aguardando programação", cor: "#92400e", fundo: "#fef3c7" },
+  programada: { rotulo: "Programada", cor: "#1e40af", fundo: "#dbeafe" },
+  baixa_pedida: { rotulo: "Baixa aguardando confirmação", cor: "#7c2d12", fundo: "#ffedd5" },
+  baixa_confirmada: { rotulo: "Confirmada — aguardando o gerente", cor: "#4c1d95", fundo: "#ede9fe" },
+  finalizada: { rotulo: "Finalizada", cor: "#166534", fundo: "#dcfce7" },
+};
+
+function formatarDia(dia?: string | null): string {
+  if (!dia) return "—";
+  const [ano, mes, d] = dia.split("-");
+  return `${d}/${mes}/${ano}`;
+}
+
+/**
+ * Os cinco passos do fluxo, com um botão por vez.
+ *
+ * A regra de quem pode o quê é do servidor; aqui só se esconde o que a pessoa
+ * não pode fazer, para ela não bater numa mensagem de erro. Cada passo mostra
+ * quem fez e quando, porque é isso que o gestor e o gerente vêm conferir.
+ */
+function PassosDoFluxo({
+  os,
+  condominioId,
+  ehGestor,
+  ehGerente,
+  onFeito,
+}: {
+  os: {
+    id: number;
+    etapa?: string | null;
+    prazoLimite?: string | null;
+    dataProgramada?: string | null;
+    baixaEm?: Date | string | null;
+    baixaPorNome?: string | null;
+    baixaObservacao?: string | null;
+    baixaConfirmadaEm?: Date | string | null;
+    baixaConfirmadaPorNome?: string | null;
+    responsaveis?: { nome: string }[];
+  };
+  condominioId: number;
+  ehGestor: boolean;
+  ehGerente: boolean;
+  onFeito: () => Promise<void> | void;
+}) {
+  const [data, setData] = useState(os.dataProgramada ?? "");
+  const [equipe, setEquipe] = useState<number[]>([]);
+  const [observacao, setObservacao] = useState("");
+
+  const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery(
+    { condominioId },
+    { enabled: ehGerente },
+  );
+
+  const aoTerminar = async (mensagem: string) => {
+    toast.success(mensagem);
+    setObservacao("");
+    setEquipe([]);
+    await onFeito();
+  };
+
+  const programar = trpc.ordensServico.programar.useMutation({
+    onSuccess: () => aoTerminar("Serviço programado"),
+    onError: (e) => toast.error(e.message),
+  });
+  const darBaixa = trpc.ordensServico.darBaixa.useMutation({
+    onSuccess: () => aoTerminar("Baixa registrada — o gestor vai conferir"),
+    onError: (e) => toast.error(e.message),
+  });
+  const confirmar = trpc.ordensServico.confirmarBaixa.useMutation({
+    onSuccess: () => aoTerminar("Baixa confirmada"),
+    onError: (e) => toast.error(e.message),
+  });
+  const devolver = trpc.ordensServico.devolverBaixa.useMutation({
+    onSuccess: () => aoTerminar("Baixa devolvida para a equipe"),
+    onError: (e) => toast.error(e.message),
+  });
+  const definirPrazo = trpc.ordensServico.definirPrazo.useMutation({
+    onSuccess: () => aoTerminar("Data máxima atualizada"),
+    onError: (e) => toast.error(e.message),
+  });
+
+  const etapa = os.etapa ?? "solicitada";
+  const info = ETAPAS[etapa] ?? ETAPAS.solicitada;
+  const emAndamento =
+    programar.isPending || darBaixa.isPending || confirmar.isPending || devolver.isPending;
+
+  return (
+    <div className="border rounded-lg p-3 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium">Andamento</span>
+        <span
+          className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+          style={{ color: info.cor, backgroundColor: info.fundo }}
+        >
+          {info.rotulo}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+        <span className="inline-flex items-center gap-1">
+          <span className="font-medium">Prazo máximo:</span> {formatarDia(os.prazoLimite)}
+          {/* Errar a data na abertura acontece; corrigir aqui evita apagar a
+              O.S. e perder protocolo, fotos e histórico. */}
+          {ehGestor && (
+            <button
+              type="button"
+              className="text-blue-700 hover:underline"
+              onClick={() => {
+                const novo = window.prompt(
+                  "Nova data máxima (dia/mês/ano):",
+                  formatarDia(os.prazoLimite),
+                );
+                if (novo === null) return;
+                const partes = novo.trim().split(/[/\-.]/);
+                if (partes.length !== 3) {
+                  toast.error("Escreva a data como 20/08/2026");
+                  return;
+                }
+                const [d, m, a] = partes;
+                const iso = `${a.padStart(4, "20")}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+                if (Number.isNaN(new Date(`${iso}T12:00:00`).getTime())) {
+                  toast.error("Data inválida");
+                  return;
+                }
+                definirPrazo.mutate({ id: os.id, prazoLimite: iso });
+              }}
+            >
+              corrigir
+            </button>
+          )}
+        </span>
+        <span>
+          <span className="font-medium">Programado para:</span>{" "}
+          {os.dataProgramada ? formatarDia(os.dataProgramada) : "ainda não programado"}
+        </span>
+        {(os.responsaveis?.length ?? 0) > 0 && (
+          <span>
+            <span className="font-medium">Equipe:</span>{" "}
+            {os.responsaveis!.map((r) => r.nome).join(", ")}
+          </span>
+        )}
+      </div>
+
+      {/* Passo do gerente: marcar o dia e a equipe. Serve para reprogramar. */}
+      {ehGerente && etapa !== "finalizada" && (
+        <div className="border rounded-md p-2.5 space-y-2 bg-slate-50">
+          <p className="text-xs font-medium text-slate-700">
+            {os.dataProgramada ? "Reprogramar o serviço" : "Programar o serviço"}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="date"
+              value={data}
+              onChange={(e) => setData(e.target.value)}
+              className="h-9 w-[170px]"
+            />
+            <Button
+              size="sm"
+              disabled={!data || emAndamento}
+              onClick={() =>
+                programar.mutate({
+                  id: os.id,
+                  dataProgramada: data,
+                  responsaveisIds: equipe.length ? equipe : undefined,
+                })
+              }
+            >
+              {programar.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CalendarClock className="w-4 h-4 mr-2" />
+              )}
+              {os.dataProgramada ? "Reprogramar" : "Programar"}
+            </Button>
+          </div>
+
+          {(candidatos?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1">
+                Designar equipe (quem não estiver marcado continua como está):
+              </p>
+              <div className="max-h-32 overflow-y-auto divide-y border rounded-md bg-white">
+                {candidatos!.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={equipe.includes(c.id)}
+                      onChange={() =>
+                        setEquipe((atual) =>
+                          atual.includes(c.id)
+                            ? atual.filter((id) => id !== c.id)
+                            : [...atual, c.id],
+                        )
+                      }
+                    />
+                    <span className="flex-1">{c.nome}</span>
+                    <span className="text-[11px] text-slate-400">{c.cargo ?? ""}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Passo da equipe: dar baixa. Não fecha a O.S., manda para conferência. */}
+      {!ehGestor && etapa === "programada" && (
+        <div className="border rounded-md p-2.5 space-y-2 bg-slate-50">
+          <p className="text-xs font-medium text-slate-700">Terminou o serviço?</p>
+          <Textarea
+            rows={2}
+            placeholder="O que foi feito (opcional)"
+            value={observacao}
+            onChange={(e) => setObservacao(e.target.value)}
+          />
+          <Button
+            size="sm"
+            disabled={emAndamento}
+            onClick={() =>
+              darBaixa.mutate({ id: os.id, observacao: observacao.trim() || undefined })
+            }
+          >
+            {darBaixa.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+            )}
+            Dar baixa
+          </Button>
+          <p className="text-[11px] text-slate-500">
+            A baixa vai para a conferência do gestor. Anexe as fotos antes de dar baixa.
+          </p>
+        </div>
+      )}
+
+      {/* Passo do gestor: conferir a baixa ou devolver com motivo. */}
+      {ehGestor && etapa === "baixa_pedida" && (
+        <div className="border rounded-md p-2.5 space-y-2 bg-slate-50">
+          <p className="text-xs font-medium text-slate-700">
+            Baixa dada por {os.baixaPorNome ?? "equipe"}
+            {os.baixaEm ? ` em ${formatarDataHora(os.baixaEm)}` : ""}
+          </p>
+          {os.baixaObservacao && (
+            <p className="text-xs text-slate-600">“{os.baixaObservacao}”</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={emAndamento} onClick={() => confirmar.mutate({ id: os.id })}>
+              {confirmar.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+              )}
+              Confirmar baixa
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={emAndamento}
+              onClick={() => {
+                const motivo = window.prompt("Por que a baixa está sendo devolvida?");
+                if (motivo === null) return;
+                if (motivo.trim().length < 3) {
+                  toast.error("Escreva o motivo da devolução");
+                  return;
+                }
+                devolver.mutate({ id: os.id, motivo: motivo.trim() });
+              }}
+            >
+              <RotateCcw className="w-4 h-4 mr-2" /> Devolver
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {os.baixaConfirmadaEm && (
+        <p className="text-xs text-slate-500">
+          Baixa confirmada por {os.baixaConfirmadaPorNome ?? "gestor"} em{" "}
+          {formatarDataHora(os.baixaConfirmadaEm)}
+          {etapa === "baixa_confirmada" ? " · aguardando o gerente finalizar" : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Miolo da O.S. aberta: fotos por fase, anexos, responsáveis, comentários,
  * andamento e avaliação — as abas que o Manutenção X mostra ao abrir a O.S.
@@ -95,12 +383,18 @@ function lerArquivoBase64(arquivo: File): Promise<string> {
 export function OsDetalhe({
   ordemServicoId,
   condominioId,
-  podeReabrir = true,
+  ehGestor = true,
 }: {
   ordemServicoId: number;
   condominioId: number;
-  /** Reabrir é do gestor da unidade; o servidor recusa o funcionário. */
-  podeReabrir?: boolean;
+  /**
+   * Verdadeiro no painel do gestor, falso no portal do funcionário.
+   *
+   * Decide o que é decisão de quem responde pela unidade: reabrir a ordem e a
+   * conferência da baixa. O servidor recusa o funcionário de qualquer forma;
+   * aqui é só para não mostrar botão que vai dar erro.
+   */
+  ehGestor?: boolean;
 }) {
   const utils = trpc.useUtils();
 
@@ -111,6 +405,11 @@ export function OsDetalhe({
   } = trpc.ordensServico.getById.useQuery({ id: ordemServicoId }, { retry: false });
   const { data: anexos } = trpc.ordensServico.listarAnexos.useQuery({ ordemServicoId });
   const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery({ condominioId });
+  // Quem programa e finaliza no fluxo é o gerente. A pergunta só existe do lado
+  // do gestor: no portal do funcionário não há sessão de usuário para responder.
+  const { data: podeGerenciar } = trpc.gestores.podeGerenciar.useQuery(undefined, {
+    enabled: ehGestor,
+  });
 
   const [comentario, setComentario] = useState("");
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
@@ -340,6 +639,17 @@ export function OsDetalhe({
 
       <p className="text-sm text-slate-600">{os.descricao || "Sem descrição inicial."}</p>
 
+      {/* Fluxo com prazo e confirmação: só aparece nas unidades que o ligaram. */}
+      {os.fluxoConfirmacao && (
+        <PassosDoFluxo
+          os={os}
+          condominioId={condominioId}
+          ehGestor={ehGestor}
+          ehGerente={!!podeGerenciar}
+          onFeito={recarregar}
+        />
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
@@ -350,17 +660,26 @@ export function OsDetalhe({
           <Play className="w-4 h-4 mr-2" />
           {os.dataInicio ? `Iniciada em ${formatarDataHora(os.dataInicio)}` : "Iniciar serviço"}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!os.dataInicio || !!os.dataFim || finalizar.isPending}
-          onClick={() => finalizar.mutate({ id: ordemServicoId })}
-        >
-          <CheckCircle2 className="w-4 h-4 mr-2" />
-          {os.dataFim ? `Finalizada em ${formatarDataHora(os.dataFim)}` : "Finalizar serviço"}
-        </Button>
+        {/* No fluxo, quem fecha é o gerente e só depois da conferência: o botão
+            solto aqui confundiria a equipe, que agora usa "Dar baixa". */}
+        {(!os.fluxoConfirmacao || podeGerenciar) && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={
+              !os.dataInicio ||
+              !!os.dataFim ||
+              finalizar.isPending ||
+              (os.fluxoConfirmacao && os.etapa !== "baixa_confirmada")
+            }
+            onClick={() => finalizar.mutate({ id: ordemServicoId })}
+          >
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            {os.dataFim ? `Finalizada em ${formatarDataHora(os.dataFim)}` : "Finalizar serviço"}
+          </Button>
+        )}
         {/* Só aparece depois de encerrada; o motivo fica na linha do tempo. */}
-        {os.dataFim && podeReabrir && (
+        {os.dataFim && ehGestor && (
           <Button
             variant="outline"
             size="sm"

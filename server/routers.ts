@@ -82,6 +82,7 @@ import { gestoresRouter } from "./modules/gestores/router";
 import { tarefasAgendadasRouter } from "./modules/tarefasAgendadas/router";
 import { quadroAtividadesRouter } from "./modules/quadroAtividades/router";
 import { qrcodeRouter } from "./modules/qrcode/router";
+import { calendarioRouter } from "./modules/calendario/router";
 
 
 
@@ -322,6 +323,8 @@ export const appRouter = router({
   tarefasAgendadas: tarefasAgendadasRouter,
   quadroAtividades: quadroAtividadesRouter,
   qrcode: qrcodeRouter,
+  // Leitura das outras funções num calendário só; não tem tabela própria.
+  calendario: calendarioRouter,
 });
 
 export type AppRouter = typeof appRouter;
