@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BotaoSuporte } from "@/components/BotaoSuporte";
+import { BotaoManual } from "@/components/BotaoManual";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/sonner";
 import { useCredenciaisLembradas } from "@/hooks/useCredenciaisLembradas";
@@ -126,7 +127,8 @@ export default function SindicoLogin() {
           </CardContent>
         </Card>
 
-        <div className="mt-6">
+        <div className="mt-6 space-y-3">
+          <BotaoManual />
           <BotaoSuporte />
         </div>
 

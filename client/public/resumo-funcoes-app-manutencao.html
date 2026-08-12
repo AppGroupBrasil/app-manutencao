@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resumo das Funções</title>
+<style>
+  :root{
+    --laranja:#ec5a00; --texto:#111827; --cinza:#4b5563; --linha:#e5e7eb;
+    --fundo:#f8fafc; --azul:#1d4ed8;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:#fff; color:var(--texto);
+    font:19px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  .pg{max-width:900px;margin:0 auto;padding:28px 22px 80px}
+  h1{font-size:38px;line-height:1.15;margin:0 0 6px}
+  h2{font-size:28px;margin:44px 0 6px;padding-top:14px;border-top:3px solid var(--laranja)}
+  h3{font-size:23px;margin:26px 0 4px;display:flex;align-items:center;gap:10px}
+  h4{font-size:20px;margin:20px 0 4px}
+  p{margin:8px 0}
+  .sub{color:var(--cinza);font-size:18px;margin:0 0 18px}
+  .quem{color:var(--cinza);font-size:17px;margin:0 0 8px}
+  ol.passos{margin:8px 0 8px;padding-left:28px}
+  ol.passos>li{margin:7px 0}
+  ul.lista{margin:8px 0;padding-left:24px}
+  ul.lista>li{margin:6px 0}
+  .ic{width:1.05em;height:1.05em;flex:none;fill:none;stroke:currentColor;
+     stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-2px}
+  .bt{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:12px;
+     font-size:17px;font-weight:600;line-height:1.45;white-space:nowrap;vertical-align:1px}
+  .bt-p{background:var(--laranja);color:#fff}
+  .bt-o{background:#fff;color:#1f2937;border:1.5px solid #cbd5e1}
+  .bt-g{background:#f1f5f9;color:#475569;padding:5px 8px}
+  .bt-d{background:#fee2e2;color:#b91c1c;padding:5px 8px}
+  .campo{display:inline-block;border:1.5px solid #cbd5e1;border-radius:10px;
+     padding:2px 12px;color:#475569;font-size:17px;background:#fff}
+  .et{display:inline-block;border-radius:999px;padding:1px 10px;font-size:15px;font-weight:600}
+  .et-verde{background:#dcfce7;color:#166534}
+  .et-amarelo{background:#fef3c7;color:#92400e}
+  .et-vermelho{background:#fee2e2;color:#991b1b}
+  .et-azul{background:#dbeafe;color:#1e40af}
+  .aviso{background:#fff7ed;border-left:5px solid var(--laranja);padding:12px 14px;
+     border-radius:10px;margin:12px 0;font-size:18px}
+  .so{background:#eef2ff;border-left:5px solid #4f46e5;padding:12px 14px;
+     border-radius:10px;margin:12px 0;font-size:18px}
+  .perfil{background:var(--fundo);border:2px solid var(--linha);border-radius:16px;
+     padding:16px 18px;margin:16px 0}
+  .fn{border:2px solid var(--linha);border-radius:16px;padding:14px 18px;margin:16px 0}
+  .card{border:2px solid var(--linha);border-radius:14px;padding:12px 14px;margin:10px 0;background:#fff}
+  .grade{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .quadro{border:2px solid var(--linha);border-radius:14px;padding:12px;text-align:center}
+  .quadro .ic{width:30px;height:30px;color:var(--laranja)}
+  .quadro b{display:block;margin-top:6px;font-size:18px}
+  .quadro span{display:block;color:var(--cinza);font-size:15px}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:17px}
+  th,td{border:1px solid var(--linha);padding:8px 10px;text-align:left}
+  th{background:var(--fundo)}
+  td.c{text-align:center;font-weight:700}
+  .sim{color:#15803d}.nao{color:#b91c1c}
+  .indice{background:var(--fundo);border-radius:16px;padding:14px 20px}
+  .indice a{color:var(--azul);text-decoration:none}
+  .indice li{margin:5px 0}
+  .rodape{margin-top:40px;border-top:2px solid var(--linha);padding-top:14px;
+     color:var(--cinza);font-size:17px}
+  .imprimir{position:sticky;top:0;background:#fff;padding:10px 0;text-align:right;z-index:5}
+  .imprimir button{font:inherit;font-weight:700;background:var(--laranja);color:#fff;
+     border:0;border-radius:12px;padding:10px 18px;cursor:pointer}
+  /* Resumo: cartão compacto, uma linha por pergunta. */
+  .lin{margin:5px 0}
+  .lin b{color:#0f172a}
+  .fn.compacta{padding:12px 16px;margin:12px 0}
+  .fn.compacta h3{font-size:21px;margin:0 0 2px}
+  @media print{
+    .imprimir{display:none}
+    body{font-size:12.5pt}
+    h1{font-size:24pt} h2{font-size:17pt} h3{font-size:14pt}
+    h2{break-before:page;break-after:avoid}
+    h2:first-of-type{break-before:auto}
+    .fn,.perfil,.card,table{break-inside:avoid}
+    .pg{padding:0}
+    @page{margin:14mm}
+  }
+  @media (max-width:640px){
+    body{font-size:18px}
+    h1{font-size:30px} h2{font-size:24px}
+    .grade{grid-template-columns:1fr}
+  }
+
+      @media print{
+        body{font-size:11.5pt}
+        h2{break-before:auto;margin-top:22px}
+        .fn.compacta{margin:9px 0;padding:10px 14px}
+        .lin{margin:3px 0}
+      }</style>
+</head>
+<body>
+<svg style="display:none" aria-hidden="true"><symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+<symbol id="i-calendar-days" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></symbol>
+<symbol id="i-qr-code" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></symbol>
+<symbol id="i-share-2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></symbol>
+<symbol id="i-trash-2" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
+<symbol id="i-clipboard-list" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+<symbol id="i-check-circle-2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+<symbol id="i-calendar-clock" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-clipboard-check" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></symbol>
+<symbol id="i-alert-triangle" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-list-checks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+<symbol id="i-columns-3" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+<symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol></svg>
+
+<div class="pg">
+<div class="imprimir"><button onclick="window.print()">Imprimir</button></div>
+
+<h1>Resumo das Funções</h1>
+<p class="sub">O que cada função faz, onde ela fica, quem envia para quem e quem vê o quê. Os botões são só ilustração — os de verdade estão na tela.</p>
+
+<div class="perfil">
+<p class="lin"><b>Gerente (Sr. Francisco):</b> responde por todas as unidades; cadastra gestores e funcionários e decide o que cada um vê.</p>
+<p class="lin"><b>Gestor da unidade:</b> mesma tela e as mesmas funções, só da unidade dele.</p>
+<p class="lin"><b>Funcionário:</b> vê apenas as funções liberadas para ele, normalmente pelo celular.</p>
+</div>
+
+<ul class="lista"><li><b>Onde as funções moram:</b> gerente e gestor entram por <b>Painel → <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg>Manutenções</span></b>,
+   que tem um quadrado por função. O funcionário vê um <b>cartão por função liberada</b> no
+   <b>Portal do Funcionário</b>.</li><li><b>A permissão é por pessoa e por função</b>, na tela Funcionários: <b>Ver</b>, <b>Criar</b> e
+   <b>Excluir</b> (Excluir existe só na Ordem de Serviço).</li><li><b>O que vence quando:</b> o <svg class="ic" aria-hidden="true"><use href="#i-calendar-days"/></svg> <b>Calendário</b> em destaque no painel junta
+   as datas de todas as funções e leva direto ao registro.</li><li><b>Em qualquer função:</b> <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span> cria · <span class="campo">Buscar…</span> procura pelo protocolo ·
+   <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span> gera o relatório com fotos · <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg>QR Code</span> deixa consultar sem login ·
+   <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-share-2"/></svg>Compartilhar</span> envia por WhatsApp · <span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> apaga, sempre perguntando antes.</li></ul>
+
+<h2>As funções</h2>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-calendar-days"/></svg> Calendário</h3>
+  <p class="lin"><b>Faz:</b> junta num mês só <b>tudo que tem data marcada</b>, de todas as funções, com a cor do
+    prazo: <span class="et et-vermelho">vermelho passou</span> <span class="et et-amarelo">amarelo está chegando</span>
+    <span class="et et-verde">verde dentro do prazo</span> — cinza é o que já foi resolvido.</p>
+  <p class="lin"><b>Fica em:</b> <b>em destaque no Painel</b>, logo ao entrar, e também em
+    Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Calendário</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> não envia nada: é atalho. Toque no dia para ver o que vence nele e toque no item para
+    <b>abrir a função de origem</b>, já filtrada pelo número de protocolo daquele registro.</p>
+  <p class="lin"><b>Vê:</b> <b>gerente e gestor</b>, cada um com as datas da sua unidade. Mostra apenas as funções
+    ligadas para a organização.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-clipboard-list"/></svg> Ordens de Serviço</h3>
+  <p class="lin"><b>Faz:</b> o serviço que tem começo, meio e fim: protocolo, responsáveis, fotos de antes,
+    durante e depois, anexos, histórico e nota no final.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Ordens de Serviço</b> · no portal do funcionário, cartão <b>Ordens de Serviço</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> quem abre marca os <b>responsáveis</b> → a equipe da unidade recebe <b>aviso no
+    aplicativo</b> (se o gestor ligou o envio automático) e <b>e-mail</b> quem estiver marcado
+    para receber → o responsável <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Iniciar serviço</span> , registra as fotos e
+    <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Finalizar serviço</span> → o gestor confere, dá a nota e, se precisar,
+    <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg>Reabrir</span> escrevendo o motivo.
+    <br><b>Na unidade com o fluxo do gerente:</b> o gestor abre com <b>data máxima</b> → o gerente
+    programa o dia e a equipe → a equipe <b>dá baixa</b> → o gestor <b>confirma</b> (ou devolve com
+    motivo) → o gerente <b>finaliza</b>.</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta. Quem recebe o QR ou o link vê aquela O.S. <b>sem entrar no sistema</b>.
+    Reabrir é só de gerente e gestor.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-calendar-clock"/></svg> Agenda de Vencimentos</h3>
+  <p class="lin"><b>Faz:</b> contrato e serviço com prazo — dedetização, extintor, caixa d'água, seguro — em
+    <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg>Lista</span> ou <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-calendar-days"/></svg>Calendário</span> , com aviso antes de vencer.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Agenda de Vencimentos</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> o gestor cadastra a data e escolhe os <b>avisos</b> (tantos dias antes, ou data marcada)
+    e os <b>e-mails</b> que recebem → o sistema <b>envia o e-mail sozinho</b>, todo dia que cai um
+    aviso → resolvido o serviço, o gestor registra em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-clipboard-list"/></svg>Antes e depois</span> .</p>
+  <p class="lin"><b>Vê:</b> <b>só gerente e gestor</b>. Esta função não existe no portal do funcionário.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-clipboard-check"/></svg> Checklists</h3>
+  <p class="lin"><b>Faz:</b> a verificação do dia, item por item, com foto e observação; a barra verde mostra
+    quanto já foi feito.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Checklists</b> · no portal do funcionário, cartão <b>Checklists</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> o gestor monta a lista e escolhe em <b>Enviar para</b> quem vai executar → a pessoa marca
+    os itens no celular, anexa foto e, achando defeito, <b>reporta o problema</b> → o problema volta
+    para o gestor no botão <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg>3</span> da tela, como <span class="et et-amarelo">Aberto</span> até
+    alguém resolver. No modo <b>Ao vivo</b>, quem está no local monta e marca na hora.</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg> Vistorias</h3>
+  <p class="lin"><b>Faz:</b> a inspeção que precisa de prova: situação de cada item, galeria de fotos e relatório
+    em PDF.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Vistorias</b> · no portal do funcionário, cartão <b>Vistorias</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> o gestor cria a vistoria <b>pré-definida</b> para alguém executar, ou faz <b>ao vivo</b> no
+    local → quem vistoria fotografa e descreve item por item e reporta o problema com prioridade
+    → o gestor recebe o problema e gera o <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span> para quem cobra resultado.</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-list-checks"/></svg> Lista de Tarefas</h3>
+  <p class="lin"><b>Faz:</b> o serviço que se repete — diária, semanal, mensal ou data marcada — com registro de
+    execução e prova em foto.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Lista de Tarefas</b> · no portal do funcionário, cartão <b>Lista de Tarefas</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> o gestor cria a tarefa <b>escolhendo o funcionário</b> e a frequência → a tarefa aparece na
+    tela dessa pessoa → ela toca em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Registrar execução</span> , escreve como
+    ficou e anexa a foto → o gestor confere na aba <b>Acompanhamento</b>:
+    <span class="et et-verde">Realizadas</span> <span class="et et-amarelo">Pendentes</span> <span class="et et-vermelho">Não executadas</span> .</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-columns-3"/></svg> Quadro de Atividades</h3>
+  <p class="lin"><b>Faz:</b> mostra o andamento da equipe em quatro colunas: <b>A Fazer</b>, <b>Em Andamento</b>,
+    <b>Em Revisão</b> e <b>Concluído</b>.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Quadro de Atividades</b> · no portal do funcionário, cartão <b>Quadro de Atividades</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> aqui ninguém envia nada: é o quadro comum. Quem trabalha <b>arrasta o cartão</b> para a
+    coluna nova, e qualquer registro que já exista entra pelo número — em <b>Adicionar por
+    protocolo</b>, digite <span class="campo">OS-260810-4821</span> e escolha a coluna.</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta. Cada coluna inteira sai em PDF pelo <svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg> do título.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg> QR Code</h3>
+  <p class="lin"><b>Faz:</b> etiqueta colada no local ou no equipamento: quem aponta a câmera manda o problema com
+    foto e localização, <b>sem ter conta no sistema</b>.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>QR Code</b> · no portal do funcionário, cartão <b>QR Code</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> o gestor gera o código e <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>Imprimir</span> para colar no ponto → qualquer pessoa
+    que passa (morador, visitante, prestador) escaneia e envia → o registro cai na aba
+    <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-inbox"/></svg>Registros recebidos</span> → o gestor muda a situação (<span class="et et-azul">Nova</span>
+    <span class="et et-amarelo">Em andamento</span> <span class="et et-verde">Resolvida</span>) e, se a pessoa deixou e-mail,
+    responde por <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Responder</span> .</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta. Quem escaneia vê apenas o formulário daquele ponto — nunca o sistema.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> Registro de Manutenções</h3>
+  <p class="lin"><b>Faz:</b> o histórico do que foi consertado ou trocado, com foto de antes e depois e o protocolo
+    de cada registro.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Registro de Manutenções</b> · no portal do funcionário, cartão <b>Manutenções</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> quem executa registra o que fez → o registro fica na ficha da unidade → o gestor
+    acompanha pelos números do alto (<span class="et et-amarelo">Pendentes</span> <span class="et et-vermelho">Requer ação</span>
+    <span class="et et-azul">Realizadas</span> <span class="et et-verde">Finalizadas</span>) e manda o PDF a quem pedir.</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg> Ocorrências</h3>
+  <p class="lin"><b>Faz:</b> o registro rápido de um incidente: título, local, prioridade e foto.</p>
+  <p class="lin"><b>Fica em:</b> <b>Painel → cartão Ocorrências</b> · no portal do funcionário, cartão <b>Ocorrências</b>.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> quem viu registra na hora, do celular → o registro entra na lista da unidade → o gestor
+    (ou quem tem a função) toca em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Finalizar</span> quando o caso é resolvido.</p>
+  <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
+  Sem a chave <b>Criar</b>, a tela abre só para consulta.</p>
+</section>
+
+<h2>Para onde vai cada aviso</h2>
+<table>
+<tr><th style="width:210px">Caminho</th><th>Quando sai</th><th style="width:230px">Para quem</th></tr>
+<tr>
+  <td><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg> Aviso no aplicativo</td>
+  <td>ao abrir uma Ordem de Serviço, se o gestor ligou o <b>envio automático</b></td>
+  <td>equipe da unidade</td>
+</tr>
+<tr>
+  <td><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg> E-mail</td>
+  <td>O.S. aberta · vencimento chegando · resposta de um registro do QR Code</td>
+  <td>quem o gestor marcou na O.S. · a lista de e-mails do vencimento · quem deixou contato no QR</td>
+</tr>
+<tr>
+  <td><svg class="ic" aria-hidden="true"><use href="#i-message-circle"/></svg> WhatsApp</td>
+  <td>quando alguém toca em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-share-2"/></svg>Compartilhar</span> num registro</td>
+  <td>quem tem WhatsApp na ficha de funcionário</td>
+</tr>
+<tr>
+  <td><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg> Nada automático</td>
+  <td>Checklists, Vistorias, Tarefas, Quadro e Ocorrências</td>
+  <td>a pessoa vê ao abrir a função; o gestor vê na faixa <b>Chamados em aberto</b></td>
+</tr>
+</table>
+
+<h2>Quem vê o quê</h2>
+<table>
+<tr>
+  <th>Função</th>
+  <th class="c">Gerente</th>
+  <th class="c">Gestor da unidade</th>
+  <th class="c">Funcionário</th>
+</tr>
+<tr>
+  <td>Calendário</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c nao">não tem</td>
+</tr><tr>
+  <td>Ordens de Serviço</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr><tr>
+  <td>Agenda de Vencimentos</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c nao">não tem</td>
+</tr><tr>
+  <td>Checklists</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr><tr>
+  <td>Vistorias</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr><tr>
+  <td>Lista de Tarefas</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr><tr>
+  <td>Quadro de Atividades</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr><tr>
+  <td>QR Code</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr><tr>
+  <td>Registro de Manutenções</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr><tr>
+  <td>Ocorrências</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c ">se liberada</td>
+</tr>
+</table>
+<div class="aviso"><b>Duas coisas que ninguém vê:</b> unidade que não é sua, e função com a chave <b>Ver</b> desligada. O gerente troca de unidade no
+   seletor <span class="campo">Organização ▾</span> das telas <b>Funcionários</b> e <b>Registro de Manutenções</b>.</div>
+
+<div class="rodape">
+<p><b>App Manutenção</b> — appmanutencao.com.br · Suporte pelo WhatsApp (11) 93328-4364.</p>
+<p>O passo a passo de cada tela, botão por botão, está no <b>Manual do App Manutenção</b> —
+o PDF fica na tela de entrada, em <b>Baixar em PDF</b>.</p>
+</div>
+
+</div>
+</body>
+</html>

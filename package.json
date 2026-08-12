@@ -17,6 +17,7 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "smoke": "tsx scripts/smoke.ts",
+    "manual": "node scripts/manual/gerar-manual.mjs && node scripts/manual/gerar-resumo.mjs",
     "db:admin-plataforma": "tsx scripts/db/criar-admin-plataforma.ts",
     "testar-email": "tsx scripts/testar-email.ts",
     "db:redefinir-senha": "tsx scripts/db/redefinir-senha.ts",

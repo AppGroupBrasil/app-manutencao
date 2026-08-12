@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual do App Manutenção</title>
+<style>
+  :root{
+    --laranja:#ec5a00; --texto:#111827; --cinza:#4b5563; --linha:#e5e7eb;
+    --fundo:#f8fafc; --azul:#1d4ed8;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:#fff; color:var(--texto);
+    font:19px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  .pg{max-width:900px;margin:0 auto;padding:28px 22px 80px}
+  h1{font-size:38px;line-height:1.15;margin:0 0 6px}
+  h2{font-size:28px;margin:44px 0 6px;padding-top:14px;border-top:3px solid var(--laranja)}
+  h3{font-size:23px;margin:26px 0 4px;display:flex;align-items:center;gap:10px}
+  h4{font-size:20px;margin:20px 0 4px}
+  p{margin:8px 0}
+  .sub{color:var(--cinza);font-size:18px;margin:0 0 18px}
+  .quem{color:var(--cinza);font-size:17px;margin:0 0 8px}
+  ol.passos{margin:8px 0 8px;padding-left:28px}
+  ol.passos>li{margin:7px 0}
+  ul.lista{margin:8px 0;padding-left:24px}
+  ul.lista>li{margin:6px 0}
+  .ic{width:1.05em;height:1.05em;flex:none;fill:none;stroke:currentColor;
+     stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-2px}
+  .bt{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:12px;
+     font-size:17px;font-weight:600;line-height:1.45;white-space:nowrap;vertical-align:1px}
+  .bt-p{background:var(--laranja);color:#fff}
+  .bt-o{background:#fff;color:#1f2937;border:1.5px solid #cbd5e1}
+  .bt-g{background:#f1f5f9;color:#475569;padding:5px 8px}
+  .bt-d{background:#fee2e2;color:#b91c1c;padding:5px 8px}
+  .campo{display:inline-block;border:1.5px solid #cbd5e1;border-radius:10px;
+     padding:2px 12px;color:#475569;font-size:17px;background:#fff}
+  .et{display:inline-block;border-radius:999px;padding:1px 10px;font-size:15px;font-weight:600}
+  .et-verde{background:#dcfce7;color:#166534}
+  .et-amarelo{background:#fef3c7;color:#92400e}
+  .et-vermelho{background:#fee2e2;color:#991b1b}
+  .et-azul{background:#dbeafe;color:#1e40af}
+  .aviso{background:#fff7ed;border-left:5px solid var(--laranja);padding:12px 14px;
+     border-radius:10px;margin:12px 0;font-size:18px}
+  .so{background:#eef2ff;border-left:5px solid #4f46e5;padding:12px 14px;
+     border-radius:10px;margin:12px 0;font-size:18px}
+  .perfil{background:var(--fundo);border:2px solid var(--linha);border-radius:16px;
+     padding:16px 18px;margin:16px 0}
+  .fn{border:2px solid var(--linha);border-radius:16px;padding:14px 18px;margin:16px 0}
+  .card{border:2px solid var(--linha);border-radius:14px;padding:12px 14px;margin:10px 0;background:#fff}
+  .grade{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .quadro{border:2px solid var(--linha);border-radius:14px;padding:12px;text-align:center}
+  .quadro .ic{width:30px;height:30px;color:var(--laranja)}
+  .quadro b{display:block;margin-top:6px;font-size:18px}
+  .quadro span{display:block;color:var(--cinza);font-size:15px}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:17px}
+  th,td{border:1px solid var(--linha);padding:8px 10px;text-align:left}
+  th{background:var(--fundo)}
+  td.c{text-align:center;font-weight:700}
+  .sim{color:#15803d}.nao{color:#b91c1c}
+  .indice{background:var(--fundo);border-radius:16px;padding:14px 20px}
+  .indice a{color:var(--azul);text-decoration:none}
+  .indice li{margin:5px 0}
+  .rodape{margin-top:40px;border-top:2px solid var(--linha);padding-top:14px;
+     color:var(--cinza);font-size:17px}
+  .imprimir{position:sticky;top:0;background:#fff;padding:10px 0;text-align:right;z-index:5}
+  .imprimir button{font:inherit;font-weight:700;background:var(--laranja);color:#fff;
+     border:0;border-radius:12px;padding:10px 18px;cursor:pointer}
+  /* Resumo: cartão compacto, uma linha por pergunta. */
+  .lin{margin:5px 0}
+  .lin b{color:#0f172a}
+  .fn.compacta{padding:12px 16px;margin:12px 0}
+  .fn.compacta h3{font-size:21px;margin:0 0 2px}
+  @media print{
+    .imprimir{display:none}
+    body{font-size:12.5pt}
+    h1{font-size:24pt} h2{font-size:17pt} h3{font-size:14pt}
+    h2{break-before:page;break-after:avoid}
+    h2:first-of-type{break-before:auto}
+    .fn,.perfil,.card,table{break-inside:avoid}
+    .pg{padding:0}
+    @page{margin:14mm}
+  }
+  @media (max-width:640px){
+    body{font-size:18px}
+    h1{font-size:30px} h2{font-size:24px}
+    .grade{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<svg style="display:none" aria-hidden="true"><symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-key-round" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+<symbol id="i-trash-2" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
+<symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></symbol>
+<symbol id="i-qr-code" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></symbol>
+<symbol id="i-share-2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+<symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></symbol>
+<symbol id="i-alert-triangle" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+<symbol id="i-building-2" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-user-cog" viewBox="0 0 24 24"><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m21.7 16.4-.9-.3"/><path d="m15.2 13.9-.9-.3"/><path d="m16.6 18.7.3-.9"/><path d="m19.1 12.2.3-.9"/><path d="m19.6 18.7-.4-1"/><path d="m16.8 12.3-.4-1"/><path d="m14.3 16.6 1-.4"/><path d="m20.7 13.8 1-.4"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+<symbol id="i-lock-open" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
+<symbol id="i-crown" viewBox="0 0 24 24"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></symbol>
+<symbol id="i-calendar-days" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></symbol>
+<symbol id="i-clipboard-list" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></symbol>
+<symbol id="i-calendar-clock" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+<symbol id="i-clipboard-check" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></symbol>
+<symbol id="i-list-checks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+<symbol id="i-columns-3" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+<symbol id="i-check-circle-2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-hash" viewBox="0 0 24 24"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></symbol>
+<symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+<symbol id="i-settings-2" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
+<symbol id="i-more-vertical" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+<symbol id="i-image-plus" viewBox="0 0 24 24"><path d="M16 5h6"/><path d="M19 2v6"/><path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/><circle cx="9" cy="9" r="2"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol></svg>
+
+<div class="pg">
+<div class="imprimir"><button onclick="window.print()">Imprimir</button></div>
+
+<h1>Manual do App Manutenção</h1>
+<p class="sub">Passo a passo, com os mesmos botões e desenhos que aparecem na tela. Os botões deste manual são só ilustração — para usar, toque nos botões do sistema.</p>
+
+<div class="indice">
+<b>O que tem neste manual</b>
+<ul class="lista">
+  <li><a href="#comecar">1. Antes de começar — entrar, senha, sair</a></li>
+  <li><a href="#botoes">2. Os botões que aparecem em todas as telas</a></li>
+  <li><a href="#gerente">3. Gerente (Sr. Francisco)</a></li>
+  <li><a href="#gestor">4. Gestor da unidade</a></li>
+  <li><a href="#funcionario">5. Funcionário</a></li>
+  <li><a href="#funcoes">6. As funções, uma por uma</a></li>
+  <li><a href="#quemve">7. Quem vê o quê</a></li>
+  <li><a href="#duvidas">8. Dúvidas rápidas e suporte</a></li>
+</ul>
+</div>
+
+<h2 id="comecar">1. Antes de começar</h2>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-log-out"/></svg> Entrar no sistema</h3>
+<ol class="passos"><li>Abra o site <b>appmanutencao.com.br</b> no celular ou no computador.</li><li>Toque em <span class="bt bt-p">Entrar</span> , no canto de cima da tela.</li><li>Em <b>Usuário ou E-mail</b>, digite seu e-mail: <span class="campo">nome@email.com</span></li><li>Em <b>Senha</b>, digite seus <b>6 números</b>: <span class="campo">• • • • • •</span> — para conferir o que digitou, toque no olho <svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg> .</li><li>Marque <b>Lembrar e-mail e senha neste dispositivo</b> para não digitar tudo de novo na próxima vez.</li><li>Toque em <span class="bt bt-p">Entrar</span> . Cada pessoa entra pelo mesmo endereço; o sistema já sabe qual tela abrir.</li></ol>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-key-round"/></svg> Primeira vez: criar a sua senha</h3>
+<ol class="passos"><li>A conta nova vem com uma senha temporária, informada por quem cadastrou você.</li><li>Ao entrar, abre a tela <b>Crie sua senha</b>.</li><li>Digite <b>6 números</b> em <b>Nova senha</b> e repita em <b>Confirmar senha</b>.</li><li>Toque em <span class="bt bt-p">Salvar e entrar</span> .</li></ol>
+<div class="aviso"><b>Atenção:</b> enquanto a senha temporária não for trocada, o sistema fica bloqueado. Só existe esta saída — não tem como pular.</div>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg> Esqueci a senha</h3>
+<ul class="lista"><li><b>Funcionário:</b> na tela de entrada, toque em <b>Esqueceu a senha?</b>, digite o e-mail do
+   login e confirme. Chega um link no e-mail — ele <b>vale 1 hora</b>.</li><li><b>Gerente e gestor:</b> peça ao gerente para redefinir (botão <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-key-round"/></svg></span> na tela
+   <b>Gestores</b>). A senha volta para a inicial e o sistema pede uma nova no próximo acesso.</li><li><b>Se o próprio gerente perdeu a senha:</b> fale com o suporte pelo WhatsApp.</li></ul>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-log-out"/></svg> Sair</h3>
+<p>Toque em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-log-out"/></svg>Sair</span> no canto de cima, à direita. Em computador de uso comum, sempre saia ao terminar.</p>
+
+<h2 id="botoes">2. Os botões que aparecem em todas as telas</h2>
+<p>São sempre os mesmos, em qualquer função. Se souber estes, sabe usar o sistema todo.</p>
+
+<table>
+<tr><th style="width:190px">Botão</th><th>O que faz</th></tr>
+<tr><td><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg></span></td><td><b>Voltar</b> para a tela anterior. Fica sempre no canto de cima, à esquerda.</td></tr>
+<tr><td><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span></td><td><b>Criar</b> um registro novo (uma O.S., uma tarefa, um checklist…). Abre uma janela para preencher.</td></tr>
+<tr><td><span class="campo">Buscar…</span> <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></td><td><b>Procurar</b> por título, número do protocolo, local ou nome. Digite e a lista filtra sozinha.</td></tr>
+<tr><td><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg></span></td><td><b>Editar</b> o que já está gravado.</td></tr>
+<tr><td><span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span></td><td><b>Excluir</b>. O sistema <b>pergunta antes</b>: leia e confirme só se tiver certeza. Não dá para desfazer.</td></tr>
+<tr><td><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span></td><td><b>Gerar o relatório</b> em PDF, com fotos e histórico, para guardar ou enviar.</td></tr>
+<tr><td><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg>QR Code</span></td><td><b>Mostrar o código</b> do registro para imprimir e colar no local. Quem aponta a câmera vê o registro sem precisar de senha.</td></tr>
+<tr><td><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-share-2"/></svg>Compartilhar</span></td><td><b>Enviar por WhatsApp</b> para alguém da equipe, ou <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>Copiar</span> o texto.</td></tr>
+<tr><td><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg></span></td><td><b>Permissões</b> — o que cada funcionário pode ver e fazer.</td></tr>
+<tr><td><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg>3</span></td><td><b>Problemas reportados</b>. O número é a quantidade que ainda espera solução.</td></tr>
+<tr><td><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg></span></td><td><b>Tirar foto</b> na hora, com a câmera do celular.</td></tr>
+<tr><td><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span></td><td><b>Escolher foto</b> que já está guardada no aparelho.</td></tr>
+</table>
+
+<div class="aviso"><b>Três coisas valem para tudo:</b> 
+<b>1)</b> todo registro ganha um <b>número de protocolo</b> (ex.: <b>OS-260810-0042</b>) — é por ele que se procura depois.
+<b>2)</b> dentro da Ordem de Serviço <b>não existe botão de salvar</b>: o sistema grava sozinho e escreve
+<span class="et et-verde">As alterações são salvas automaticamente</span> no alto da janela.
+<b>3)</b> a foto pode ser tirada no lugar do serviço, direto do celular.</div>
+
+<h2 id="gerente">3. Gerente (Sr. Francisco)</h2>
+<div class="perfil">
+<p><b>O que o gerente é no sistema:</b> responde por <b>todas as unidades</b>. Vê tudo, cadastra
+gestores e funcionários, e decide o que cada um pode fazer.</p>
+<p class="quem">Na tela de cadastro de gestor, esse papel aparece escrito como
+<b>“Gestor-chefe (várias unidades)”</b> — é a mesma coisa.</p>
+</div>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-building-2"/></svg> A tela que abre depois de entrar</h3>
+<p>Chama-se <b>Painel Administrativo</b>. Tem três partes:</p>
+
+<h4>1) O calendário, em destaque no alto</h4>
+<p>Mostra o mês com <b>tudo que tem data marcada</b>, de todas as funções, pela cor do prazo.
+Toque num dia para ver o que vence nele; toque no item para abrir a função de origem.
+O passo a passo está em <a href="#f-cal">Calendário</a>.</p>
+
+<h4>2) A faixa de avisos</h4>
+<div class="card">
+<svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg> <b>Chamados em aberto (12)</b><br>
+<span class="quem">Itens de todas as funções que aguardam resposta ou verificação.</span>
+<div style="margin-top:8px">
+  <span class="bt bt-o" style="width:100%;justify-content:space-between"><b>4</b> &nbsp;Ordens de Serviço — em aberto <svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></span><br>
+  <span class="bt bt-o" style="margin-top:6px;width:100%;justify-content:space-between"><b>3</b> &nbsp;Agenda de Vencimentos — 1 vencido <svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></span>
+</div>
+</div>
+<ul class="lista"><li>Cada linha mostra <b>quantos</b> itens esperam você. Toque na linha e o sistema abre a função já naquela lista.</li><li>Quando estiver tudo em dia, a faixa fica verde: <span class="et et-verde">Nada esperando resposta</span> .</li></ul>
+
+<h4>3) Os cartões quadrados, dois por linha</h4>
+<div class="grade">
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-building-2"/></svg><b>Organizações</b><span>as unidades — abrir, editar, excluir</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-user-cog"/></svg><b>Gestores</b><span>responsáveis pelas unidades</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg><b>Funcionários</b><span>equipe e permissões</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg><b>Ocorrências</b><span>incidentes com foto e prioridade</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg><b>Manutenções</b><span>entra aqui para as 9 funções</span></div>
+</div>
+<p>Toque no cartão para abrir. O número grande dentro do cartão é a quantidade já cadastrada.</p>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-building-2"/></svg> Organizações (as unidades)</h3>
+<ol class="passos"><li>No painel, toque no cartão <b>Organizações</b>.</li><li>Para cadastrar: <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nova</span> → preencha <b>Nome</b>, <b>Endereço</b>, <b>Cidade</b>, <b>UF</b>, <b>CEP</b> → <span class="bt bt-p">Salvar</span> .</li><li>Para corrigir: <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg></span> no cartão da unidade.</li><li>Para apagar: <span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> e confirme. Só o gerente vê este botão.</li></ol>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-user-cog"/></svg> Gestores</h3>
+<ol class="passos"><li>No painel, toque no cartão <b>Gestores</b>.</li><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span> → <b>Nome</b>, <b>E-mail</b>, <b>Telefone</b>.</li><li>Em <b>Papel</b>, escolha: <b>Gestor da unidade</b> (cuida de uma) ou <b>Gestor-chefe</b> (cuida de várias — é o caso do gerente).</li><li>Em <b>Unidades</b>, marque as unidades dessa pessoa.</li><li><span class="bt bt-p">Salvar</span> . Aparece um aviso verde com a <b>senha inicial</b> — passe para a pessoa; ela troca no primeiro acesso.</li></ol>
+<p><b>No cartão de cada gestor:</b>
+<span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg></span> editar ·
+<span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-key-round"/></svg></span> redefinir a senha ·
+<span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span> bloquear o acesso (<span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-lock-open"/></svg></span> para liberar de novo) ·
+<span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> excluir.</p>
+<ul class="lista"><li>A conta marcada com a coroa <svg class="ic" aria-hidden="true"><use href="#i-crown"/></svg> <b>Gestor master</b> não pode ser bloqueada nem excluída — é a que manda em tudo.</li><li><span class="et et-amarelo">senha provisória</span> no cartão quer dizer que a pessoa ainda não criou a senha dela.</li><li><span class="et et-vermelho">bloqueado</span> quer dizer que a pessoa não consegue entrar.</li></ul>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg> Funcionários e permissões</h3>
+<ol class="passos"><li>No painel, toque no cartão <b>Funcionários</b>.</li><li>No alto, escolha a unidade no seletor <span class="campo">Organização ▾</span> .</li><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span> → <b>Nome</b>, <b>Cargo</b>, <b>Tipo</b>, <b>E-mail</b>, <b>Telefone</b>, <b>WhatsApp</b>.</li><li>Em <b>Acesso ao portal</b>: escreva o <b>E-mail de login</b> e uma senha de <b>6 números</b>. Deixando a senha em branco, a pessoa fica apenas cadastrada, sem entrar no sistema.</li><li><span class="bt bt-p">Salvar</span> .</li><li>Agora defina o que ela vê: toque em <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg></span> no cartão dela.</li></ol>
+<h4>A janela de permissões</h4>
+<p>Uma linha por função e três chaves em cada linha:</p>
+<table>
+<tr><th style="width:150px">Chave</th><th>O que acontece</th></tr>
+<tr><td><b>Ver</b></td><td>A função aparece na tela do funcionário. Desligada, ele nem vê o cartão.</td></tr>
+<tr><td><b>Criar</b></td><td>Ele pode registrar coisas novas. Desligada, ele só olha.</td></tr>
+<tr><td><b>Excluir</b></td><td>Só existe em <b>Ordens de Serviço</b>. Apagar leva fotos, anexos e histórico junto — deixe desligada se a equipe só precisa registrar.</td></tr>
+</table>
+<p>Ao terminar: <span class="bt bt-p">Salvar permissões</span> .</p>
+<div class="aviso"><b>Como já nasce:</b> toda função vem com <b>Ver</b> e <b>Criar</b> ligados e <b>Excluir</b> desligado. Você só mexe no que quiser tirar.</div>
+<p><b>Cartão do funcionário:</b> <span class="et et-verde">acesso ativo</span> entra no sistema ·
+<span class="et et-azul">sem acesso</span> só cadastrado. Botões: <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg></span> permissões ·
+<span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg></span> editar · <span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> excluir.</p>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> Manutenções — a porta das 8 funções</h3>
+<p>No painel, toque no cartão <b>Manutenções</b>. Abre uma tela com nove quadrados:</p>
+<div class="grade">
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-calendar-days"/></svg><b>Calendário</b><span>tudo com data, num mês só</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-clipboard-list"/></svg><b>Ordens de Serviço</b><span>abertura, execução, conclusão</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-calendar-clock"/></svg><b>Agenda de Vencimentos</b><span>contratos e serviços com prazo</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-clipboard-check"/></svg><b>Checklists</b><span>itens, antes e depois</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-list-checks"/></svg><b>Lista de Tarefas</b><span>quem faz, quando e com que foto</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><b>Vistorias</b><span>inspeção item por item</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-columns-3"/></svg><b>Quadro de Atividades</b><span>colunas do que está andando</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg><b>QR Code</b><span>etiqueta no local, registro pela câmera</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg><b>Registro de Manutenções</b><span>o que já foi registrado</span></div>
+</div>
+<p>O passo a passo de cada uma está na <a href="#funcoes">parte 6</a>.</p>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-building-2"/></svg> Trocar de unidade</h3>
+<ol class="passos"><li>Abra <b>Funcionários</b> (ou <b>Registro de Manutenções</b>).</li><li>Toque no seletor <span class="campo">Organização ▾</span> e escolha a unidade.</li><li>O sistema <b>guarda a escolha</b>: painel, ordens de serviço e todas as funções passam a mostrar essa unidade até você trocar de novo.</li></ol>
+<div class="aviso"><b>Importante:</b> os números do painel são sempre <b>de uma unidade só</b> — a que está escolhida. Não existe soma de todas as unidades numa tela.</div>
+
+<div class="so"><b>Só o gerente (não aparece para os gestores de unidade):</b> 
+criar e excluir unidade ·
+criar gestor, redefinir a senha de um gestor, bloquear e excluir gestor ·
+ver a equipe inteira de cada unidade ·
+ligar e desligar funções da unidade (tela <b>Módulos</b>, aberta digitando o endereço
+<b>appmanutencao.com.br/admin/modulos</b>).</div>
+
+<h2 id="gestor">4. Gestor da unidade</h2>
+<div class="perfil">
+<p><b>O que é:</b> responde por <b>uma unidade</b>. A tela é a mesma do gerente e as 8 funções
+são as mesmas — só que tudo o que ele vê é da sua unidade.</p>
+</div>
+
+<h3>O que o gestor faz igual ao gerente</h3>
+<ul class="lista"><li>Vê a faixa <b>Chamados em aberto</b> e entra em qualquer função pelo cartão <b>Manutenções</b>.</li><li>Cadastra e edita <b>funcionários</b> da unidade e define as <b>permissões</b> de cada um.</li><li>Cria, acompanha, finaliza, gera PDF e compartilha em todas as funções.</li><li>Reabre O.S. finalizada e responde os registros que chegam pelo QR Code.</li></ul>
+
+<h3>O que não aparece para ele</h3>
+<ul class="lista"><li>Em <b>Gestores</b>: o botão <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span> e os botões <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-key-round"/></svg></span> <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg></span> <span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> . Ele vê apenas a própria conta na lista.</li><li>Em <b>Organizações</b>: os botões <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nova</span> e <span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> — ele vê só a unidade dele.</li><li>A tela <b>Módulos</b>, que liga e desliga funções da unidade.</li></ul>
+<div class="aviso"><b>O gestor faz, sim:</b> <b>reabrir</b> uma O.S. finalizada e ligar o <b>envio automático de avisos</b> da O.S. para a
+   equipe. Isso é de quem responde pela unidade — o funcionário não tem esses botões.</div>
+<div class="aviso"><b>Sobre a lista de funcionários:</b> o gestor de unidade vê na lista <b>as pessoas que ele mesmo cadastrou</b>. O gerente vê a equipe inteira da unidade.</div>
+
+<h2 id="funcionario">5. Funcionário</h2>
+<div class="perfil">
+<p><b>O que é:</b> quem executa e registra o serviço, normalmente pelo celular.
+Ele vê <b>somente as funções que o gerente liberou</b> para ele.</p>
+</div>
+
+<h3><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg> A tela que abre depois de entrar</h3>
+<p>Chama-se <b>Portal do Funcionário</b>. Em cima aparece o seu nome e o seu cargo; no meio,
+um cartão para cada função liberada:</p>
+<div class="grade">
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-clipboard-check"/></svg><b>Checklists</b><span>verificações do dia</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg><b>Manutenções</b><span>registrar e acompanhar</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg><b>Ocorrências</b><span>relatar problema</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><b>Vistorias</b><span>inspeções</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-list-checks"/></svg><b>Lista de Tarefas</b><span>o que foi pedido para você</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-columns-3"/></svg><b>Quadro de Atividades</b><span>o andamento da equipe</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-clipboard-list"/></svg><b>Ordens de Serviço</b><span>abrir e acompanhar</span></div>
+  <div class="quadro"><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg><b>QR Code</b><span>registros recebidos</span></div>
+</div>
+<ol class="passos"><li>Toque no cartão da função.</li><li>Faça o registro (o passo a passo está na <a href="#funcoes">parte 6</a>).</li><li>Para voltar aos cartões, toque em <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg></span> no canto de cima.</li></ol>
+<div class="aviso"><b>Não aparece nenhum cartão?</b> o gerente ainda não liberou funções para você. Fale com ele.</div>
+<div class="aviso"><b>Trabalha em mais de uma unidade?</b> a primeira tela mostra a lista de unidades. Toque na sua unidade para continuar.</div>
+
+<h3>O que o funcionário não faz</h3>
+<ul class="lista"><li>Não vê outras unidades, nem a equipe, nem gestores.</li><li>Não <b>reabre</b> uma O.S. finalizada — isso é do gestor.</li><li>Só <b>exclui</b> se o gestor tiver ligado essa chave para ele.</li><li>Se a chave <b>Criar</b> estiver desligada, a tela abre <b>só para consulta</b>: aparece a lista, não aparece o formulário.</li></ul>
+
+<h2 id="funcoes">6. As funções, uma por uma</h2>
+<p class="sub">Cada função tem um cartão por registro, e no pé do cartão sempre os mesmos botões:
+<span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Finalizar</span> <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg>QR Code</span> <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span>
+<span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-share-2"/></svg>Compartilhar</span> <span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> .</p>
+
+
+<section class="fn" id="f-cal">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-calendar-days"/></svg> Calendário</h3>
+  <p class="quem">Gerente e gestor. É a primeira coisa que aparece no painel: o mês com tudo que tem data marcada, de todas as funções.</p>
+  
+<h4>Ler as cores</h4>
+<ul class="lista"><li><span class="et et-vermelho">vermelho</span> — <b>passou do prazo</b> e ninguém resolveu.</li><li><span class="et et-amarelo">amarelo</span> — <b>está chegando</b>: vence em até 7 dias.</li><li><span class="et et-verde">verde</span> — <b>dentro do prazo</b>, ainda há tempo.</li><li><b>cinza</b> — <b>já resolvido</b>; fica no calendário como histórico.</li></ul>
+<ol class="passos"><li>No painel, o calendário já está aberto. Para a tela cheia, toque em <span class="bt bt-o">Abrir</span> — ou em
+   <b>Manutenções → Calendário</b>.</li><li>Os três números do alto contam o mês inteiro: passou do prazo, está chegando, dentro do prazo.</li><li>Use <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></span> e <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></span> para trocar de mês.</li><li>Toque num <b>dia com bolinha colorida</b>: a lista daquele dia abre embaixo. O número na
+   bolinha é a quantidade de itens.</li><li>Toque no item da lista: o sistema <b>abre a função de origem</b>, já filtrada pelo protocolo
+   daquele registro — é o atalho.</li><li>Na tela cheia, os botões redondos filtram por função: <b>Vencimentos</b>, <b>Manutenções</b>,
+   <b>Checklists</b>, <b>Vistorias</b>, <b>Tarefas</b>, <b>Atividades</b>.</li></ol>
+<div class="aviso"><b>O que entra no calendário:</b> a data de vencimento dos <b>vencimentos</b>; a data agendada de <b>manutenções</b>,
+   <b>vistorias</b> e <b>checklists</b>; as <b>tarefas</b> — inclusive as que se repetem, que
+   aparecem em cada dia em que caem; e as <b>atividades</b> do quadro com data marcada.
+   e as <b>ordens de serviço</b>, pelo dia programado — ou pela data máxima, enquanto o
+   gerente não programou.</div>
+
+</section>
+
+
+<section class="fn" id="f-os">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-clipboard-list"/></svg> Ordens de Serviço (O.S.)</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. É a função mais completa: use quando o serviço tem começo, meio e fim.</p>
+  
+<h4>Abrir uma O.S.</h4>
+<ol class="passos"><li>Toque em <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nova O.S.</span> , no canto de cima.</li><li><b>Título</b>: <span class="campo">Ex: Manutenção do elevador</span></li><li><b>Descrição</b>: conte o problema com detalhe.</li><li><b>Categoria</b>, <b>Prioridade</b> e <b>Status inicial</b>: escolha nas listas ▾.</li><li><b>Local</b>: <span class="campo">Ex: Bloco A - 3º andar</span></li><li><b>Responsáveis pela O.S.</b>: marque uma ou mais pessoas da equipe.</li><li>Toque em <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Criar Ordem de Serviço</span> . Aparece o aviso com o número: <b>O.S. OS-260810-0042 criada</b>.</li></ol>
+<h4>Acompanhar na lista</h4>
+<ul class="lista"><li>Cada cartão mostra <svg class="ic" aria-hidden="true"><use href="#i-hash"/></svg> o protocolo, o título, o responsável, o local, a data e duas etiquetas coloridas: <b>prioridade</b> e <b>status</b>.</li><li>Para mudar o andamento sem abrir nada: use a lista <span class="campo">Status ▾</span> no pé do cartão.</li><li>Os botões redondos de cima (<span class="et et-azul">Todas</span> e um por status) filtram a lista.</li><li>No fim da tela há o gráfico <b>Resumo por Status</b>, com a contagem de cada situação.</li></ul>
+<h4>Dentro da O.S. — toque em <span class="bt bt-o">Abrir O.S.</span></h4>
+<ol class="passos"><li>No alto: o <b>protocolo</b>, o <b>QR Code</b> da O.S. e <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>Baixar PDF</span> .</li><li><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Iniciar serviço</span> — marca a hora em que o trabalho começou.</li><li><b>Fotos:</b> escolha a fase <span class="campo">Antes ▾</span> (Antes, Durante, Depois) e toque em <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg></span> para fotografar ou <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span> para pegar do aparelho. Antes e Depois ficam lado a lado.</li><li><b>Anexos:</b> <span class="bt bt-o">Anexar arquivo</span> para orçamento, nota, laudo.</li><li><b>Responsáveis:</b> marque ou desmarque quem está no serviço.</li><li><b>Histórico:</b> escreva o que aconteceu e toque em <span class="bt bt-p">Enviar</span> . Fica registrado com data, hora e nome.</li><li><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Finalizar serviço</span> quando o serviço estiver pronto.</li><li><b>Avaliação:</b> toque nas estrelas <svg class="ic" aria-hidden="true"><use href="#i-star"/></svg> , escreva um comentário se quiser, e <span class="bt bt-p">Avaliar</span> .</li></ol>
+<div class="aviso"><b>Não procure o botão salvar:</b> aqui tudo grava na hora. No alto fica escrito <b>As alterações são salvas automaticamente</b> e, depois de cada gravação, <b>Salvo às 14:32</b>.</div>
+<div class="so"><b>Só o gestor:</b> <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg>Reabrir</span> , que só aparece depois de finalizada. O sistema pergunta
+<b>por que</b> está reabrindo, e o motivo entra no histórico.</div>
+
+<h4>Se a sua unidade usa o fluxo com prazo e confirmação</h4>
+<p>O gerente liga essa forma de trabalhar na própria O.S., em <b>Avisos ao abrir a O.S.</b>. Com
+ela, a ordem passa por cinco etapas, e a etiqueta do cartão mostra em qual delas está:</p>
+<ol class="passos"><li><b>O gestor abre</b> a O.S. com a <b>data máxima de finalização</b> — sem ela o sistema não
+   aceita, porque é o prazo que cobra a data no calendário.</li><li>A ordem entra no calendário como <span class="et et-amarelo">Aguardando programação</span> .</li><li><b>O gerente programa pelo calendário:</b> toca no item, em
+   <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-calendar-clock"/></svg>Programar data</span> , escolhe a data e marca <b>quem vai fazer o
+   serviço</b> — tudo na mesma janela, uma ordem depois da outra. Dá no mesmo abrir a O.S. e usar
+   <b>Programar o serviço</b>.</li><li><b>A equipe executa</b> e, no lugar de finalizar, toca em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Dar baixa</span>
+   — com as fotos já anexadas e uma observação do que foi feito.</li><li><b>O gestor confere:</b> <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Confirmar baixa</span> , ou
+   <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg>Devolver</span> escrevendo o motivo, e a ordem volta para a equipe.</li><li><b>O gerente finaliza.</b> Antes da confirmação do gestor, o botão de finalizar não funciona
+   nem para ele.</li></ol>
+<div class="aviso"><b>Onde cada um vê o que falta:</b> na faixa do painel. O gerente tem <b>Serviços a programar</b> e <b>Ordens a finalizar</b>; o
+   gestor tem <b>Baixas a confirmar</b>. Cada linha leva direto à lista.</div>
+
+</section>
+
+
+<section class="fn" id="f-venc">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-calendar-clock"/></svg> Agenda de Vencimentos</h3>
+  <p class="quem">Gerente e gestor. Para contratos e serviços que têm prazo: dedetização, extintor, limpeza de caixa d'água, seguro.</p>
+  
+<h4>Ler a tela</h4>
+<ul class="lista"><li>Três números em cima: <b>Ativos</b>, <b>Próximos 30 dias</b> (amarelo) e <b>Vencidos</b> (vermelho).</li><li><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg>Lista</span> mostra em forma de lista; <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-calendar-days"/></svg>Calendário</span> mostra no mês.</li><li>Os botões redondos filtram por tipo e por situação: <b>Vencidos</b>, <b>Próximos</b>, <b>Em dia</b>.</li></ul>
+<h4>Cadastrar um vencimento</h4>
+<ol class="passos"><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span> .</li><li><b>Título</b>: <span class="campo">Ex: Contrato de dedetização</span> .</li><li>Escolha o <b>tipo</b> e a <b>data de vencimento</b>.</li><li><b>Avisos:</b> escolha <span class="campo">Dias antes ▾</span> (ex.: 30) ou <span class="campo">Data específica ▾</span> . Pode colocar vários.</li><li><b>E-mails:</b> digite <span class="campo">nome@empresa.com.br</span> de quem deve receber o aviso.</li><li>Anexe fotos ou o documento, se tiver, e <span class="bt bt-p">Salvar</span> .</li></ol>
+<h4>No cartão de cada vencimento</h4>
+<ul class="lista"><li>A etiqueta mostra a situação e quantos dias faltam (ou de atraso).</li><li><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg>Editar</span> corrige os dados.</li><li><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-clipboard-list"/></svg>Antes e depois</span> registra o serviço feito, com foto de antes e de depois.</li><li><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg> quantos avisos estão programados · <svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg> quantos e-mails vão receber.</li><li><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-settings-2"/></svg></span> , no alto da tela, cadastra os <b>tipos de manutenção</b> da sua unidade.</li></ul>
+
+</section>
+
+
+<section class="fn" id="f-check">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-clipboard-check"/></svg> Checklists</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. Para a verificação do dia a dia, item por item.</p>
+  
+<h4>Criar — duas maneiras</h4>
+<ol class="passos"><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span> .</li><li>Na chave do alto, escolha: <b>Pré-definido</b> (você monta a lista e manda alguém executar) ou <b>Ao vivo</b> (você está no local e vai marcando na hora).</li><li><b>Título</b>: <span class="campo">Ex: Limpeza da cozinha</span> · <b>Local</b>: <span class="campo">Ex.: cozinha, pátio</span> · <b>Tipo</b>: Diária, Semanal, Mensal ou Especial.</li><li><b>Enviar para</b> (ou <b>Quem está executando</b>): escolha a pessoa na lista ▾.</li><li>Escreva os itens, um por linha. Para mais linhas, toque em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Item</span> .</li><li>No modo <b>Ao vivo</b>, cada item já tem <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg></span> para foto e espaço para observação.</li><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Criar checklist</span> — ou <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg>Salvar checklist</span> no modo ao vivo.</li></ol>
+<h4>Executar e acompanhar</h4>
+<ul class="lista"><li>A barra verde do cartão mostra o quanto já foi feito: <b>4/10 (40%)</b>.</li><li>Para marcar um item como feito, toque no círculo <svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg> do lado esquerdo. Ele fica riscado.</li><li><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg> do item: anexar foto e escrever o que viu. Quando o item tem registro, o triângulo fica <b>amarelo</b>.</li><li><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-more-vertical"/></svg></span> do item: abre <b>Ações</b> — <b>Reportar problema</b> (com foto e prioridade) e <b>Antes e depois</b>.</li><li><span class="bt bt-d"><svg class="ic" aria-hidden="true"><use href="#i-trash-2"/></svg></span> no alto do cartão apaga o checklist inteiro.</li></ul>
+<h4>Ver os problemas que a equipe reportou</h4>
+<p>No alto da tela, toque em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg>3</span> — o número é quanto ainda falta resolver.
+Abre a lista <b>Problemas reportados</b>, com protocolo, foto, prioridade, quem reportou e a situação
+(<span class="et et-amarelo">Aberto</span> <span class="et et-azul">Em andamento</span> <span class="et et-verde">Resolvido</span>).</p>
+<div class="aviso"><b>No celular do funcionário a tela é mais simples:</b> um formulário com <b>Título</b>, <b>Descrição</b>, <b>Localização</b>, <b>Prioridade</b> e
+   <svg class="ic" aria-hidden="true"><use href="#i-image-plus"/></svg> <b>Anexar imagens</b>, e o botão <span class="bt bt-p">Criar registro</span> . A lista fica ao
+   lado, com Finalizar, QR Code, PDF e Compartilhar.</div>
+
+</section>
+
+
+<section class="fn" id="f-vist">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg> Vistorias</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. Para inspecionar e provar com foto o estado de cada item.</p>
+  
+<ol class="passos"><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nova</span> .</li><li>Escolha <b>Pré-definida</b> (lista montada antes) ou <b>Ao vivo</b> (registro no local).</li><li><b>Título</b>: <span class="campo">Ex: Vistoria mensal do bloco A</span> , mais local e tipo.</li><li>Escreva os itens; use <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Item</span> para acrescentar linhas.</li><li><span class="bt bt-p">Criar</span> — no modo ao vivo, cada item já sai com foto e descrição.</li></ol>
+<h4>Trabalhando na vistoria</h4>
+<ul class="lista"><li>Em cada item: <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg></span> tirar foto e descrever · <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-image-plus"/></svg></span> ver galeria, descrição e situação · <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-more-vertical"/></svg></span> ações.</li><li>Em <b>Ações</b> você <b>reporta um problema</b> (com prioridade Baixa, Média, Alta ou Urgente) ou registra <b>Antes e depois</b>.</li><li>Para acrescentar item durante a vistoria: campo <span class="campo">Novo item da vistoria…</span> no pé da lista.</li><li><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span> gera o relatório com as fotos, pronto para enviar.</li></ul>
+
+</section>
+
+
+<section class="fn" id="f-tarefas">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-list-checks"/></svg> Lista de Tarefas</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. Para o serviço que se repete: quem faz, com que frequência, e a prova de que foi feito.</p>
+  
+<p>A faixa laranja <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-clipboard-list"/></svg>Como funciona</span> <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg> , no alto, explica a função em quatro linhas.</p>
+<h4>Criar a tarefa</h4>
+<ol class="passos"><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Criar Tarefa</span> .</li><li><b>Título</b>: <span class="campo">Ex: Limpeza do hall de entrada</span> .</li><li><b>Funcionário</b>: escolha na lista ▾ quem vai fazer.</li><li><b>Unidade</b>, <b>Setor</b> e <b>Local</b>: onde é o serviço.</li><li><b>Prioridade</b>: Baixa, Média, Alta ou Urgente.</li><li><b>Recorrência</b>: <b>Data Específica</b>, <b>Diária</b>, <b>Semanal</b> (marque os dias) ou <b>Mensal</b> (escolha o dia do mês).</li><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Criar Tarefa</span> .</li></ol>
+<h4>Registrar que foi feito — quem executa</h4>
+<ol class="passos"><li>No cartão da tarefa, toque em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Registrar execução</span> .</li><li>Escreva como ficou: <span class="campo">Como ficou a execução…</span> .</li><li>Anexe a foto do serviço.</li><li>Confirme. A tarefa passa a contar <b>1 execução</b>.</li></ol>
+<h4>Conferir — aba <b>Acompanhamento</b></h4>
+<ul class="lista"><li>Filtre por <span class="campo">Funcionário ▾</span> e por período: <span class="campo">Último dia ▾</span> , 7 dias ou 30 dias.</li><li>Quatro números: <b>Total</b>, <span class="et et-verde">Realizadas</span> , <span class="et et-amarelo">Pendentes</span> e <span class="et et-vermelho">Não executadas</span> .</li></ul>
+<p>No alto: <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-share-2"/></svg>Compartilhar</span> · <span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg></span> imprimir · <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-file-text"/></svg></span> PDF da lista.</p>
+
+</section>
+
+
+<section class="fn" id="f-quadro">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-columns-3"/></svg> Quadro de Atividades</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. Mostra, num olhar, o que a equipe está fazendo.</p>
+  
+<h4>As quatro colunas</h4>
+<ul class="lista"><li><span class="et et-azul">A Fazer</span> — ainda não começou.</li><li><span class="et et-amarelo">Em Andamento</span> — alguém está fazendo.</li><li><span class="et et-azul">Em Revisão</span> — feito, esperando conferência.</li><li><span class="et et-verde">Concluído</span> — encerrado.</li></ul>
+<ol class="passos"><li>Para mover uma atividade, <b>arraste o cartão</b> para a coluna nova (no celular, segure e arraste).</li><li>Para criar: <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nova Atividade</span> → título, responsável, prioridade e rotina.</li><li>Para trazer algo que já existe: em <b>Adicionar por protocolo</b>, digite o número — <span class="campo">Ex.: VNC-000012, OS-260810-4821</span> — escolha a coluna e toque em <span class="bt bt-o">Buscar</span> , depois em <span class="bt bt-p">Adicionar</span> .</li><li><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-columns-3"/></svg>Kanban</span> mostra em colunas; <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg>Lista</span> mostra tudo de uma vez.</li><li><span class="bt bt-g"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg></span> no título da coluna gera o PDF daquela coluna inteira.</li></ol>
+
+</section>
+
+
+<section class="fn" id="f-qr">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg> QR Code</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. Uma etiqueta em cada ponto: quem passa aponta a câmera e relata o problema, sem ter conta no sistema.</p>
+  
+<h4>Criar e colar a etiqueta</h4>
+<ol class="passos"><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Novo</span> .</li><li><b>Tipo</b>: <b>Local</b> (ex.: cozinha) ou <b>Item</b> (ex.: extintor do corredor).</li><li><b>Nome</b>: <span class="campo">Ex: Cozinha</span> · <b>Descrição</b>: a instrução para quem escanear.</li><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Gerar código</span> .</li><li>No cartão, toque em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>Imprimir</span> e cole o papel no lugar.</li></ol>
+<h4>Ver e responder o que chegou</h4>
+<ol class="passos"><li>Toque na aba <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-inbox"/></svg>Registros recebidos</span> . A bolinha vermelha mostra quantos são novos.</li><li>Cada registro traz o protocolo, quem avisou, o texto, as fotos, a data e o mapa do local.</li><li>Mude a situação na lista ▾: <b>Nova</b>, <b>Em andamento</b>, <b>Resolvida</b>.</li><li>Se a pessoa deixou e-mail, toque em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Responder</span> , escreva a resposta, anexe fotos e <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Enviar resposta</span> .</li></ol>
+
+</section>
+
+
+<section class="fn" id="f-manut">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> Registro de Manutenções</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. É o histórico do que foi consertado e trocado.</p>
+  
+<ul class="lista"><li>Cinco números em cima: <b>Total</b>, <span class="et et-amarelo">Pendentes</span> , <span class="et et-vermelho">Requer ação</span> , <span class="et et-azul">Realizadas</span> e <span class="et et-verde">Finalizadas</span> .</li><li>Procure por protocolo, título, local ou responsável, e filtre por <span class="campo">Todos os status ▾</span> .</li><li><span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nova</span> abre o cadastro; o protocolo é gerado sozinho.</li><li>Toque no cartão para abrir o registro: fotos <b>Antes</b> e <b>Depois</b>, descrição e histórico.</li><li>No pé do cartão: <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-qr-code"/></svg>QR Code</span> <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span> <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-share-2"/></svg>Compartilhar</span> .</li></ul>
+<div class="aviso"><b>No celular do funcionário:</b> esta função abre a tela simples — formulário com título, descrição, localização, prioridade e
+   fotos, e a lista ao lado. É a mesma tela de <b>Ocorrências</b>.</div>
+
+</section>
+
+
+<section class="fn" id="f-ocor">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg> Ocorrências</h3>
+  <p class="quem">Gerente, gestor e funcionário com a função liberada. O registro rápido de um problema ou incidente.</p>
+  
+<ol class="passos"><li>Abra <b>Ocorrências</b> (cartão do painel ou do portal).</li><li>No formulário: <b>Título</b>, <b>Descrição</b>, <b>Localização</b>.</li><li><b>Prioridade</b>: toque em Baixa, Média, Alta ou Urgente.</li><li><svg class="ic" aria-hidden="true"><use href="#i-image-plus"/></svg> <b>Anexar imagens</b> — pode ser a foto tirada na hora.</li><li><span class="bt bt-p">Criar registro</span> .</li><li>Depois, no cartão: <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Finalizar</span> quando resolver, e <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span> para o relatório.</li></ol>
+
+</section>
+
+<h2 id="quemve">7. Quem vê o quê</h2>
+<table>
+<tr>
+  <th>O que é</th>
+  <th class="c">Gerente<br><span style="font-weight:400">(Sr. Francisco)</span></th>
+  <th class="c">Gestor da<br>unidade</th>
+  <th class="c">Funcionário</th>
+</tr>
+<tr><td>Todas as unidades</td><td class="c sim">sim</td><td class="c nao">só a dele</td><td class="c nao">só a dele</td></tr>
+<tr><td>Faixa <b>Chamados em aberto</b></td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>As 8 funções de manutenção</td><td class="c sim">todas</td><td class="c sim">todas</td><td class="c">só as liberadas</td></tr>
+<tr><td>Criar e excluir unidade</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>Criar gestor / redefinir senha / bloquear</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>Cadastrar funcionário e dar permissões</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Programar a data e a equipe (fluxo)</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>Dar baixa no serviço (fluxo)</td><td class="c nao">não</td><td class="c nao">não</td><td class="c sim">se designado</td></tr>
+<tr><td>Confirmar a baixa (fluxo)</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Finalizar no fluxo com confirmação</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>Reabrir O.S. finalizada</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Excluir registro</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c">só se liberado</td></tr>
+<tr><td>Ligar e desligar funções (Módulos)</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>Calendário de todas as datas</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Gerar PDF e compartilhar</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c sim">sim</td></tr>
+</table>
+<div class="aviso"><b>A regra em uma frase:</b> o <b>gerente</b> manda em todas as unidades; o <b>gestor</b> manda na dele; o <b>funcionário</b> registra o serviço nas funções que abriram para ele.</div>
+
+<h2 id="duvidas">8. Dúvidas rápidas e suporte</h2>
+<h4>Onde clico para salvar?</h4>
+<p>Nos formulários, no botão laranja do fim (<span class="bt bt-p">Salvar</span> , <span class="bt bt-p">Criar registro</span> , <span class="bt bt-p">Criar Tarefa</span> ).
+Dentro da <b>Ordem de Serviço</b> não tem botão: grava sozinho.</p>
+
+<h4>Onde vejo o número do registro?</h4>
+<p>Sempre no alto do cartão, com o desenho <svg class="ic" aria-hidden="true"><use href="#i-hash"/></svg> . É o <b>protocolo</b> — use ele para procurar
+<svg class="ic" aria-hidden="true"><use href="#i-search"/></svg> , para citar no WhatsApp e para trazer o registro ao Quadro de Atividades.</p>
+
+<h4>Como envio para alguém?</h4>
+<p><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-share-2"/></svg>Compartilhar</span> → a lista mostra as pessoas da equipe com WhatsApp cadastrado.
+Toque no nome e o WhatsApp abre com a mensagem pronta. Ou use <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>Copiar</span> e cole onde quiser.
+Se ninguém aparecer, é porque falta preencher o WhatsApp na ficha do funcionário.</p>
+
+<h4>Como faço um relatório com as fotos?</h4>
+<p><span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg>PDF</span> no cartão do registro. O arquivo baixa no aparelho e pode ser enviado ou impresso.</p>
+
+<h4>Apaguei sem querer. Volta?</h4>
+<p>Não. Por isso o sistema pergunta antes. Ao apagar uma O.S., vão junto as fotos, os anexos e o histórico.</p>
+
+<h4>Errei a senha três vezes e travou</h4>
+<p>Espere alguns minutos e tente de novo, com calma. Se não entrar, peça ao gerente para redefinir.</p>
+
+<h4>Preciso de ajuda de verdade</h4>
+<p>Na tela de entrada há o botão verde <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-message-circle"/></svg>Fale com suporte</span> .
+Dentro do sistema, o balão verde <svg class="ic" aria-hidden="true"><use href="#i-message-circle"/></svg> fica no canto da tela. Os dois abrem o WhatsApp do suporte.</p>
+
+<div class="rodape">
+<p><b>App Manutenção</b> — appmanutencao.com.br · Suporte pelo WhatsApp (11) 93328-4364.</p>
+<p>Este manual também é um arquivo em PDF: na tela de entrada do sistema, toque em
+<b>Baixar em PDF</b> para guardar no aparelho, ou em <b>WhatsApp</b> para enviar a alguém.</p>
+</div>
+
+</div>
+</body>
+</html>
