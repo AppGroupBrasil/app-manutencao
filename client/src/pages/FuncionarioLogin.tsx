@@ -54,8 +54,8 @@ export default function FuncionarioLogin() {
             alt="App Manutenção"
             className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg"
           />
-          <h1 className="text-2xl font-bold text-slate-800">Entrar no Sistema</h1>
-          <p className="text-slate-700 font-medium mt-1">App Manutenção</p>
+          <h1 className="text-3xl font-bold text-slate-800">App Manutenção</h1>
+          <p className="text-slate-700 font-medium mt-1">Você pede, nós criamos</p>
           <p className="text-slate-500 text-sm mt-1">
             Sistema de manutenção sob medida para sua empresa ou condomínio
           </p>
