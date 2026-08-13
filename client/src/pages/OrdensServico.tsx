@@ -995,33 +995,35 @@ export function ConteudoOrdensServico({
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Status inicial</Label>
-                <Select
-                  value={form.statusId}
-                  onValueChange={(v) => setForm({ ...form, statusId: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Primeiro status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(statusNova ?? []).map((s) => (
-                      <SelectItem key={s.id} value={String(s.id)}>
-                        {s.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Local</Label>
-                <Input
-                  placeholder="Ex: Bloco A - 3º andar"
-                  value={form.endereco}
-                  onChange={(e) => setForm({ ...form, endereco: e.target.value })}
-                />
-              </div>
+            <div>
+              <Label>Status inicial</Label>
+              <Select
+                value={form.statusId}
+                onValueChange={(v) => setForm({ ...form, statusId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Primeiro status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(statusNova ?? []).map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Local ocupa a linha inteira: "Bloco A, sala 3, atrás da caixa
+                d'água" não cabe em meia tela, e é essa descrição que faz a
+                equipe achar o serviço sem telefonar. */}
+            <div>
+              <Label>Local</Label>
+              <Input
+                placeholder="Ex: Bloco A - 3º andar, sala da caldeira"
+                value={form.endereco}
+                onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+              />
             </div>
 
             {/* Antes e depois já na abertura: quem está no local fotografa o
