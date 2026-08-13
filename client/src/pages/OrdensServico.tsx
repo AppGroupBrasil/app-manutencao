@@ -252,6 +252,7 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
     <ConteudoOrdensServico
       condominioId={organizacaoAtiva?.id ?? 0}
       osInicial={osInicial}
+      unidades={organizacoes ?? []}
       organizacao={
         organizacaoAtiva
           ? {
@@ -275,6 +276,7 @@ export function ConteudoOrdensServico({
   condominioId,
   osInicial,
   organizacao,
+  unidades,
   onVoltar,
   podeCriar = true,
   podeExcluir = true,
@@ -283,6 +285,12 @@ export function ConteudoOrdensServico({
   condominioId: number;
   osInicial?: number;
   organizacao?: { nome: string; autoNotificar: boolean };
+  /**
+   * Unidades que esta pessoa alcança. Com mais de uma, a abertura da O.S.
+   * pergunta para qual delas vai — é o caso do gerente da rede. Gestor de
+   * unidade e funcionário recebem uma só (ou nenhuma) e ficam presos a ela.
+   */
+  unidades?: { id: number; nome: string }[];
   onVoltar?: () => void;
   podeCriar?: boolean;
   /** Excluir e permissao a parte: o gestor libera por funcionario. */
@@ -294,21 +302,26 @@ export function ConteudoOrdensServico({
   const v = useVocabulario();
   const { temModulo, modulosIndefinidos } = useBootstrap();
   const habilitado = condominioId > 0;
+
+  /**
+   * Unidade para onde a O.S. nova vai.
+   *
+   * Só o gerente escolhe; para os demais é sempre a unidade da sessão. Fica em
+   * estado próprio porque categoria, prioridade, status, equipe e responsáveis
+   * são cadastros DA UNIDADE: escolher uma unidade e gravar com o status de
+   * outra criaria ordem apontando para registro alheio.
+   */
+  const podeEscolherUnidade = (unidades?.length ?? 0) > 1;
+  const [unidadeNova, setUnidadeNova] = useState(condominioId);
+  useEffect(() => setUnidadeNova(condominioId), [condominioId]);
   // O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
   // isso preserva o comportamento das abas e do gráfico, que somam tudo.
   const { data: lista, isLoading: carregandoLista } = trpc.ordensServico.list.useQuery(
     { condominioId, limit: 500 },
     { enabled: habilitado },
   );
+  // Filtro da lista: sempre a unidade da tela.
   const { data: statusList } = trpc.ordensServico.getStatus.useQuery(
-    { condominioId },
-    { enabled: habilitado },
-  );
-  const { data: prioridades } = trpc.ordensServico.getPrioridades.useQuery(
-    { condominioId },
-    { enabled: habilitado },
-  );
-  const { data: categorias } = trpc.ordensServico.getCategorias.useQuery(
     { condominioId },
     { enabled: habilitado },
   );
@@ -316,10 +329,28 @@ export function ConteudoOrdensServico({
     { condominioId },
     { enabled: habilitado },
   );
+
+  // Cadastros do formulário: da unidade escolhida para a O.S. nova.
+  const { data: statusNova } = trpc.ordensServico.getStatus.useQuery(
+    { condominioId: unidadeNova },
+    { enabled: unidadeNova > 0 },
+  );
+  const { data: prioridades } = trpc.ordensServico.getPrioridades.useQuery(
+    { condominioId: unidadeNova },
+    { enabled: unidadeNova > 0 },
+  );
+  const { data: categorias } = trpc.ordensServico.getCategorias.useQuery(
+    { condominioId: unidadeNova },
+    { enabled: unidadeNova > 0 },
+  );
+  const { data: candidatosNova } = trpc.ordensServico.listarCandidatos.useQuery(
+    { condominioId: unidadeNova },
+    { enabled: unidadeNova > 0 },
+  );
   // Equipes da unidade: sem o módulo ligado a lista volta vazia e o campo some.
   const { data: equipesDaUnidade } = trpc.equipes.list.useQuery(
-    { condominioId },
-    { enabled: habilitado && !modulosIndefinidos && temModulo("equipes") },
+    { condominioId: unidadeNova },
+    { enabled: unidadeNova > 0 && !modulosIndefinidos && temModulo("equipes") },
   );
 
   const [busca, setBusca] = useState("");
@@ -365,7 +396,7 @@ export function ConteudoOrdensServico({
     onSuccess: async (res) => {
       // Responsáveis são registros filhos: entram depois que a O.S. existe.
       for (const funcionarioId of responsaveisNova) {
-        const pessoa = candidatos?.find((c) => c.id === funcionarioId);
+        const pessoa = candidatosNova?.find((c) => c.id === funcionarioId);
         if (!pessoa) continue;
         await addResponsavel
           .mutateAsync({
@@ -403,7 +434,14 @@ export function ConteudoOrdensServico({
       setResponsaveisNova([]);
       limparFotosNovas();
       await invalidar();
-      toast.success(`O.S. ${res.protocolo} criada`);
+      // Aberta em outra unidade não aparece nesta lista: dizer para onde foi
+      // evita a pessoa procurar na tela errada.
+      const destino = unidades?.find((u) => u.id === unidadeNova);
+      toast.success(
+        unidadeNova === condominioId || !destino
+          ? `O.S. ${res.protocolo} criada`
+          : `O.S. ${res.protocolo} criada em ${destino.nome}`,
+      );
     },
     onError: (e) => toast.error(e.message || "Erro ao criar a O.S."),
   });
@@ -760,13 +798,47 @@ export function ConteudoOrdensServico({
           <div className="space-y-3">
             {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
                 de digitar qualquer coisa, para onde esta ordem vai. */}
-            {organizacao && (
-              <div className="rounded-lg border bg-slate-50 px-3 py-2">
-                <span className="text-xs text-slate-500">
-                  {v.unidade} de atendimento
-                </span>
-                <p className="text-sm font-medium text-slate-800">{organizacao.nome}</p>
+            {podeEscolherUnidade ? (
+              <div>
+                <Label>{v.unidade} de atendimento</Label>
+                <Select
+                  value={String(unidadeNova)}
+                  onValueChange={(valor) => {
+                    setUnidadeNova(Number(valor));
+                    // Categoria, prioridade, status e equipe são da unidade
+                    // anterior: manter o que estava escolhido gravaria a ordem
+                    // apontando para cadastro de outra unidade.
+                    setForm((atual) => ({
+                      ...atual,
+                      categoriaId: "",
+                      prioridadeId: "",
+                      statusId: "",
+                      equipeId: "",
+                    }));
+                    setResponsaveisNova([]);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unidades!.map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            ) : (
+              organizacao && (
+                <div className="rounded-lg border bg-slate-50 px-3 py-2">
+                  <span className="text-xs text-slate-500">
+                    {v.unidade} de atendimento
+                  </span>
+                  <p className="text-sm font-medium text-slate-800">{organizacao.nome}</p>
+                </div>
+              )
             )}
             <div>
               <Label>Título</Label>
@@ -834,7 +906,7 @@ export function ConteudoOrdensServico({
                     <SelectValue placeholder="Primeiro status" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(statusList ?? []).map((s) => (
+                    {(statusNova ?? []).map((s) => (
                       <SelectItem key={s.id} value={String(s.id)}>
                         {s.nome}
                       </SelectItem>
@@ -951,11 +1023,11 @@ export function ConteudoOrdensServico({
               <p className="text-xs text-slate-500">
                 Marque uma ou mais pessoas da equipe desta unidade.
               </p>
-              {(candidatos?.length ?? 0) === 0 ? (
+              {(candidatosNova?.length ?? 0) === 0 ? (
                 <p className="text-xs text-slate-400">Nenhuma pessoa cadastrada nesta unidade.</p>
               ) : (
                 <div className="max-h-40 overflow-y-auto divide-y border rounded-md">
-                  {candidatos!.map((c) => (
+                  {candidatosNova!.map((c) => (
                     <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
                       <input
                         type="checkbox"
@@ -1040,7 +1112,7 @@ export function ConteudoOrdensServico({
               }
               onClick={() =>
                 criar.mutate({
-                  condominioId,
+                  condominioId: unidadeNova,
                   titulo: form.titulo.trim(),
                   descricao: form.descricao.trim() || undefined,
                   categoriaId: form.categoriaId ? Number(form.categoriaId) : undefined,
