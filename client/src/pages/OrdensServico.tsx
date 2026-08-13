@@ -478,6 +478,19 @@ export function ConteudoOrdensServico({
     onError: (e) => toast.error(e.message || "Erro ao salvar a preferência"),
   });
 
+  // Tirar alguém da lista de avisos exigia sair da O.S. e percorrer a tela de
+  // Funcionários. Aqui é o mesmo cadastro, alcançado de onde o nome aparece.
+  const excluirFuncionario = trpc.funcionario.delete.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.ordensServico.listarCandidatos.invalidate(),
+        utils.funcionario.list.invalidate(),
+      ]);
+      toast.success("Funcionário removido");
+    },
+    onError: (e) => toast.error(e.message || "Não foi possível remover"),
+  });
+
   const atualizar = trpc.ordensServico.update.useMutation({
     onSuccess: invalidar,
     onError: (e) => toast.error(e.message || "Erro ao atualizar"),
@@ -1150,7 +1163,20 @@ export function ConteudoOrdensServico({
             {/* Avisos de abertura: configuração da unidade, só o gestor vê. */}
             {organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
-                <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-slate-500"
+                    onClick={() => setModalFuncionarios(true)}
+                    aria-label="Cadastrar funcionários"
+                    title="Cadastrar funcionários"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                </div>
 
                 <label className="flex items-start gap-2 text-sm">
                   <input
@@ -1170,30 +1196,54 @@ export function ConteudoOrdensServico({
 
                 <div>
                   <p className="text-xs text-slate-500 mb-1">
-                    Notificação por e-mail: marque quem recebe. Fica salvo até desmarcar.
+                    Notificação por e-mail: marque quem recebe — fica salvo até desmarcar.
+                    A lixeira remove a pessoa do cadastro da unidade.
                   </p>
                   {(candidatos?.length ?? 0) === 0 ? (
                     <p className="text-xs text-slate-400">Nenhum funcionário cadastrado.</p>
                   ) : (
-                    <div className="max-h-32 overflow-y-auto divide-y border rounded-md">
+                    <div className="max-h-40 overflow-y-auto divide-y border rounded-md">
                       {candidatos!.map((c) => (
-                        <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={c.notificarOsEmail}
-                            disabled={!c.email}
-                            onChange={(e) =>
-                              setNotificarEmail.mutate({
-                                funcionarioId: c.id,
-                                ativo: e.target.checked,
-                              })
-                            }
-                          />
-                          <span className="flex-1">
-                            {c.nome}
-                            {c.email ? "" : " (sem e-mail)"}
-                          </span>
-                        </label>
+                        <div key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
+                          <label className="flex items-center gap-2 flex-1 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={c.notificarOsEmail}
+                              disabled={!c.email}
+                              onChange={(e) =>
+                                setNotificarEmail.mutate({
+                                  funcionarioId: c.id,
+                                  ativo: e.target.checked,
+                                })
+                              }
+                            />
+                            <span className="flex-1 truncate">
+                              {c.nome}
+                              {c.email ? "" : " (sem e-mail)"}
+                            </span>
+                          </label>
+                          {/* Desmarcar só para de avisar; a lixeira tira a
+                              pessoa do cadastro da unidade. */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+                            disabled={excluirFuncionario.isPending}
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Remover ${c.nome} do cadastro desta ${v.unidade.toLowerCase()}?`,
+                                )
+                              ) {
+                                excluirFuncionario.mutate({ id: c.id });
+                              }
+                            }}
+                            aria-label={`Remover ${c.nome}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       ))}
                     </div>
                   )}
