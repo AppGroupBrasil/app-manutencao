@@ -10,7 +10,7 @@ import { toast } from "@/components/ui/sonner";
 import { BotaoSuporte } from "@/components/BotaoSuporte";
 import { BotaoManual } from "@/components/BotaoManual";
 import { useCredenciaisLembradas } from "@/hooks/useCredenciaisLembradas";
-import { Building2, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import { Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
 
 export default function FuncionarioLogin() {
   const [, setLocation] = useLocation();
@@ -47,11 +47,18 @@ export default function FuncionarioLogin() {
       <div className="w-full max-w-md">
         {/* Logo e Título */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-4 shadow-lg">
-            <Building2 className="w-8 h-8" />
-          </div>
+          {/* O ícone do próprio aplicativo, o mesmo da tela do celular: quem
+              instalou reconhece antes de ler. */}
+          <img
+            src="/icon-192.png"
+            alt="App Manutenção"
+            className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg"
+          />
           <h1 className="text-2xl font-bold text-slate-800">Entrar no Sistema</h1>
-          <p className="text-slate-500 mt-1">Gerente, administrador ou funcionário</p>
+          <p className="text-slate-700 font-medium mt-1">App Manutenção</p>
+          <p className="text-slate-500 text-sm mt-1">
+            Sistema de manutenção sob medida para sua empresa ou condomínio
+          </p>
         </div>
 
         {/* Card de Login */}
@@ -141,6 +148,15 @@ export default function FuncionarioLogin() {
               >
                 Esqueceu a senha?
               </a>
+            </div>
+
+            {/* Porta de entrada de quem chega sozinho: sete dias de teste. */}
+            <div className="mt-4 text-center text-sm text-slate-600">
+              Ainda não tem conta?{" "}
+              <a href="/cadastrar" className="text-blue-600 hover:text-blue-700 font-medium">
+                Cadastre-se
+              </a>{" "}
+              — 7 dias grátis.
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">

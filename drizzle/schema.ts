@@ -126,6 +126,14 @@ export const users = pgTable("users", {
   criadoPorUserId: integer("criadoPorUserId"),
   // Conta criada com senha padrão: bloqueia o uso do sistema até a troca.
   senhaProvisoria: boolean("senhaProvisoria").default(false).notNull(),
+  /**
+   * Fim do teste grátis de quem se cadastrou sozinho.
+   *
+   * `null` = sem prazo, que é o caso de cliente aberto pela plataforma. Depois
+   * desta data o sistema continua abrindo e mostrando o que já existe, mas
+   * recusa gravação — ninguém perde dado por causa de prazo vencido.
+   */
+  trialAte: timestamp("trialAte"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

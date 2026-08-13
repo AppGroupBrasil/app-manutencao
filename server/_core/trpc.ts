@@ -5,6 +5,7 @@ import type { TrpcContext } from "./context";
 
 import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from './trpc.types';
 import { isModuloHabilitado } from './modules';
+import { testeVencido } from './teste';
 import { assegurarPermissaoFuncionario } from './permissaoFuncionario';
 import type { VerificadorEscopo } from './escopoRegistro';
 
@@ -212,10 +213,29 @@ async function resolverTenant(
   return ctx.tenant.require(solicitado);
 }
 
+/**
+ * Teste vencido: o sistema fica somente leitura.
+ *
+ * Recusa só gravação. Consultar continua liberado porque a pessoa precisa
+ * enxergar o que cadastrou para decidir se contrata — e porque tirar a tela do
+ * ar transformaria fim de teste em perda de dado aos olhos dela.
+ */
+async function assegurarTesteVigente(condominioId: number, tipo: string) {
+  if (tipo !== "mutation") return;
+  if (!(await testeVencido(condominioId))) return;
+
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message:
+      "Seu teste de 7 dias terminou. Fale com a gente para continuar usando — seus dados estão guardados.",
+  });
+}
+
 /** Usuário OU funcionário autenticado + tenant resolvido. */
 export const tenantProcedure = protectedOrFuncionarioProcedure.use(
-  async ({ ctx, next, getRawInput }) => {
+  async ({ ctx, next, getRawInput, type }) => {
     const condominioId = await resolverTenant(ctx, getRawInput);
+    await assegurarTesteVigente(condominioId, type);
     return next({ ctx: { ...ctx, condominioId } });
   },
 );
@@ -226,8 +246,9 @@ export const tenantProcedure = protectedOrFuncionarioProcedure.use(
  * autenticação, apenas acrescenta a validação de tenant.
  */
 export const tenantUserProcedure = protectedProcedure.use(
-  async ({ ctx, next, getRawInput }) => {
+  async ({ ctx, next, getRawInput, type }) => {
     const condominioId = await resolverTenant(ctx, getRawInput);
+    await assegurarTesteVigente(condominioId, type);
     return next({ ctx: { ...ctx, condominioId } });
   },
 );

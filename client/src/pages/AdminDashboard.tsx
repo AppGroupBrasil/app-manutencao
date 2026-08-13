@@ -11,6 +11,14 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, Briefcase, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
+/** Dias inteiros que faltam para o fim do teste. Zero quando venceu. */
+function diasDeTeste(trialAte?: Date | string | null): number | null {
+  if (!trialAte) return null;
+  const fim = new Date(trialAte);
+  if (Number.isNaN(fim.getTime())) return null;
+  return Math.max(0, Math.ceil((fim.getTime() - Date.now()) / 86_400_000));
+}
+
 /**
  * Funções que o hub de Manutenções reúne. Com todas desligadas o quadrado do
  * hub levaria a uma tela vazia, então ele some junto.
@@ -128,6 +136,26 @@ export default function AdminDashboard() {
                 : "Sem organização vinculada"}
           </p>
         </div>
+
+        {/* Teste grátis: quem se cadastrou sozinho precisa saber quanto falta
+            antes de descobrir no bloqueio. Cliente aberto pela plataforma não
+            tem prazo e não vê faixa nenhuma. */}
+        {(() => {
+          const dias = diasDeTeste((user as { trialAte?: string | null }).trialAte);
+          if (dias === null) return null;
+
+          return dias > 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <strong>Teste grátis:</strong> {dias === 1 ? "falta 1 dia" : `faltam ${dias} dias`}.
+              Depois disso o sistema continua abrindo, mas para de aceitar novos registros.
+            </div>
+          ) : (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+              <strong>Seu teste terminou.</strong> Seus dados continuam aqui e podem ser
+              consultados; para voltar a registrar, fale com a gente pelo botão do WhatsApp.
+            </div>
+          );
+        })()}
 
         {/* Em destaque, antes de tudo: o que vence e quando. Cada dia leva à
             função de onde o item veio. */}

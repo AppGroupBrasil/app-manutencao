@@ -2,13 +2,17 @@ import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../../db";
-import { users } from "../../../drizzle/schema";
+import { condominios, users, usuarioCondominios } from "../../../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getSessionCookieOptions } from "../../_core/cookies";
 import { COOKIE_NAME, SENHA_ERR_MSG, SENHA_REGEX } from "@shared/const";
 import { rateLimiter, RATE_LIMIT_CONFIGS, getClientIp } from "../../_core/rateLimit";
 import { ENV } from "../../_core/env";
 import { sendEmail, isEmailConfigured } from "../../_core/email";
+import { prepararUnidade } from "../../_core/seedUnidade";
+import { fimDoTeste, DIAS_DE_TESTE } from "../../_core/teste";
+import { SEGMENTOS_VALIDOS } from "../../../shared/modules/registry";
+import { labelsDoSegmento } from "../../../shared/vocabulario";
 
 export const authRouter = router({
     me: publicProcedure.query(opts => {
@@ -24,12 +28,23 @@ export const authRouter = router({
     
     // ==================== LOGIN LOCAL PARA SÍNDICOS ====================
     
-    // Registar novo síndico com email/senha
+    /**
+     * Cadastro de quem chega sozinho, com 7 dias de teste.
+     *
+     * Cria três coisas de uma vez: a conta, a primeira organização e o vínculo
+     * de chefe entre elas. Antes esta rota criava só a conta — a pessoa
+     * entrava e não tinha onde trabalhar, porque criar organização é ato de
+     * gestor-chefe e ela não era chefe de nada.
+     */
     registar: publicProcedure
       .input(z.object({
         nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
         email: z.string().email("Email inválido"),
         senha: z.string().regex(SENHA_REGEX, SENHA_ERR_MSG),
+        telefone: z.string().max(30).optional(),
+        /** Nome da empresa, condomínio ou unidade que ele vai administrar. */
+        organizacao: z.string().min(2).max(255),
+        segmento: z.enum(SEGMENTOS_VALIDOS).default("generico"),
         tipoConta: z.enum(["sindico", "administradora"]).default("sindico"),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -57,17 +72,47 @@ export const authRouter = router({
         const crypto = await import('crypto');
         const openId = `local_${crypto.randomBytes(16).toString('hex')}`;
         
-        // Criar utilizador
-        const [result] = await db.insert(users).values({
-          openId,
-          email: input.email,
-          name: input.nome,
-          senha: senhaHash,
-          loginMethod: 'local',
-          role: 'sindico',
-          tipoConta: input.tipoConta,
-          lastSignedIn: new Date(),
-        }).returning();
+        // Conta, organização e vínculo numa transação: conta sem organização
+        // é conta que entra e não tem onde trabalhar.
+        const trialAte = fimDoTeste();
+
+        const { result, organizacaoId } = await db.transaction(async (tx) => {
+          const [conta] = await tx.insert(users).values({
+            openId,
+            email: input.email,
+            name: input.nome,
+            phone: input.telefone?.trim() || null,
+            senha: senhaHash,
+            loginMethod: 'local',
+            role: 'sindico',
+            tipoConta: input.tipoConta,
+            // Cadastro próprio: o poder vem de ser dono da organização, nunca
+            // da hierarquia — `admin_master` enxergaria a base inteira.
+            hierarquia: 'funcionario',
+            trialAte,
+            lastSignedIn: new Date(),
+          }).returning();
+
+          const [organizacao] = await tx.insert(condominios).values({
+            nome: input.organizacao.trim(),
+            sindicoId: conta.id,
+            segmento: input.segmento,
+            labels: labelsDoSegmento(input.segmento),
+          }).returning({ id: condominios.id });
+
+          await tx.insert(usuarioCondominios).values({
+            userId: conta.id,
+            condominioId: organizacao.id,
+            papel: 'chefe',
+            ativo: true,
+          });
+
+          return { result: conta, organizacaoId: organizacao.id };
+        });
+
+        // Fora da transação: falhar aqui não justifica desfazer o cadastro, e
+        // rodar de novo completa o que faltou.
+        await prepararUnidade(organizacaoId);
         
         // Criar sessão (cookie + token)
         const { sdk } = await import('../../_core/sdk');
@@ -91,6 +136,7 @@ export const authRouter = router({
                        <ul>
                          <li><strong>Nome:</strong> ${input.nome}</li>
                          <li><strong>Email:</strong> ${input.email}</li>
+                         <li><strong>Organização:</strong> ${input.organizacao}</li>
                          <li><strong>Tipo:</strong> ${input.tipoConta}</li>
                          <li><strong>Data:</strong> ${new Date().toLocaleString('pt-BR')}</li>
                        </ul>
@@ -102,9 +148,10 @@ export const authRouter = router({
 
         return {
           success: true,
-          message: "Conta criada com sucesso!",
+          message: `Conta criada. Você tem ${DIAS_DE_TESTE} dias de teste.`,
           // Token retornado no body para WebViews que não persistem cookies
           token: sessionToken,
+          trialAte,
           user: {
             id: result.id,
             nome: input.nome,
