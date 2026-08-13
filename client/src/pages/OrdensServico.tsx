@@ -107,20 +107,20 @@ function LadoDaFoto({
   const tom = FASE_FOTO[fase];
 
   return (
-    <div className="border rounded-md p-2.5">
+    <div className="border rounded-md p-3">
       <div className="flex items-center justify-between gap-2">
         <span
-          className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+          className="text-xs font-semibold px-2.5 py-1 rounded-full border"
           style={estiloEtiqueta(tom)}
         >
           {tom.rotulo}
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="border h-8 px-2"
+            className="border h-10 px-3.5"
             style={estiloEtiqueta(TOM_ANEXO)}
             onClick={() => camera.current?.click()}
             aria-label={`Tirar foto de ${tom.rotulo.toLowerCase()}`}
@@ -131,7 +131,7 @@ function LadoDaFoto({
             type="button"
             variant="outline"
             size="sm"
-            className="border h-8 px-2"
+            className="border h-10 px-3.5"
             style={estiloEtiqueta(TOM_ANEXO)}
             onClick={() => galeria.current?.click()}
             aria-label={`Escolher foto de ${tom.rotulo.toLowerCase()} do aparelho`}
@@ -753,7 +753,7 @@ export function ConteudoOrdensServico({
           if (!aberto) limparFotosNovas();
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
           </DialogHeader>
@@ -861,7 +861,7 @@ export function ConteudoOrdensServico({
                 A foto do problema é o “antes”. O “depois” pode entrar agora ou quando o serviço
                 for concluído, abrindo a O.S.
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(["antes", "depois"] as const).map((fase) => (
                   <LadoDaFoto
                     key={fase}
@@ -1066,7 +1066,7 @@ export function ConteudoOrdensServico({
 
       {/* Detalhe da O.S. */}
       <Dialog open={detalheId !== null} onOpenChange={(aberto) => !aberto && setDetalheId(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>{tituloDetalhe}</DialogTitle>
           </DialogHeader>
