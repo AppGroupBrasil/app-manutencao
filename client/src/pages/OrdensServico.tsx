@@ -924,6 +924,39 @@ export function ConteudoOrdensServico({
               </p>
             </div>
 
+            {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
+                sem precisar reabrir a ordem depois. */}
+            {temModulo("equipes") && (
+              <div>
+                <Label>Equipe designada</Label>
+                <Select
+                  value={form.equipeId}
+                  onValueChange={(valor) => setForm({ ...form, equipeId: valor })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Designar depois" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(equipesDaUnidade ?? []).map((e) => (
+                      <SelectItem key={e.id} value={String(e.id)}>
+                        {e.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(equipesDaUnidade?.length ?? 0) === 0 && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Nenhuma equipe cadastrada nesta {v.unidade.toLowerCase()} ainda.
+                  </p>
+                )}
+                {form.equipeId && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    O supervisor da equipe recebe o aviso com esta O.S.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Categoria</Label>
@@ -1027,39 +1060,6 @@ export function ConteudoOrdensServico({
                 ))}
               </div>
             </div>
-
-            {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
-                sem precisar reabrir a ordem depois. */}
-            {temModulo("equipes") && (
-              <div>
-                <Label>Equipe designada</Label>
-                <Select
-                  value={form.equipeId}
-                  onValueChange={(valor) => setForm({ ...form, equipeId: valor })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Designar depois" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(equipesDaUnidade ?? []).map((e) => (
-                      <SelectItem key={e.id} value={String(e.id)}>
-                        {e.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {(equipesDaUnidade?.length ?? 0) === 0 && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    Nenhuma equipe cadastrada nesta {v.unidade.toLowerCase()} ainda.
-                  </p>
-                )}
-                {form.equipeId && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    O supervisor da equipe recebe o aviso com esta O.S.
-                  </p>
-                )}
-              </div>
-            )}
 
             <div>
               <Label>Observações adicionais</Label>
