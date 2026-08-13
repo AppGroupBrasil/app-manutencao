@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
+import { GerenciarEquipes } from "@/components/GerenciarEquipes";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
@@ -30,6 +31,7 @@ import {
   ArrowLeft,
   Calendar,
   Camera,
+  Settings,
   Hash,
   ImagePlus,
   Loader2,
@@ -372,6 +374,8 @@ export function ConteudoOrdensServico({
   const [filtroStatus, setFiltroStatus] = useState<number | "todos">("todos");
   const [pagina, setPagina] = useState(1);
   const [modalNova, setModalNova] = useState(false);
+  /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
+  const [modalEquipes, setModalEquipes] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [responsaveisNova, setResponsaveisNova] = useState<number[]>([]);
   /**
@@ -928,7 +932,26 @@ export function ConteudoOrdensServico({
                 sem precisar reabrir a ordem depois. */}
             {temModulo("equipes") && (
               <div>
-                <Label>Equipe designada</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Equipe designada</Label>
+                  {/* Falta a equipe na lista? Resolve aqui, sem perder o que já
+                      foi digitado nesta O.S. Só quem responde pela unidade
+                      cadastra — o servidor recusa o funcionário de qualquer
+                      forma. */}
+                  {ehGestor && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-slate-500"
+                      onClick={() => setModalEquipes(true)}
+                      aria-label="Cadastrar equipes e membros"
+                      title="Cadastrar equipes e membros"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
                 <Select
                   value={form.equipeId}
                   onValueChange={(valor) => setForm({ ...form, equipeId: valor })}
@@ -1191,6 +1214,19 @@ export function ConteudoOrdensServico({
               Criar Ordem de Serviço
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cadastro de equipes, por cima da abertura da O.S. */}
+      <Dialog open={modalEquipes} onOpenChange={setModalEquipes}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Equipes desta {v.unidade.toLowerCase()}</DialogTitle>
+          </DialogHeader>
+          <GerenciarEquipes
+            condominioId={unidadeNova}
+            onMudou={() => utils.equipes.list.invalidate()}
+          />
         </DialogContent>
       </Dialog>
 
