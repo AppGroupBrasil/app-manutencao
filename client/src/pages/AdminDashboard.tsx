@@ -8,6 +8,15 @@ import { CalendarioGeral } from "@/components/CalendarioGeral";
 import { Loader2, LogOut, Building2, Users, UserCog, Wrench, AlertTriangle, Briefcase } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
+/** O papel gravado em `users.role` é interno; na tela vale o nome do cargo. */
+const CARGO: Record<string, string> = {
+  sindico: "Gerente",
+  admin: "Administrador",
+  master: "Plataforma",
+  morador: "Morador",
+  user: "Usuário",
+};
+
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const utils = trpc.useContext();
@@ -64,7 +73,7 @@ export default function AdminDashboard() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
           <div>
             <h1 className="text-lg font-bold">Painel Administrativo</h1>
-            <p className="text-xs text-slate-500">{user.name} · {user.role}</p>
+            <p className="text-xs text-slate-500">{user.name} · {CARGO[user.role] ?? user.role}</p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()}>
             <LogOut className="w-4 h-4 mr-2" /> Sair
