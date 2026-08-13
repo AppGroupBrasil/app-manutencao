@@ -1,0 +1,65 @@
+name: Padronizar andamento da O.S.
+
+# Deixa as unidades com o mesmo conjunto de status: Aguardando início,
+# Em execução, Finalizada parcialmente, Finalizada totalmente e Cancelada.
+#
+# Unidade criada a partir da versão de 13/08/2026 já nasce assim
+# (`prepararUnidade`). Este workflow existe para as que vieram antes e ficaram
+# com o conjunto antigo, de sete status.
+#
+# Rode SEMPRE com `simular = true` primeiro: a saída mostra o que seria criado
+# e para onde cada O.S. existente seria remapeada.
+on:
+  workflow_dispatch:
+    inputs:
+      cliente:
+        description: "E-mail do gestor-chefe (resolve as unidades dele)"
+        required: false
+        type: string
+      organizacoes:
+        description: "Ou os ids das organizações, separados por vírgula"
+        required: false
+        type: string
+      simular:
+        description: "Só mostrar o que faria, sem gravar"
+        required: true
+        default: true
+        type: boolean
+
+env:
+  APP_PATH: /opt/app-manutencao
+
+jobs:
+  padronizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir os parâmetros
+        run: |
+          if [ -z "${{ inputs.cliente }}" ] && [ -z "${{ inputs.organizacoes }}" ]; then
+            echo "Informe o e-mail do gestor-chefe ou os ids das organizações."
+            exit 1
+          fi
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Rodar
+        env:
+          CLIENTE: ${{ inputs.cliente }}
+          ORGANIZACOES: ${{ inputs.organizacoes }}
+          SIMULAR: ${{ inputs.simular }}
+        run: |
+          args=""
+          [ -n "$CLIENTE" ] && args="$args --cliente=$CLIENTE"
+          [ -n "$ORGANIZACOES" ] && args="$args --organizacoes=$ORGANIZACOES"
+          [ "$SIMULAR" = "true" ] && args="$args --dry-run"
+
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cd ${{ env.APP_PATH }} && docker compose run --rm --no-deps app \
+               node dist/status-os.js $args"

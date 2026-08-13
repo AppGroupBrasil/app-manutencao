@@ -14,7 +14,10 @@
  * (`prepararUnidade`): o script existe para as que vieram antes.
  *
  * Uso:  pnpm tsx scripts/db/status-os-cliente.ts --organizacoes=1,2,3 --dry-run
- *       pnpm tsx scripts/db/status-os-cliente.ts --organizacoes=1,2,3
+ *       pnpm tsx scripts/db/status-os-cliente.ts --cliente=chefe@cliente.com
+ *
+ * `--cliente` resolve as unidades pelo e-mail do gestor-chefe (dono delas), que
+ * é mais seguro do que digitar quinze ids à mão numa execução manual.
  */
 import 'dotenv/config';
 import postgres from 'postgres';
@@ -22,13 +25,17 @@ import postgres from 'postgres';
 const dryRun = process.argv.includes('--dry-run');
 
 const argOrganizacoes = process.argv.find((a) => a.startsWith('--organizacoes='));
-const organizacoes = (argOrganizacoes?.split('=')[1] ?? '')
+const argCliente = process.argv.find((a) => a.startsWith('--cliente='));
+
+const idsInformados = (argOrganizacoes?.split('=')[1] ?? '')
   .split(',')
   .map((n) => Number(n.trim()))
   .filter((n) => Number.isInteger(n) && n > 0);
 
-if (organizacoes.length === 0) {
-  console.error('Informe as organizações: --organizacoes=1,2,3');
+const emailChefe = argCliente?.split('=')[1]?.trim().toLowerCase() ?? '';
+
+if (idsInformados.length === 0 && !emailChefe) {
+  console.error('Informe --organizacoes=1,2,3 ou --cliente=chefe@cliente.com');
   process.exit(1);
 }
 
@@ -38,6 +45,23 @@ if (!process.env.DATABASE_URL) {
 }
 
 const sql = postgres(process.env.DATABASE_URL, { connect_timeout: 30 });
+
+/** Unidades do cliente, pelo e-mail de quem responde por elas. */
+async function unidadesDoCliente(email: string): Promise<number[]> {
+  const linhas = await sql<{ id: number }[]>`
+    SELECT c."id"
+    FROM "condominios" c
+    JOIN "users" u ON u."id" = c."sindicoId"
+    WHERE lower(u."email") = ${email}
+    ORDER BY c."id"
+  `;
+
+  if (linhas.length === 0) {
+    throw new Error(`Nenhuma unidade encontrada para o gestor ${email}.`);
+  }
+
+  return linhas.map((l) => l.id);
+}
 
 /** O conjunto combinado com o cliente. A ordem é a que a tela mostra. */
 const NOVOS = [
@@ -179,6 +203,9 @@ async function main() {
       ? 'Simulação (nada será gravado)\n'
       : 'Aplicando o andamento combinado da O.S.\n',
   );
+
+  const organizacoes = emailChefe ? await unidadesDoCliente(emailChefe) : idsInformados;
+  console.log(`${organizacoes.length} organização(ões): ${organizacoes.join(', ')}`);
 
   for (const id of organizacoes) {
     await configurar(id);
