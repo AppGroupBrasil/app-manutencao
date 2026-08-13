@@ -6,6 +6,7 @@ import type { TrpcContext } from "./context";
 import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from './trpc.types';
 import { isModuloHabilitado } from './modules';
 import { testeVencido } from './teste';
+import { bloqueioDaOrganizacao, mensagemDeBloqueio } from './bloqueio';
 import { assegurarPermissaoFuncionario } from './permissaoFuncionario';
 import type { VerificadorEscopo } from './escopoRegistro';
 
@@ -220,6 +221,25 @@ async function resolverTenant(
  * enxergar o que cadastrou para decidir se contrata — e porque tirar a tela do
  * ar transformaria fim de teste em perda de dado aos olhos dela.
  */
+/**
+ * Unidade suspensa: corta tudo, consulta inclusive.
+ *
+ * É a diferença para o teste vencido, que só recusa gravação. Bloqueio é
+ * decisão de quem administra, e deixar a tela abrindo passaria a impressão de
+ * que o corte não valeu.
+ */
+async function assegurarUnidadeLiberada(ctx: TrpcContext, condominioId: number) {
+  if (ctx.tenant.isMaster()) return;
+
+  const bloqueio = await bloqueioDaOrganizacao(condominioId);
+  if (!bloqueio) return;
+
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: mensagemDeBloqueio(bloqueio.motivo),
+  });
+}
+
 async function assegurarTesteVigente(
   ctx: TrpcContext,
   condominioId: number,
@@ -243,6 +263,7 @@ async function assegurarTesteVigente(
 export const tenantProcedure = protectedOrFuncionarioProcedure.use(
   async ({ ctx, next, getRawInput, type }) => {
     const condominioId = await resolverTenant(ctx, getRawInput);
+    await assegurarUnidadeLiberada(ctx, condominioId);
     await assegurarTesteVigente(ctx, condominioId, type);
     return next({ ctx: { ...ctx, condominioId } });
   },
@@ -256,6 +277,7 @@ export const tenantProcedure = protectedOrFuncionarioProcedure.use(
 export const tenantUserProcedure = protectedProcedure.use(
   async ({ ctx, next, getRawInput, type }) => {
     const condominioId = await resolverTenant(ctx, getRawInput);
+    await assegurarUnidadeLiberada(ctx, condominioId);
     await assegurarTesteVigente(ctx, condominioId, type);
     return next({ ctx: { ...ctx, condominioId } });
   },

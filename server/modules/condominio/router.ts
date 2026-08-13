@@ -5,6 +5,7 @@ import { getDb } from "../../db";
 import { condominios, condominioFuncoes, usuarioCondominios } from "../../../drizzle/schema";
 import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { invalidarCacheBloqueio } from "../../_core/bloqueio";
 import { prepararUnidade } from "../../_core/seedUnidade";
 import { ehGestorMaster } from "../../_core/gestorMaster";
 import type { Segmento } from "../../../shared/modules/registry";
@@ -134,6 +135,48 @@ export const condominioRouter = router({
         const { id, ...data } = input;
         await db.update(condominios).set(data).where(eq(condominios.id, id));
         return { success: true };
+      }),
+
+    /**
+     * Suspende ou libera uma unidade.
+     *
+     * Vale para todos que trabalham nela — gestor e equipe. É o corte que a
+     * plataforma usa para cliente inadimplente e que o gestor-chefe usa para
+     * unidade que saiu de operação.
+     */
+    bloquear: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          bloqueada: z.boolean(),
+          motivo: z.string().max(255).optional(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        await ctx.tenant.assert(input.id);
+        if (!ctx.tenant.isMaster() && !(await ehGestorMaster(ctx.user.id))) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Apenas o gestor-chefe suspende uma unidade.",
+          });
+        }
+
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        await db
+          .update(condominios)
+          .set({
+            bloqueadaEm: input.bloqueada ? new Date() : null,
+            motivoBloqueio: input.bloqueada
+              ? input.motivo?.trim() || "Unidade suspensa. Fale com o suporte."
+              : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(condominios.id, input.id));
+
+        invalidarCacheBloqueio(input.id);
+        return { success: true, bloqueada: input.bloqueada };
       }),
 
     /**

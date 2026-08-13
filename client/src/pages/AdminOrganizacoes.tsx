@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { ArrowLeft, Building2, Loader2, MapPin, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Ban, Building2, Loader2, MapPin, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 type Organizacao = {
   id: number;
@@ -27,6 +27,8 @@ type Organizacao = {
   cep?: string | null;
   segmento?: string | null;
   tipoUnidade?: string | null;
+  /** Preenchido quando a unidade está suspensa. */
+  bloqueadaEm?: Date | string | null;
 };
 
 type Formulario = {
@@ -69,6 +71,14 @@ export default function AdminOrganizacoes() {
       fechar();
     },
     onError: (e) => toast.error(e.message),
+  });
+
+  const bloquear = trpc.condominio.bloquear.useMutation({
+    onSuccess: async (res) => {
+      await utils.condominio.list.invalidate();
+      toast.success(res.bloqueada ? "Unidade suspensa" : "Unidade liberada");
+    },
+    onError: (e) => toast.error(e.message || "Não foi possível alterar"),
   });
 
   const remover = trpc.condominio.remove.useMutation({
@@ -189,14 +199,44 @@ export default function AdminOrganizacoes() {
                         )}
                         {o.cidade && <span>{o.cidade}{o.estado ? `/${o.estado}` : ""}</span>}
                       </div>
-                      {o.tipoUnidade && (
-                        <Badge variant="outline" className="mt-2 text-xs">
-                          {o.tipoUnidade}
-                        </Badge>
-                      )}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {o.tipoUnidade && (
+                          <Badge variant="outline" className="text-xs">
+                            {o.tipoUnidade}
+                          </Badge>
+                        )}
+                        {/* Suspensa: ninguém que trabalha nela entra. */}
+                        {o.bloqueadaEm && (
+                          <Badge className="bg-red-100 text-red-700 text-xs">
+                            suspensa
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => abrirEdicao(o)}>
                       <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title={o.bloqueadaEm ? "Liberar unidade" : "Suspender unidade"}
+                      className={`${o.bloqueadaEm ? "text-emerald-700" : "text-amber-700"} ${podeGerenciar ? "" : "hidden"}`}
+                      disabled={bloquear.isPending}
+                      onClick={() => {
+                        const bloqueada = !o.bloqueadaEm;
+                        if (
+                          !bloqueada ||
+                          confirm(
+                            `Suspender "${o.nome}"?
+
+Ninguém que trabalha nela entra: gestor e equipe. Os dados ficam guardados.`,
+                          )
+                        ) {
+                          bloquear.mutate({ id: o.id, bloqueada });
+                        }
+                      }}
+                    >
+                      <Ban className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost"

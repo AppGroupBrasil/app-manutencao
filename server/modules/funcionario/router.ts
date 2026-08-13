@@ -1,6 +1,7 @@
 import { publicProcedure, protectedProcedure, protectedOrFuncionarioProcedure, router } from "../../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { bloqueioDaOrganizacao, mensagemDeBloqueio } from "../../_core/bloqueio";
 import { getDb } from "../../db";
 import { ehGestorMaster } from "../../_core/gestorMaster";
 import { CHAVES_FUNCOES_FUNCIONARIO } from "../../../shared/funcoesFuncionario";
@@ -462,7 +463,17 @@ export const funcionarioRouter = router({
         if (!senhaValida) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha inválidos" });
         }
-        
+
+        // Unidade suspensa fecha a porta aqui, e não lá dentro: entrar para
+        // encontrar erro em toda tela é pior do que não entrar.
+        const bloqueio = await bloqueioDaOrganizacao(funcionario.condominioId);
+        if (bloqueio) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: mensagemDeBloqueio(bloqueio.motivo),
+          });
+        }
+
         // Buscar funções habilitadas do funcionário
         const funcoes = await db.select().from(funcionarioFuncoes)
           .where(eq(funcionarioFuncoes.funcionarioId, funcionario.id));

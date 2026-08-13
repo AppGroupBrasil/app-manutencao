@@ -204,6 +204,14 @@ export const condominios = pgTable("condominios", {
   modoEscuroPadrao: boolean("modoEscuroPadrao").default(false),
   // Ao abrir uma O.S., notifica todos os funcionários da unidade no aplicativo.
   osAutoNotificar: boolean("osAutoNotificar").default(false).notNull(),
+  /**
+   * Unidade suspensa: ninguém que trabalha nela entra — dono, gestor e equipe.
+   *
+   * Bloquear só a conta do dono deixava a porta do portal do funcionário
+   * aberta, e o cliente suspenso seguia operando pela equipe.
+   */
+  bloqueadaEm: timestamp("bloqueadaEm"),
+  motivoBloqueio: varchar("motivoBloqueio", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

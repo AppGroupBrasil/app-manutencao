@@ -27,6 +27,7 @@ import { prepararUnidade } from "../../_core/seedUnidade";
 import { SEGMENTOS_VALIDOS } from "../../../shared/modules/registry";
 import { labelsDoSegmento } from "../../../shared/vocabulario";
 import { invalidarCacheTeste } from "../../_core/teste";
+import { invalidarCacheBloqueio } from "../../_core/bloqueio";
 
 /**
  * O alvo é mesmo um cliente?
@@ -345,12 +346,11 @@ export const plataformaRouter = router({
     }),
 
   /**
-   * Bloqueia ou libera o acesso do cliente.
+   * Bloqueia ou libera o cliente inteiro.
    *
-   * O bloqueio já é respeitado no login, então vale para o gestor na hora. A
-   * equipe dele entra por outra porta e continua entrando: quem paga é o
-   * cliente, e derrubar a operação inteira por causa de fatura é decisão que
-   * ninguém quer tomar sem avisar.
+   * Fecha a conta do dono **e as unidades dele**. Só a conta deixava a porta
+   * do portal do funcionário aberta, e o cliente suspenso seguia operando pela
+   * equipe — bloqueio que não bloqueia é pior do que não ter.
    */
   bloquearCliente: plataformaProcedure
     .input(
@@ -366,17 +366,26 @@ export const plataformaRouter = router({
 
       await exigirCliente(input.gestorId);
 
+      const motivo = input.bloqueado
+        ? input.motivo?.trim() || "Acesso suspenso. Fale com o suporte."
+        : null;
+
       await db
         .update(users)
-        .set({
-          bloqueado: input.bloqueado,
-          motivoBloqueio: input.bloqueado
-            ? input.motivo?.trim() || "Acesso suspenso. Fale com o suporte."
-            : null,
-          updatedAt: new Date(),
-        })
+        .set({ bloqueado: input.bloqueado, motivoBloqueio: motivo, updatedAt: new Date() })
         .where(eq(users.id, input.gestorId));
 
+      // As unidades dele vão junto: é o que fecha a porta da equipe.
+      await db
+        .update(condominios)
+        .set({
+          bloqueadaEm: input.bloqueado ? new Date() : null,
+          motivoBloqueio: motivo,
+          updatedAt: new Date(),
+        })
+        .where(eq(condominios.sindicoId, input.gestorId));
+
+      invalidarCacheBloqueio();
       return { success: true, bloqueado: input.bloqueado };
     }),
 
@@ -427,6 +436,17 @@ export const plataformaRouter = router({
         })
         .where(eq(users.id, input.gestorId));
 
+      // Encerrar a conta fecha as unidades junto; restaurar reabre.
+      await db
+        .update(condominios)
+        .set({
+          bloqueadaEm: input.restaurar ? null : new Date(),
+          motivoBloqueio: input.restaurar ? null : "Conta encerrada.",
+          updatedAt: new Date(),
+        })
+        .where(eq(condominios.sindicoId, input.gestorId));
+
+      invalidarCacheBloqueio();
       return { success: true, excluido: !input.restaurar };
     }),
 });

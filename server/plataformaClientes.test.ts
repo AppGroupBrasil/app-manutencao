@@ -17,7 +17,8 @@ vi.mock("./_core/teste", () => ({
 /** Conta consultada por `exigirCliente`, ajustada por teste. */
 let conta: { hierarquia: string } | undefined;
 let organizacao: { id: number } | undefined;
-let gravado: Record<string, unknown> | null;
+/** Gravações por tabela: bloquear mexe no dono e nas unidades dele. */
+let gravacoes: { tabela: string; valores: Record<string, unknown> }[];
 
 vi.mock("./db", () => {
   const encadeavel = (dados: unknown[]) => {
@@ -42,10 +43,11 @@ vi.mock("./db", () => {
             ),
         }),
       }),
-      update: () => ({
+      update: (tabela: { _: { name?: string } } & Record<string, unknown>) => ({
         set: (valores: Record<string, unknown>) => ({
           where: async () => {
-            gravado = valores;
+            const nome = "sindicoId" in tabela ? "condominios" : "users";
+            gravacoes.push({ tabela: nome, valores });
           },
         }),
       }),
@@ -82,15 +84,24 @@ function comoCliente() {
 beforeEach(() => {
   conta = { hierarquia: "funcionario" };
   organizacao = { id: 5 };
-  gravado = null;
+  gravacoes = [];
 });
+
+/** Última gravação feita naquela tabela. */
+const gravadoEm = (tabela: string) =>
+  [...gravacoes].reverse().find((g) => g.tabela === tabela)?.valores ?? null;
 
 describe("ações da plataforma sobre clientes", () => {
   it("bloqueia o cliente com motivo padrão", async () => {
     await comoPlataforma().bloquearCliente({ gestorId: 9, bloqueado: true });
 
-    expect(gravado).toMatchObject({ bloqueado: true });
-    expect(String((gravado as { motivoBloqueio: string }).motivoBloqueio)).toContain("suporte");
+    const conta = gravadoEm("users")!;
+    expect(conta).toMatchObject({ bloqueado: true });
+    expect(String(conta.motivoBloqueio)).toContain("suporte");
+
+    // O que fecha a porta da equipe: as unidades vão junto.
+    const unidades = gravadoEm("condominios")!;
+    expect(unidades.bloqueadaEm).toBeInstanceOf(Date);
   });
 
   it("recusa agir sobre uma conta da própria plataforma", async () => {
@@ -99,7 +110,7 @@ describe("ações da plataforma sobre clientes", () => {
     await expect(
       comoPlataforma().bloquearCliente({ gestorId: 1, bloqueado: true }),
     ).rejects.toThrow(/plataforma/i);
-    expect(gravado).toBeNull();
+    expect(gravacoes).toEqual([]);
   });
 
   it("recusa agir sobre conta que não é dona de organização", async () => {
@@ -108,32 +119,39 @@ describe("ações da plataforma sobre clientes", () => {
     await expect(
       comoPlataforma().excluirCliente({ gestorId: 9 }),
     ).rejects.toThrow(/organização/i);
-    expect(gravado).toBeNull();
+    expect(gravacoes).toEqual([]);
   });
 
-  it("excluir marca a data e bloqueia, sem apagar", async () => {
+  it("excluir marca a data, bloqueia e fecha as unidades", async () => {
     await comoPlataforma().excluirCliente({ gestorId: 9 });
 
-    expect(gravado).toMatchObject({ bloqueado: true });
-    expect((gravado as { excluidoEm: Date }).excluidoEm).toBeInstanceOf(Date);
+    const conta = gravadoEm("users")!;
+    expect(conta).toMatchObject({ bloqueado: true });
+    expect(conta.excluidoEm).toBeInstanceOf(Date);
+    expect(gravadoEm("condominios")!.bloqueadaEm).toBeInstanceOf(Date);
   });
 
-  it("restaurar desfaz a exclusão e o bloqueio", async () => {
+  it("restaurar desfaz a exclusão, o bloqueio e reabre as unidades", async () => {
     await comoPlataforma().excluirCliente({ gestorId: 9, restaurar: true });
 
-    expect(gravado).toMatchObject({ excluidoEm: null, bloqueado: false, motivoBloqueio: null });
+    expect(gravadoEm("users")).toMatchObject({
+      excluidoEm: null,
+      bloqueado: false,
+      motivoBloqueio: null,
+    });
+    expect(gravadoEm("condominios")).toMatchObject({ bloqueadaEm: null });
   });
 
   it("liberar sem prazo tira o teste", async () => {
     await comoPlataforma().definirTeste({ gestorId: 9, dias: null });
 
-    expect(gravado).toMatchObject({ trialAte: null });
+    expect(gravadoEm("users")).toMatchObject({ trialAte: null });
   });
 
   it("cliente não alcança as ações da plataforma", async () => {
     await expect(
       comoCliente().bloquearCliente({ gestorId: 9, bloqueado: true }),
     ).rejects.toThrow(/plataforma/i);
-    expect(gravado).toBeNull();
+    expect(gravacoes).toEqual([]);
   });
 });
