@@ -320,9 +320,16 @@ ${passos([
   `<b>Descrição</b>: conte o problema com detalhe.`,
   `<b>Categoria</b>, <b>Prioridade</b> e <b>Status inicial</b>: escolha nas listas ▾.`,
   `<b>Local</b>: ${campo("Ex: Bloco A - 3º andar")}`,
+  `<b>Fotos de antes e depois</b>: já na abertura, dois lados com câmera e galeria. A foto do
+   problema é o “antes”; o “depois” pode entrar agora ou quando o serviço terminar.`,
   `<b>Responsáveis pela O.S.</b>: marque uma ou mais pessoas da equipe.`,
   `Toque em ${bt("Criar Ordem de Serviço", "plus")} . Aparece o aviso com o número: <b>O.S. OS-260810-0042 criada</b>.`,
 ])}
+${aviso(
+  "No relatório em PDF:",
+  `as fotos saem <b>lado a lado</b> — coluna ANTES à esquerda, DEPOIS à direita, uma linha por
+   par. Faltando um dos lados, o lugar aparece marcado como "Sem foto de depois".`,
+)}
 <h4>Acompanhar na lista</h4>
 ${lista([
   `Cada cartão mostra ${ic("hash")} o protocolo, o título, o responsável, o local, a data e duas etiquetas coloridas: <b>prioridade</b> e <b>status</b>.`,
@@ -334,7 +341,7 @@ ${lista([
 ${passos([
   `No alto: o <b>protocolo</b>, o <b>QR Code</b> da O.S. e ${bo("Baixar PDF", "printer")} .`,
   `${bo("Iniciar serviço", "play")} — marca a hora em que o trabalho começou.`,
-  `<b>Fotos:</b> escolha a fase ${campo("Antes ▾")} (Antes, Durante, Depois) e toque em ${bg("camera")} para fotografar ou ${bg("plus")} para pegar do aparelho. Antes e Depois ficam lado a lado.`,
+  `<b>Fotos:</b> escolha a fase ${campo("Antes ▾")} (Antes, Durante, Depois) e toque em ${bg("camera")} para fotografar ou ${bg("plus")} para pegar do aparelho. Antes e Depois ficam lado a lado. O seletor muda de cor conforme a fase — âmbar no Antes, verde no Depois.`,
   `<b>Anexos:</b> ${bo("Anexar arquivo")} para orçamento, nota, laudo.`,
   `<b>Responsáveis:</b> marque ou desmarque quem está no serviço.`,
   `<b>Histórico:</b> escreva o que aconteceu e toque em ${bt("Enviar")} . Fica registrado com data, hora e nome.`,
