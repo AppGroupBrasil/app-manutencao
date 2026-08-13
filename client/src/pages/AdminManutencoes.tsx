@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
 import { toast } from "@/components/ui/sonner";
-import { ArrowLeft, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Columns3, ListChecks, Loader2, QrCode, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Columns3, ListChecks, Loader2, QrCode, Wrench } from "lucide-react";
 
 const TENANT_ATIVO_KEY = "condominio_ativo";
 
@@ -21,6 +21,7 @@ const MODULOS_DO_HUB = [
   "quadro-atividades",
   "qrcode",
   "manutencoes",
+  "ocorrencias",
 ];
 
 /**
@@ -82,6 +83,10 @@ export default function AdminManutencoes() {
   const { data: qrcodes } = trpc.qrcode.listar.useQuery(
     { condominioId },
     { enabled: ativa("qrcode") },
+  );
+  const { data: ocorrencias } = trpc.ocorrencia.list.useQuery(
+    { condominioId },
+    { enabled: ativa("ocorrencias") },
   );
 
   useEffect(() => {
@@ -199,6 +204,15 @@ export default function AdminManutencoes() {
               valor={qrcodes?.length ?? "—"}
               descricao="pontos com registro por leitura"
               onClick={() => setLocation("/manutencoes/qrcode")}
+            />
+          )}
+          {temModulo("ocorrencias") && (
+            <CardQuadrado
+              icone={<AlertTriangle className="w-6 h-6 text-red-500" />}
+              titulo="Ocorrências"
+              valor={ocorrencias?.length ?? "—"}
+              descricao="incidentes com foto e prioridade"
+              onClick={() => setLocation("/ocorrencias")}
             />
           )}
           {temModulo("manutencoes") && (

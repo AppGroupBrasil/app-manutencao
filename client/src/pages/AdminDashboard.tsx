@@ -8,7 +8,7 @@ import { CardQuadrado } from "@/components/CardQuadrado";
 import { PainelPendencias } from "@/components/PainelPendencias";
 import { CalendarioGeral } from "@/components/CalendarioGeral";
 import { NotificationBell } from "@/components/NotificationBell";
-import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, AlertTriangle, Briefcase, SlidersHorizontal } from "lucide-react";
+import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, Briefcase, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 /**
@@ -25,6 +25,7 @@ const MODULOS_DO_HUB = [
   "quadro-atividades",
   "qrcode",
   "manutencoes",
+  "ocorrencias",
 ];
 
 export default function AdminDashboard() {
@@ -187,14 +188,6 @@ export default function AdminDashboard() {
               titulo="Equipes"
               descricao="times que recebem a O.S. designada"
               onClick={() => setLocation("/admin/equipes")}
-            />
-          )}
-          {temModulo("ocorrencias") && (
-            <CardQuadrado
-              icone={<AlertTriangle className="w-6 h-6 text-red-500" />}
-              titulo="Ocorrências"
-              descricao="incidentes com foto e prioridade"
-              onClick={() => setLocation("/ocorrencias")}
             />
           )}
           {MODULOS_DO_HUB.some(temModulo) && (

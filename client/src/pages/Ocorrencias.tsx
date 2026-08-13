@@ -45,7 +45,9 @@ export default function Ocorrencias() {
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setLocation("/admin")}>
+          {/* Ocorrências agora mora dentro de Manutenções: a seta volta para o
+              hub de onde o quadrado foi tocado, não para o painel. */}
+          <Button variant="ghost" size="sm" onClick={() => setLocation("/admin/manutencoes")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
