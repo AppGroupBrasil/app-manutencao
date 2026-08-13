@@ -8,6 +8,24 @@ Regra que sustenta tudo: **nunca** escreva `if (condominioId === 7)` dentro de
 um módulo compartilhado. Ou o comportamento vira configuração, ou vira módulo
 restrito.
 
+## O que todo cliente novo recebe
+
+Um pacote só, igual para todos: o sistema de manutenção inteiro
+(`modulosPadrao()`), menos as especialidades marcadas com `padrao: false`
+(leitura de medidores, controle de pragas, jardinagem) e menos o legado de
+condomínio, que nem aparece no catálogo.
+
+Não existe mais pacote por segmento. A diferença entre uma rede de creches e uma
+metalúrgica passou a ser **vocabulário** (`labelsDoSegmento`), não conjunto de
+funções — a lista por segmento era herança de quando o produto era um sistema de
+condomínio, e ninguém sabia justificar por que um deles tinha votação e o outro
+não.
+
+Toda unidade nasce pronta: `prepararUnidade()` grava módulos, status da O.S.,
+categorias e prioridades na criação. Antes cada cadastro nascia na primeira vez
+que alguém abria a tela, e duas unidades do mesmo cliente podiam acabar
+diferentes.
+
 ## Escada de customização
 
 Quando um cliente pede algo, resolva no degrau mais baixo possível:
@@ -23,6 +41,13 @@ Quando um cliente pede algo, resolva no degrau mais baixo possível:
 5. **Módulo restrito** — só faz sentido para um cliente.
    Entra no registry com `visibilidade: 'restrito'`.
 6. **Fork do repositório** — nunca.
+
+Marcas no registry, além de `visibilidade`:
+
+- `padrao: false` — existe no catálogo, nasce desligado.
+- `legado: true` — fora do catálogo e de qualquer pacote. É o que sobrou do
+  sistema de condomínio (votações, classificados, moradores, revista, caronas…).
+  Fica no repositório até haver certeza de que ninguém quer.
 
 ## Como funciona o isolamento
 
@@ -118,6 +143,21 @@ Tela em `/admin/modulos` (`client/src/components/ModulosConfig.tsx`). Mostra só
 catálogo visível daquela organização, acumula as alterações e grava tudo num
 request. Quem administra mais de uma organização troca pelo seletor no topo.
 
+Rede de unidades: marque **"Aplicar a todas as organizações"** antes de salvar.
+`funcoesCondominio.atualizarMultiplas` recebe `organizacoesIds` e valida cada
+alvo (pertence à identidade autenticada **e** tem direito de configurar) antes
+de gravar qualquer um — uma unidade fora do alcance recusa o lote inteiro, em
+vez de deixar a rede metade configurada.
+
+Desligar um módulo tira o cartão da tela **e** fecha a rota. As telas do gestor
+(`AdminDashboard`, `AdminManutencoes`) e o painel de pendências consultam
+`temModulo` do `useBootstrap` antes de renderizar o cartão e antes de disparar a
+consulta: função desligada não vira chamada que o servidor recusaria.
+
+O calendário (`calendario`) e a faixa de chamados em aberto
+(`painel-pendencias`) também são módulos — antes eram fixos na tela. Cliente que
+quer apenas O.S. desliga o resto e fica só com o que pediu.
+
 ## Criar um módulo exclusivo de um cliente
 
 1. Descubra o `id` do tenant (`condominios.id`).
@@ -176,12 +216,14 @@ as mesmas de `client/src/i18n/locales/*.json`.
 
 ## Segmentos
 
-`condominios.segmento` define o pacote de módulos padrão ao criar o tenant
-(`generico`, `condominio`, `metalurgia`, `oficina`, `academia`, `facilities`).
-Os pacotes ficam no campo `segmentos` de cada módulo no registry.
+`condominios.segmento` define o **vocabulário sugerido** na abertura do cliente
+(`generico`, `condominio`, `metalurgia`, `oficina`, `academia`, `facilities`,
+`educacional`). Os termos ficam em `VOCABULARIO_POR_SEGMENTO`
+(`shared/vocabulario.ts`) e entram como `labels` da organização — a plataforma
+pode ajustar qualquer um antes de salvar.
 
-O segmento define apenas o **estado inicial**. Depois disso, quem manda é
-`condominio_funcoes`.
+Módulos não dependem do segmento: o pacote é o mesmo para todos, e a partir daí
+quem manda é `condominio_funcoes`.
 
 ## Ordem de implantação
 

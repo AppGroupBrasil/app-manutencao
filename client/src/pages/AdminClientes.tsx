@@ -22,7 +22,12 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { SEGMENTOS_VALIDOS } from "@shared/modules/registry";
-import { VOCABULARIO_PADRAO, PREFIXO_VOCABULARIO, type TermoVocabulario } from "@shared/vocabulario";
+import {
+  VOCABULARIO_PADRAO,
+  VOCABULARIO_POR_SEGMENTO,
+  PREFIXO_VOCABULARIO,
+  type TermoVocabulario,
+} from "@shared/vocabulario";
 import { ArrowLeft, Building2, KeyRound, Loader2, Plus, Users } from "lucide-react";
 
 const ROTULO_SEGMENTO: Record<string, string> = {
@@ -76,7 +81,7 @@ export default function AdminClientes() {
         `Cliente aberto: ${res.unidades.length} unidade(s) para ${res.gestor.nome}`,
       );
       if (res.semModulos.length > 0) {
-        toast.error(`Sem pacote de módulos: ${res.semModulos.join(", ")}`);
+        toast.error(`Preparo incompleto em: ${res.semModulos.join(", ")}`);
       }
     },
     onError: (e) => toast.error(e.message || "Erro ao abrir o cliente"),
@@ -185,7 +190,11 @@ export default function AdminClientes() {
               <Label>Segmento</Label>
               <Select
                 value={form.segmento}
-                onValueChange={(v) => setForm({ ...form, segmento: v })}
+                onValueChange={(v) => {
+                  setForm({ ...form, segmento: v });
+                  // Sugere as palavras do segmento; tudo continua editável.
+                  setVocabulario(VOCABULARIO_POR_SEGMENTO[v] ?? {});
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -199,7 +208,8 @@ export default function AdminClientes() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-500 mt-1">
-                Define quais funções já nascem ligadas para este cliente.
+                Define o vocabulário sugerido. As funções são as mesmas para todo
+                cliente novo e cada unidade ajusta as dela depois.
               </p>
             </div>
 
@@ -261,8 +271,8 @@ export default function AdminClientes() {
                 Vocabulário do cliente (opcional)
               </summary>
               <p className="text-xs text-slate-500 mt-2">
-                Renomeia os termos nas telas deste cliente. Uma metalúrgica chama de
-                "Planta" o que a rede de creches chama de "Unidade".
+                Renomeia os termos nas telas deste cliente. Vem preenchido pelo
+                segmento escolhido — troque o que não combinar com o cliente.
               </p>
               <div className="grid grid-cols-2 gap-2 mt-3">
                 {(Object.keys(VOCABULARIO_PADRAO) as TermoVocabulario[]).map((termo) => (

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
-import { router, tenantUserProcedure } from "../../_core/trpc";
+import { moduloUserProcedure, router } from "../../_core/trpc";
 import { isModuloHabilitado } from "../../_core/modules";
 import { getDb } from "../../db";
 import {
@@ -59,11 +59,7 @@ export interface ItemCalendario {
   detalhe: string | null;
   /** Para onde o atalho leva; já com a busca pelo protocolo quando dá. */
   rota: string;
-  /**
-   * Só na O.S. do fluxo: a etapa em que ela está e a data máxima combinada.
-   * É o que deixa o calendário reprogramar sem abrir a ordem.
-   */
-  etapa?: string | null;
+  /** Data máxima combinada: deixa o calendário reprogramar sem abrir a O.S. */
   prazoLimite?: string | null;
   /** Falso quando o dia mostrado é o prazo, porque ninguém programou ainda. */
   programada?: boolean;
@@ -107,6 +103,12 @@ function diasDoIntervalo(de: string, ate: string): string[] {
   return dias;
 }
 
+/**
+ * O calendário é um módulo como os outros: cliente que só quer O.S. na tela
+ * desliga em `/admin/modulos` e a rota some junto com o cartão.
+ */
+const calendarioProcedure = moduloUserProcedure("calendario");
+
 export const calendarioRouter = router({
   /**
    * Tudo que cai no intervalo, de todas as funções com data.
@@ -115,7 +117,7 @@ export const calendarioRouter = router({
    * a grade mostra dias do mês anterior e do seguinte, e eles também precisam
    * de marca.
    */
-  listar: tenantUserProcedure
+  listar: calendarioProcedure
     .input(
       z.object({
         condominioId: z.number(),
@@ -157,7 +159,6 @@ export const calendarioRouter = router({
           concluido: boolean;
           detalhe?: string | null;
           sufixoChave?: string;
-          etapa?: string | null;
           prazoLimite?: string | null;
           programada?: boolean;
         },
@@ -173,7 +174,6 @@ export const calendarioRouter = router({
           concluido: dados.concluido,
           detalhe: dados.detalhe ?? null,
           rota: rotaDoItem(fonte, dados.id, dados.protocolo),
-          etapa: dados.etapa ?? null,
           prazoLimite: dados.prazoLimite ?? null,
           programada: dados.programada,
         });
@@ -181,7 +181,7 @@ export const calendarioRouter = router({
 
       // ------------------------------------------------ ordens de serviço
       // Mostra o dia programado; enquanto ninguém programou, mostra o prazo
-      // máximo — é assim que a O.S. sem data ainda cobra o gerente.
+      // máximo — é assim que a O.S. sem data marcada ainda cobra alguém.
       if (await ligado("os")) {
         const linhas = await db
           .select({
@@ -190,7 +190,6 @@ export const calendarioRouter = router({
             titulo: ordensServico.titulo,
             programada: ordensServico.dataProgramada,
             prazo: ordensServico.prazoLimite,
-            etapa: ordensServico.etapa,
             dataFim: ordensServico.dataFim,
             responsavel: ordensServico.responsavelPrincipalNome,
             endereco: ordensServico.endereco,
@@ -227,9 +226,8 @@ export const calendarioRouter = router({
             protocolo: linha.protocolo,
             titulo: linha.titulo,
             data: dia,
-            concluido: !!linha.dataFim || linha.etapa === "finalizada",
+            concluido: !!linha.dataFim,
             detalhe: linha.responsavel || linha.endereco,
-            etapa: linha.etapa,
             prazoLimite: linha.prazo,
             programada: !!linha.programada,
           });

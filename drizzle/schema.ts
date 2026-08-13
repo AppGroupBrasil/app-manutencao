@@ -176,12 +176,6 @@ export const condominios = pgTable("condominios", {
   modoEscuroPadrao: boolean("modoEscuroPadrao").default(false),
   // Ao abrir uma O.S., notifica todos os funcionários da unidade no aplicativo.
   osAutoNotificar: boolean("osAutoNotificar").default(false).notNull(),
-  /**
-   * Liga o fluxo com prazo, programação e baixa confirmada nas O.S. desta
-   * unidade. Desligada, a O.S. funciona como sempre — é o que mantém os outros
-   * clientes intactos.
-   */
-  osFluxoConfirmacao: boolean("osFluxoConfirmacao").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -2243,6 +2237,16 @@ export const ordensServico = pgTable("ordens_servico", {
   // Responsável Principal (ID sem foreign key para evitar referência circular)
   responsavelPrincipalId: integer("responsavelPrincipalId"),
   responsavelPrincipalNome: varchar("responsavelPrincipalNome", { length: 255 }),
+
+  /**
+   * Equipe designada para o serviço. Ao ser preenchida, o supervisor da equipe
+   * recebe o aviso com a O.S. — é o que troca "alguém vai lá" por "esta equipe
+   * está com o serviço".
+   */
+  equipeId: integer("equipeId"),
+
+  /** Observações adicionais: o que não cabe na descrição do problema. */
+  observacoes: text("observacoes"),
   
   // Solicitante
   solicitanteId: integer("solicitanteId").references(() => users.id),
@@ -2257,26 +2261,16 @@ export const ordensServico = pgTable("ordens_servico", {
   avaliacaoComentario: text("avaliacaoComentario"),
 
   /**
-   * Fluxo com prazo, programação e baixa confirmada.
+   * As duas datas da ordem: até quando pode e para quando ficou.
    *
-   * Só vale nas unidades com `condominios.osFluxoConfirmacao`. `etapa` nula é
-   * O.S. do jeito antigo: abre, executa e o gestor finaliza.
+   * O andamento em si é o status (`statusId`) — um modelo só. Existiu aqui um
+   * segundo, com etapas de baixa e confirmação; foi removido antes de entrar em
+   * uso porque duas noções de andamento na mesma tela não se explicam.
    */
   /** Data máxima de finalização, pedida por quem abre a O.S. */
   prazoLimite: date("prazoLimite"),
-  /** Dia em que o gerente marcou o serviço para ser feito. */
+  /** Dia marcado para o serviço acontecer. */
   dataProgramada: date("dataProgramada"),
-  /** solicitada | programada | baixa_pedida | baixa_confirmada | finalizada */
-  etapa: varchar("etapa", { length: 20 }),
-  /** Baixa dada pela equipe designada. */
-  baixaEm: timestamp("baixaEm"),
-  baixaPorId: integer("baixaPorId"),
-  baixaPorNome: varchar("baixaPorNome", { length: 255 }),
-  baixaObservacao: text("baixaObservacao"),
-  /** Conferência do gestor da unidade sobre a baixa da equipe. */
-  baixaConfirmadaEm: timestamp("baixaConfirmadaEm"),
-  baixaConfirmadaPorId: integer("baixaConfirmadaPorId"),
-  baixaConfirmadaPorNome: varchar("baixaConfirmadaPorNome", { length: 255 }),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),

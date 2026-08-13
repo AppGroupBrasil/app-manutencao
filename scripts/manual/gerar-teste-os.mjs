@@ -1,5 +1,5 @@
 /**
- * Folha de teste do fluxo da O.S., para uma pessoa seguir do começo ao fim.
+ * Folha de teste da O.S., para uma pessoa seguir do começo ao fim.
  *
  * Não é manual: é um roteiro de uma vez, com os botões na ordem em que ele vai
  * tocar. Sai só na área de trabalho (não vai para o site) porque é interno e tem
@@ -30,14 +30,13 @@ ${passos([
   `Volte com a flecha ${bg("arrow-left")} .`,
 ])}
 
-<h2>Passo 3 — Ligar o fluxo e abrir a ordem de teste</h2>
+<h2>Passo 3 — Abrir a ordem de teste</h2>
 ${passos([
   `Toque no cartão ${bo("Manutenções", "wrench")} e depois no quadrado <b>Ordens de Serviço</b>.`,
   `Toque em ${bt("Nova O.S.", "plus")} .`,
-  `Desça a janela até <b>Avisos ao abrir a O.S.</b> e marque a caixinha
-   <b>Fluxo com prazo e confirmação de baixa</b>. <i>(Só você vê essa caixinha.)</i>`,
-  `Agora preencha, na mesma janela: <b>Título</b> ${campo("Teste do fluxo")} e
-   <b>Data máxima de finalização</b> — escolha uma data desta semana.`,
+  `Preencha <b>Título</b> ${campo("Teste da ordem")} e a <b>Data máxima de finalização</b> —
+   escolha uma data desta semana. Sem essa data o sistema não aceita.`,
+  `Em <b>Equipe designada</b>, escolha uma equipe. O supervisor dela recebe o aviso.`,
   `Em <b>Fotos de antes e depois</b>, no lado <b>Antes</b>, toque na câmera ${bg("camera")} e
    fotografe qualquer coisa.`,
   `Toque em ${bt("Criar Ordem de Serviço", "plus")} . Aparece um aviso verde com o número da O.S.`,
@@ -52,7 +51,7 @@ ${passos([
   `Toque em ${bt("Salvar data e equipe", "calendar-clock")} .`,
 ])}
 
-<h2>Passo 5 — O funcionário faz e dá baixa</h2>
+<h2>Passo 5 — O funcionário executa</h2>
 ${aviso("Este passo é dele, no celular dele.", "Peça para ele fazer assim:")}
 ${passos([
   `Entrar em <b>appmanutencao.com.br</b> com o e-mail e a senha dele.`,
@@ -60,34 +59,33 @@ ${passos([
   `Tocar em ${bo("Iniciar serviço", "play")} .`,
   `Em <b>Fotos</b>, trocar ${campo("Antes ▾")} para <b>Depois</b> — o botão fica verde — e
    fotografar com a câmera ${bg("camera")} .`,
-  `Tocar em ${bo("Dar baixa", "check-circle-2")} .`,
+  `No cartão da ordem, trocar o <b>Status</b> para <b>Em execução</b>.`,
 ])}
 
-<h2>Passo 6 — O gestor confirma e você finaliza</h2>
+<h2>Passo 6 — Encerrar e conferir</h2>
 ${passos([
-  `<b>O gestor da unidade</b> entra com a conta dele, vê no painel a linha
-   <b>Baixas a confirmar</b>, abre a ordem e toca em ${bo("Confirmar baixa", "check-circle-2")} .`,
-  `<b>Você</b> entra, vê no painel a linha <b>Ordens a finalizar</b>, abre a ordem e toca em
-   ${bo("Finalizar serviço", "check-circle-2")} .`,
+  `Abra a ordem e troque o <b>Status</b> para <b>Finalizada totalmente</b> — ou
+   <b>Finalizada parcialmente</b>, se tiver ficado algo para depois.`,
+  `Toque em ${bo("Finalizar serviço", "check-circle-2")} : o sistema guarda a hora e o tempo total.`,
   `Ainda na ordem, toque em ${bo("Baixar PDF", "printer")} : as fotos saem lado a lado,
    <b>ANTES</b> e <b>DEPOIS</b>. Pronto — o teste acabou.`,
 ])}
 
 <h2>Se algo não aparecer</h2>
 ${lista([
-  `<b>O funcionário não vê "Dar baixa":</b> ele não foi marcado em <b>Quem vai fazer o
-   serviço</b>. Volte ao passo 4.`,
   `<b>Não achei "Programar data":</b> esse botão só existe na <b>Ordem de Serviço</b>, não nos
    outros itens do calendário.`,
-  `<b>O gestor não vê "Baixas a confirmar":</b> ele precisa entrar com a conta dele, não com a
-   sua.`,
-  `<b>"Finalizar serviço" não funciona:</b> é porque falta a confirmação do gestor. É essa a
-   ordem: baixa ${ic("chevron-right")} confirmação ${ic("chevron-right")} finalizar.`,
+  `<b>Não consigo escolher a equipe:</b> só quem responde pela unidade designa equipe, e a
+   equipe precisa estar cadastrada em <b>Equipes</b>, no painel.`,
+  `<b>O funcionário não vê a ordem:</b> confira as permissões dele em <b>Funcionários</b> — a
+   função <b>Ordens de Serviço</b> precisa estar marcada.`,
+  `<b>"Finalizar serviço" não funciona:</b> a ordem precisa ter sido iniciada antes
+   ${ic("chevron-right")} ${bo("Iniciar serviço", "play")} .`,
 ])}
 
 ${aviso(
   "Deu tudo certo?",
-  `Avise que ligamos o fluxo nas outras unidades. Deu problema em algum passo, me diga
+  `Avise, que liberamos para as outras unidades. Deu problema em algum passo, me diga
    <b>o número do passo</b> — resolvo e te chamo.`,
 )}
 

@@ -30,8 +30,15 @@ import {
   ChevronRight
 } from "lucide-react";
 
+/** Chave da permissão -> id do módulo da organização. */
+const MODULO_DA_FUNCAO = new Map(FUNCOES_FUNCIONARIO.map((f) => [f.chave, f.modulo]));
+
+function moduloDaFuncao(chave: string): string {
+  return MODULO_DA_FUNCAO.get(chave) ?? chave;
+}
+
 // Mapeamento de funções para ícones e rotas
-const FUNCOES_CONFIG: Record<string, { 
+const FUNCOES_CONFIG: Record<string, {
   icon: React.ElementType; 
   label: string; 
   description: string;
@@ -282,8 +289,13 @@ export default function FuncionarioDashboard() {
 
   // Filtrar funções: permissão do funcionário E módulo liberado para a organização.
   // A permissão individual nunca pode expor um módulo que o cliente não contratou.
+  //
+  // A chave da permissão NÃO é o id do módulo ("ordens" x "ordens-servico",
+  // "tarefas" x "tarefas-agendadas", "quadro" x "quadro-atividades"). Perguntar
+  // pela chave escondia essas três funções do funcionário mesmo com o módulo
+  // ligado; a amarração certa está em `FUNCOES_FUNCIONARIO.modulo`.
   const funcoesDisponiveis = Object.entries(FUNCOES_CONFIG).filter(
-    ([key]) => funcoesHabilitadas.includes(key) && temModulo(key)
+    ([key]) => funcoesHabilitadas.includes(key) && temModulo(moduloDaFuncao(key))
   );
 
   // Filtrar apps da organização selecionado

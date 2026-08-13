@@ -17,8 +17,9 @@ import { eq } from "drizzle-orm";
 import { router, protectedProcedure } from "../../_core/trpc";
 import { getDb } from "../../db";
 import { condominios, usuarioCondominios, users } from "../../../drizzle/schema";
-import { seedModulosDoTenant } from "../../_core/modules";
-import { SEGMENTOS_VALIDOS, type Segmento } from "../../../shared/modules/registry";
+import { prepararUnidade } from "../../_core/seedUnidade";
+import { SEGMENTOS_VALIDOS } from "../../../shared/modules/registry";
+import { labelsDoSegmento } from "../../../shared/vocabulario";
 
 /** Só a conta da plataforma abre cliente. */
 const plataformaProcedure = protectedProcedure.use(async ({ ctx, next }) => {
@@ -103,7 +104,10 @@ export const plataformaRouter = router({
               nome: nome.trim(),
               sindicoId: gestor.id,
               segmento: input.segmento,
-              labels: input.labels ?? null,
+              // O preset do segmento entra por baixo do que a plataforma
+              // digitou: quem abre o cliente pode ajustar tudo, mas ninguém
+              // precisa lembrar de traduzir "unidade" em toda abertura.
+              labels: { ...labelsDoSegmento(input.segmento), ...(input.labels ?? {}) },
             })
             .returning({ id: condominios.id, nome: condominios.nome });
 
@@ -120,14 +124,14 @@ export const plataformaRouter = router({
         return { gestor, unidades };
       });
 
-      // Fora da transação: o pacote de módulos é recuperável (basta rodar de
+      // Fora da transação: preparar a unidade é recuperável (basta rodar de
       // novo), e uma falha aqui não justifica desfazer o cliente inteiro.
       const semModulos: string[] = [];
       for (const unidade of criado.unidades) {
         try {
-          await seedModulosDoTenant(unidade.id, input.segmento as Segmento);
+          await prepararUnidade(unidade.id);
         } catch (erro) {
-          console.error(`[plataforma] seed de módulos falhou para #${unidade.id}:`, erro);
+          console.error(`[plataforma] preparo falhou para #${unidade.id}:`, erro);
           semModulos.push(unidade.nome);
         }
       }

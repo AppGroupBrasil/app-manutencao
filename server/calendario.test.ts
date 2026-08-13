@@ -60,6 +60,9 @@ const JANELA = { de: "2026-08-01", ate: "2026-08-31" };
 
 beforeEach(() => {
   modulosLigados.clear();
+  // O próprio calendário é módulo: sem ele a rota nem responde. Cada teste
+  // liga só as fontes que quer ver.
+  modulosLigados.add("calendario");
   linhas.clear();
 });
 
@@ -110,6 +113,17 @@ describe("calendario.listar", () => {
     const itens = await chamador().listar({ condominioId: 1, ...JANELA });
 
     expect(itens).toEqual([]);
+  });
+
+  it("recusa a chamada quando o próprio calendário está desligado", async () => {
+    // Cliente que só quer O.S. na tela: o cartão some no client e a rota
+    // fecha aqui — esconder no menu não impede ninguém de chamar direto.
+    modulosLigados.delete("calendario");
+    modulosLigados.add("agenda-vencimentos");
+
+    await expect(
+      chamador().listar({ condominioId: 1, ...JANELA }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("marca como concluído o que já foi realizado", async () => {
@@ -240,7 +254,6 @@ describe("calendario.listar", () => {
         titulo: "Trocar lâmpadas do pátio",
         programada: "2026-08-18",
         prazo: "2026-08-20",
-        etapa: "programada",
         dataFim: null,
         responsavel: "Ana",
         endereco: "pátio",
@@ -254,7 +267,6 @@ describe("calendario.listar", () => {
       data: "2026-08-18",
       programada: true,
       prazoLimite: "2026-08-20",
-      etapa: "programada",
       // Rota por id: o atalho abre a ordem, não uma lista filtrada.
       rota: "/manutencoes/ordens-servico/50",
     });
@@ -269,7 +281,6 @@ describe("calendario.listar", () => {
         titulo: "Consertar portão",
         programada: null,
         prazo: "2026-08-25",
-        etapa: "solicitada",
         dataFim: null,
         responsavel: null,
         endereco: null,
@@ -278,7 +289,7 @@ describe("calendario.listar", () => {
 
     const [item] = await chamador().listar({ condominioId: 1, ...JANELA });
 
-    expect(item).toMatchObject({ data: "2026-08-25", programada: false, etapa: "solicitada" });
+    expect(item).toMatchObject({ data: "2026-08-25", programada: false });
   });
 
   it("recusa a organização que não é do solicitante", async () => {

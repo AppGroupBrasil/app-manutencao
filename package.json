@@ -24,6 +24,7 @@
     "db:migrar": "tsx scripts/db/migrar.ts",
     "db:materializar-modulos": "tsx scripts/db/materializar-modulos.ts",
     "db:seed-asa": "tsx scripts/db/seed-asa.ts",
+    "db:status-os": "tsx scripts/db/status-os-cliente.ts",
     "cap:sync": "npx cap sync",
     "cap:build:android": "pnpm build:client && npx cap sync android",
     "cap:build:ios": "pnpm build:client && npx cap sync ios",

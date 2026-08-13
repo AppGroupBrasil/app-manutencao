@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
+import { useBootstrap } from "@/hooks/useBootstrap";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
@@ -11,51 +12,55 @@ import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
  * A contagem é feita aqui no cliente a partir das mesmas consultas que cada
  * função já usa — assim uma função nova entra somando uma linha nesta lista,
  * sem endpoint novo. Cada linha leva direto para a tela da função.
+ *
+ * Função desligada para a organização não é consultada nem contada: o servidor
+ * recusaria a chamada, e cobrar do gestor algo que ele não tem seria pior.
  */
 export function PainelPendencias({ condominioId }: { condominioId: number }) {
   const [, setLocation] = useLocation();
+  const { temModulo, modulosIndefinidos } = useBootstrap();
   const habilitado = condominioId > 0;
+  // Espera o bootstrap: com meia dúzia de funções desligadas, disparar antes
+  // encheria a tela de chamadas recusadas a cada abertura do painel.
+  const ativa = (modulo: string) =>
+    habilitado && !modulosIndefinidos && temModulo(modulo);
 
   const { data: ordens, isLoading: carregandoOS } = trpc.ordensServico.list.useQuery(
     { condominioId, limit: 500 },
-    { enabled: habilitado },
+    { enabled: ativa("ordens-servico") },
   );
   const { data: statusOS } = trpc.ordensServico.getStatus.useQuery(
     { condominioId },
-    { enabled: habilitado },
+    { enabled: ativa("ordens-servico") },
   );
   const { data: vencimentos, isLoading: carregandoVenc } = trpc.vencimentos.stats.useQuery(
     { condominioId },
-    { enabled: habilitado },
+    { enabled: ativa("agenda-vencimentos") },
   );
   const { data: manutencoes, isLoading: carregandoManut } = trpc.manutencao.getStats.useQuery(
     { condominioId },
-    { enabled: habilitado },
+    { enabled: ativa("manutencoes") },
   );
   const { data: reportesChecklist } = trpc.checklist.listarReportes.useQuery(
     { condominioId, status: "todos" },
-    { enabled: habilitado },
+    { enabled: ativa("checklists") },
   );
   const { data: reportesVistoria } = trpc.vistoria.listarReportes.useQuery(
     { condominioId },
-    { enabled: habilitado },
+    { enabled: ativa("vistorias") },
   );
   const { data: respostasQr } = trpc.qrcode.listarRespostas.useQuery(
     { condominioId },
-    { enabled: habilitado },
+    { enabled: ativa("qrcode") },
   );
   const { data: tarefas } = trpc.tarefasAgendadas.listar.useQuery(
     { condominioId },
-    { enabled: habilitado },
+    { enabled: ativa("tarefas-agendadas") },
   );
   const { data: execucoes } = trpc.tarefasAgendadas.listarExecucoesDaOrganizacao.useQuery(
     { condominioId },
-    { enabled: habilitado },
+    { enabled: ativa("tarefas-agendadas") },
   );
-  // Cada etapa do fluxo espera uma pessoa: o gerente só é cobrado do que é dele.
-  const { data: podeGerenciar } = trpc.gestores.podeGerenciar.useQuery();
-  const ehGerente = !!podeGerenciar;
-
   const linhas = useMemo(() => {
     // Status marcado como `isFinal` encerra a O.S.; o resto continua na mesa
     // do gestor.
@@ -64,43 +69,13 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       (os) => !os.statusId || !idsFinais.has(os.statusId),
     ).length;
 
-    // Fluxo com confirmação de baixa: cada etapa espera uma pessoa diferente, e
-    // é isso que a faixa precisa dizer — quem está devendo o próximo passo.
-    const naEtapa = (etapa: string) =>
-      (ordens?.items ?? []).filter((os) => os.etapa === etapa).length;
-    const aguardandoProgramacao = naEtapa("solicitada");
-    const baixaAConfirmar = naEtapa("baixa_pedida");
-    const aFinalizar = naEtapa("baixa_confirmada");
-
     const vencidos = vencimentos?.vencidos ?? 0;
     const proximos = vencimentos?.proximos ?? 0;
 
     return [
-      // Programar e finalizar são passos do gerente: mostrar essas linhas ao
-      // gestor da unidade seria cobrar dele algo que o sistema não deixa fazer.
-      {
-        chave: "os-programar",
-        rotulo: "Serviços a programar",
-        total: ehGerente ? aguardandoProgramacao : 0,
-        detalhe: "o gestor pediu; falta marcar a data e a equipe",
-        destino: "/manutencoes/calendario",
-      },
-      {
-        chave: "os-confirmar",
-        rotulo: "Baixas a confirmar",
-        total: baixaAConfirmar,
-        detalhe: "a equipe deu baixa e espera a conferência do gestor",
-        destino: "/manutencoes/ordens-servico",
-      },
-      {
-        chave: "os-finalizar",
-        rotulo: "Ordens a finalizar",
-        total: ehGerente ? aFinalizar : 0,
-        detalhe: "baixa confirmada, aguardando o gerente encerrar",
-        destino: "/manutencoes/ordens-servico",
-      },
       {
         chave: "os",
+        modulo: "ordens-servico",
         rotulo: "Ordens de Serviço",
         total: osAbertas,
         detalhe: "em aberto, aguardando andamento",
@@ -108,6 +83,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       },
       {
         chave: "vencimentos",
+        modulo: "agenda-vencimentos",
         rotulo: "Agenda de Vencimentos",
         total: vencidos + proximos,
         detalhe: `${vencidos} vencidos · ${proximos} vencem em até 30 dias`,
@@ -115,6 +91,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       },
       {
         chave: "manutencoes",
+        modulo: "manutencoes",
         rotulo: "Registro de Manutenções",
         total: (manutencoes?.requerAcao ?? 0) + (manutencoes?.pendentes ?? 0),
         detalhe: `${manutencoes?.requerAcao ?? 0} requerem ação · ${manutencoes?.pendentes ?? 0} pendentes`,
@@ -122,6 +99,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       },
       {
         chave: "checklists",
+        modulo: "checklists",
         rotulo: "Checklists",
         total: (reportesChecklist ?? []).filter((r) => r.status !== "resolvido").length,
         detalhe: "problemas reportados sem solução",
@@ -129,6 +107,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       },
       {
         chave: "vistorias",
+        modulo: "vistorias",
         rotulo: "Vistorias",
         total: (reportesVistoria ?? []).filter((r) => r.status !== "resolvido").length,
         detalhe: "problemas reportados sem solução",
@@ -136,6 +115,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       },
       {
         chave: "qrcode",
+        modulo: "qrcode",
         rotulo: "QR Code",
         total: (respostasQr ?? []).filter((r) => r.status !== "resolvida").length,
         detalhe: "registros recebidos sem tratativa",
@@ -143,6 +123,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
       },
       {
         chave: "tarefas",
+        modulo: "tarefas-agendadas",
         rotulo: "Lista de Tarefas",
         // Tarefa sem nenhuma execução registrada ainda espera alguém.
         total: (tarefas ?? []).filter(
@@ -151,8 +132,9 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
         detalhe: "sem execução registrada",
         destino: "/manutencoes/tarefas",
       },
-    ].filter((linha) => linha.total > 0);
+    ].filter((linha) => linha.total > 0 && temModulo(linha.modulo));
   }, [
+    temModulo,
     ordens,
     statusOS,
     vencimentos,
@@ -162,7 +144,6 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
     respostasQr,
     tarefas,
     execucoes,
-    ehGerente,
   ]);
 
   const carregando = carregandoOS || carregandoVenc || carregandoManut;

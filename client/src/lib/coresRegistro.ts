@@ -82,21 +82,6 @@ export const SITUACAO_PRAZO: Record<string, Rotulado> = {
 };
 
 /**
- * Etapas da O.S. no fluxo com prazo e confirmação.
- *
- * `curto` é para caber na linha do calendário; `rotulo` é o texto do cartão e
- * da tela da ordem. Antes cada uma das três telas escrevia a sua versão, e elas
- * já discordavam entre si.
- */
-export const ETAPA_FLUXO: Record<string, Rotulado & { curto: string }> = {
-  solicitada: { rotulo: "Aguardando programação", curto: "aguardando programação", ...TONS.ambar },
-  programada: { rotulo: "Programada", curto: "programada", ...TONS.azul },
-  baixa_pedida: { rotulo: "Baixa a confirmar", curto: "baixa a confirmar", ...TONS.laranja },
-  baixa_confirmada: { rotulo: "A finalizar pelo gerente", curto: "a finalizar", ...TONS.roxo },
-  finalizada: { rotulo: "Finalizada", curto: "finalizada", ...TONS.verde },
-};
-
-/**
  * Fase da foto. A cor no seletor é o recado de que existe mais de uma: em
  * "Antes" ele fica âmbar; ao trocar para "Depois", fica verde. Sem isso as
  * pessoas anexavam tudo em "Antes" sem perceber que havia "Depois".
@@ -106,12 +91,6 @@ export const FASE_FOTO: Record<string, Rotulado> = {
   durante: { rotulo: "Durante", ...TONS.azul },
   depois: { rotulo: "Depois", ...TONS.verde },
 };
-
-/** Etapa da O.S., com o rótulo curto do calendário. Desconhecida vira cinza. */
-export function etapaDoFluxo(chave?: string | null): Rotulado & { curto: string } {
-  if (chave && ETAPA_FLUXO[chave]) return ETAPA_FLUXO[chave];
-  return { rotulo: chave ?? "—", curto: chave ?? "—", ...TONS.cinza };
-}
 
 /** Tom de um valor desconhecido: cinza, nunca sem cor. */
 export function tomDe(mapa: Record<string, Rotulado>, chave?: string | null): Rotulado {

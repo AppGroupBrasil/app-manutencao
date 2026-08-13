@@ -202,6 +202,7 @@ export const appRouter = router({
   membroEquipe: equipeRouter,
 
   // ==================== EQUIPES (Grupos de Funcionários) ====================
+  equipes: equipesRouter,
 
   // ==================== LINKS COMPARTILHÁVEIS ====================
   linkCompartilhavel: linkCompartilhavelRouter,

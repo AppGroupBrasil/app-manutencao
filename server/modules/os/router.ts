@@ -20,6 +20,8 @@ import {
   notificacoes,
   manutencoes,
   funcionarios,
+  equipes,
+  equipeFuncionarios,
   condominios,
   users
 } from "../../../drizzle/schema"; // Adjusted path
@@ -28,7 +30,11 @@ import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
 import { assegurarExclusaoFuncionario } from "../../_core/permissaoFuncionario";
-import { ehGestorMaster } from "../../_core/gestorMaster";
+import {
+  seedCategoriasOs,
+  seedPrioridadesOs,
+  seedStatusOs,
+} from "../../_core/seedUnidade";
 import { TRPCError } from "@trpc/server";
 
 // Exige o modulo "ordens-servico" habilitado e valida que cada id recebido
@@ -48,6 +54,7 @@ const escopoOs = escopoPorRegistro(
     // Impede vincular a OS a registros de outra organizacao
     manutencaoId: direto(manutencoes),
     funcionarioId: direto(funcionarios),
+    equipeId: direto(equipes),
   },
   {
     updateCategoria: { id: direto(osCategorias) },
@@ -171,62 +178,129 @@ async function notificarAberturaDeOS(
 }
 
 /**
- * Fluxo com prazo, programação e baixa confirmada.
+ * Aviso da equipe designada.
  *
- * Cinco etapas fixas, na ordem: o gestor da unidade abre com data máxima
- * (`solicitada`), o gerente marca o dia e a equipe (`programada`), a equipe dá
- * baixa (`baixa_pedida`), o gestor confere (`baixa_confirmada`) e o gerente
- * encerra (`finalizada`).
- *
- * São fixas de propósito. O status colorido da O.S. continua configurável por
- * unidade, mas trava de fluxo não pode depender de um texto que o cliente
- * renomeia — se "Concluída" virasse outra coisa, a trava iria junto.
+ * Quem precisa saber é o supervisor: é ele que distribui o serviço dentro do
+ * time. Equipe sem supervisor cadastrado avisa todos os membros — melhor o
+ * time inteiro saber do que ninguém ficar sabendo.
  */
-const ETAPA = {
-  solicitada: "solicitada",
-  programada: "programada",
-  baixaPedida: "baixa_pedida",
-  baixaConfirmada: "baixa_confirmada",
-  finalizada: "finalizada",
-} as const;
-
-/** A unidade usa o fluxo? Desligado, nada nesta seção entra em ação. */
-async function fluxoLigado(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  condominioId: number,
-): Promise<boolean> {
-  const [org] = await db
-    .select({ ligado: condominios.osFluxoConfirmacao })
-    .from(condominios)
-    .where(eq(condominios.id, condominioId))
-    .limit(1);
-  return !!org?.ligado;
-}
-
-/** Carrega a O.S. e diz se a unidade dela está no fluxo. */
-async function osComFluxo(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  id: number,
-) {
-  const [os] = await db.select().from(ordensServico).where(eq(ordensServico.id, id));
-  if (!os) throw new TRPCError({ code: "NOT_FOUND", message: "Ordem de serviço não encontrada" });
-  return { os, ligado: await fluxoLigado(db, os.condominioId) };
-}
-
 /**
- * Programar e finalizar são do gerente (gestor-chefe ou dono da organização).
+ * A equipe é da mesma unidade da O.S.?
  *
- * É o pedido do cliente: quem distribui a agenda e fecha a ordem é uma pessoa
- * só, e o gestor de unidade responde pela conferência. Vale apenas onde o fluxo
- * está ligado — nas outras unidades, qualquer gestor continua finalizando.
+ * O escopo por registro garante que a equipe pertence a alguma organização de
+ * quem chamou — e quem cuida de 15 unidades passa nessa checagem com a equipe
+ * de qualquer uma delas. Aqui é a segunda pergunta: é a equipe DESTA unidade.
+ * Sem ela, o aviso sairia para o time errado e o nome nem apareceria na lista,
+ * que só busca equipes da unidade da ordem.
  */
-async function exigirGerente(ctx: { user: { id: number } | null }, acao: string) {
-  if (!ctx.user || !(await ehGestorMaster(ctx.user.id))) {
+async function exigirEquipeDaUnidade(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  equipeId: number,
+  condominioId: number,
+  ctx: { funcionario: { id: number } | null },
+): Promise<void> {
+  // Designar decide quem responde pelo serviço e dispara aviso: é decisão de
+  // quem gerencia. O portal do funcionário mostra a equipe, sem editar.
+  if (ctx.funcionario) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: `Apenas o gerente ${acao}.`,
+      message: "Só quem responde pela unidade designa a equipe.",
     });
   }
+
+  const [equipe] = await db
+    .select({ condominioId: equipes.condominioId, ativo: equipes.ativo })
+    .from(equipes)
+    .where(eq(equipes.id, equipeId))
+    .limit(1);
+
+  if (!equipe || equipe.condominioId !== condominioId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Esta equipe não é da unidade da ordem de serviço.",
+    });
+  }
+
+  if (!equipe.ativo) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Esta equipe foi desativada.",
+    });
+  }
+}
+
+async function notificarEquipeDesignada(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  os: { id: number; condominioId: number; protocolo: string; titulo: string; prazoLimite?: string | null },
+  equipeId: number,
+): Promise<{ equipe: string | null; avisados: string[] }> {
+  const [equipe] = await db
+    .select({ nome: equipes.nome })
+    .from(equipes)
+    .where(eq(equipes.id, equipeId))
+    .limit(1);
+
+  const membros = await db
+    .select({
+      nome: funcionarios.nome,
+      email: funcionarios.email,
+      loginEmail: funcionarios.loginEmail,
+      tipo: funcionarios.tipoFuncionario,
+    })
+    .from(equipeFuncionarios)
+    .innerJoin(funcionarios, eq(equipeFuncionarios.funcionarioId, funcionarios.id))
+    .where(and(eq(equipeFuncionarios.equipeId, equipeId), eq(funcionarios.ativo, true)));
+
+  const supervisores = membros.filter((m) => m.tipo === "supervisor");
+  const alvos = supervisores.length > 0 ? supervisores : membros;
+  if (alvos.length === 0) return { equipe: equipe?.nome ?? null, avisados: [] };
+
+  const enderecos = alvos
+    .flatMap((m) => [m.loginEmail, m.email])
+    .filter((e): e is string => !!e)
+    .map((e) => e.toLowerCase());
+
+  // Aviso dentro do sistema para quem tem conta; o e-mail cobre o resto.
+  if (enderecos.length > 0) {
+    const contas = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(inArray(sql`lower(${users.email})`, enderecos));
+
+    if (contas.length > 0) {
+      await db.insert(notificacoes).values(
+        contas.map((conta) => ({
+          userId: conta.id,
+          condominioId: os.condominioId,
+          tipo: "geral" as const,
+          titulo: `O.S. ${os.protocolo} designada para ${equipe?.nome ?? "sua equipe"}`,
+          mensagem: os.titulo,
+          link: `/manutencoes/ordens-servico/${os.id}`,
+        })),
+      );
+    }
+  }
+
+  const emails = alvos.map((m) => m.email).filter((e): e is string => !!e);
+  if (emails.length > 0) {
+    const { isEmailConfigured, sendEmail } = await import("../../_core/email");
+    if (isEmailConfigured()) {
+      await sendEmail({
+        to: emails,
+        subject: `O.S. ${os.protocolo} designada para ${equipe?.nome ?? "sua equipe"}`,
+        text: [
+          `A ordem de serviço ${os.protocolo} foi designada para a equipe ${equipe?.nome ?? ""}.`,
+          ``,
+          `Serviço: ${os.titulo}`,
+          os.prazoLimite ? `Data máxima para finalização: ${formatarDia(os.prazoLimite)}` : ``,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      });
+    }
+  }
+
+  return { equipe: equipe?.nome ?? null, avisados: alvos.map((a) => a.nome) };
 }
 
 /** Registra o passo na linha do tempo, que é onde a auditoria vive. */
@@ -324,28 +398,10 @@ export const osRouter = router({
           ))
           .orderBy(asc(osCategorias.nome));
         
+        // Unidade criada antes de o preparo existir: completa aqui, uma vez.
         if (categorias.length === 0) {
-          const categoriasPadrao = [
-            { nome: "Elétrica", icone: "Zap", cor: "#EAB308" },
-            { nome: "Hidráulica", icone: "Droplets", cor: "#3B82F6" },
-            { nome: "Estrutural", icone: "Building2", cor: "#6B7280" },
-            { nome: "Jardinagem", icone: "TreePine", cor: "#22C55E" },
-            { nome: "Limpeza", icone: "Sparkles", cor: "#06B6D4" },
-            { nome: "Pintura", icone: "Paintbrush", cor: "#EC4899" },
-            { nome: "Segurança", icone: "Shield", cor: "#EF4444" },
-            { nome: "Outros", icone: "MoreHorizontal", cor: "#8B5CF6" },
-          ];
-          
-          for (const cat of categoriasPadrao) {
-            await db.insert(osCategorias).values({
-              condominioId: input.condominioId,
-              nome: cat.nome,
-              icone: cat.icone,
-              cor: cat.cor,
-              isPadrao: true,
-            });
-          }
-          
+          await seedCategoriasOs(input.condominioId);
+
           categorias = await db.select().from(osCategorias)
             .where(and(
               eq(osCategorias.condominioId, input.condominioId),
@@ -432,24 +488,8 @@ export const osRouter = router({
           .orderBy(asc(osPrioridades.nivel));
         
         if (prioridades.length === 0) {
-          const prioridadesPadrao = [
-            { nome: "Baixa", nivel: 1, cor: "#22C55E", icone: "ArrowDown" },
-            { nome: "Normal", nivel: 2, cor: "#3B82F6", icone: "Minus" },
-            { nome: "Alta", nivel: 3, cor: "#F97316", icone: "ArrowUp" },
-            { nome: "Urgente", nivel: 4, cor: "#EF4444", icone: "AlertTriangle" },
-          ];
-          
-          for (const prio of prioridadesPadrao) {
-            await db.insert(osPrioridades).values({
-              condominioId: input.condominioId,
-              nome: prio.nome,
-              nivel: prio.nivel,
-              cor: prio.cor,
-              icone: prio.icone,
-              isPadrao: true,
-            });
-          }
-          
+          await seedPrioridadesOs(input.condominioId);
+
           prioridades = await db.select().from(osPrioridades)
             .where(and(
               eq(osPrioridades.condominioId, input.condominioId),
@@ -542,28 +582,8 @@ export const osRouter = router({
           .orderBy(asc(osStatus.ordem));
         
         if (statusList.length === 0) {
-          const statusPadrao = [
-            { nome: "Aberta", ordem: 1, cor: "#3B82F6", icone: "FolderOpen", isFinal: false },
-            { nome: "Em Análise", ordem: 2, cor: "#8B5CF6", icone: "Search", isFinal: false },
-            { nome: "Aprovada", ordem: 3, cor: "#22C55E", icone: "CheckCircle", isFinal: false },
-            { nome: "Em Execução", ordem: 4, cor: "#F97316", icone: "Wrench", isFinal: false },
-            { nome: "Aguardando Material", ordem: 5, cor: "#EAB308", icone: "Package", isFinal: false },
-            { nome: "Concluída", ordem: 6, cor: "#10B981", icone: "CheckCircle2", isFinal: true },
-            { nome: "Cancelada", ordem: 7, cor: "#EF4444", icone: "XCircle", isFinal: true },
-          ];
-          
-          for (const st of statusPadrao) {
-            await db.insert(osStatus).values({
-              condominioId: input.condominioId,
-              nome: st.nome,
-              ordem: st.ordem,
-              cor: st.cor,
-              icone: st.icone,
-              isFinal: st.isFinal,
-              isPadrao: true,
-            });
-          }
-          
+          await seedStatusOs(input.condominioId);
+
           statusList = await db.select().from(osStatus)
             .where(and(
               eq(osStatus.condominioId, input.condominioId),
@@ -760,13 +780,18 @@ export const osRouter = router({
           .where(eq(osPrioridades.condominioId, input.condominioId));
         const statusList = await db.select().from(osStatus)
           .where(eq(osStatus.condominioId, input.condominioId));
-        
+        const equipesDaUnidade = await db
+          .select({ id: equipes.id, nome: equipes.nome, cor: equipes.cor })
+          .from(equipes)
+          .where(eq(equipes.condominioId, input.condominioId));
+
         return {
           items: lista.map(os => ({
             ...os,
             categoria: categorias.find(c => c.id === os.categoriaId),
             prioridade: prioridades.find(p => p.id === os.prioridadeId),
             status: statusList.find(s => s.id === os.statusId),
+            equipe: equipesDaUnidade.find(e => e.id === os.equipeId) ?? null,
           })),
           total,
         };
@@ -803,9 +828,21 @@ export const osRouter = router({
           .where(eq(osImagens.ordemServicoId, os.id))
           .orderBy(asc(osImagens.ordem));
         
-        // A tela precisa saber se a unidade usa o fluxo para decidir os botões;
-        // sem isto ela mostraria "Finalizar" onde o certo é "Dar baixa".
-        const fluxoConfirmacao = await fluxoLigado(db, os.condominioId);
+        // Unidade de atendimento e equipe designada: a ordem tem de dizer onde
+        // é o serviço e quem ficou com ele sem obrigar a abrir outra tela.
+        const [unidade] = await db
+          .select({ id: condominios.id, nome: condominios.nome })
+          .from(condominios)
+          .where(eq(condominios.id, os.condominioId))
+          .limit(1);
+
+        const [equipe] = os.equipeId
+          ? await db
+              .select({ id: equipes.id, nome: equipes.nome, cor: equipes.cor })
+              .from(equipes)
+              .where(eq(equipes.id, os.equipeId))
+              .limit(1)
+          : [null];
 
         return {
           ...os,
@@ -818,7 +855,8 @@ export const osRouter = router({
           orcamentos,
           timeline,
           imagens,
-          fluxoConfirmacao,
+          unidade: unidade ?? null,
+          equipe: equipe ?? null,
         };
       }),
     
@@ -842,22 +880,28 @@ export const osRouter = router({
         manutencaoId: z.number().optional(),
         solicitanteNome: z.string().optional(),
         solicitanteTipo: z.enum(["sindico", "morador", "funcionario", "administradora"]).optional(),
-        /** Data máxima de finalização (`AAAA-MM-DD`); obrigatória no fluxo. */
-        prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        /** Data máxima de finalização (`AAAA-MM-DD`). Toda O.S. nasce com uma. */
+        prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        /** Equipe que fica com o serviço; o supervisor dela recebe o aviso. */
+        equipeId: z.number().optional(),
+        observacoes: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
-        // Unidade no fluxo: sem prazo a O.S. não entra no calendário e não
-        // cobra ninguém, então ela não pode nascer sem prazo.
-        const ligado = await fluxoLigado(db, input.condominioId);
-        if (ligado && !input.prazoLimite) {
+        // Sem prazo a O.S. não entra no calendário e não cobra ninguém: é o
+        // que separa um chamado de um bilhete solto.
+        if (!input.prazoLimite) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Informe a data máxima de finalização.",
           });
+        }
+
+        if (input.equipeId) {
+          await exigirEquipeDaUnidade(db, input.equipeId, input.condominioId, ctx);
         }
 
         // O numero vem da sequence do banco: dois pedidos simultaneos nunca
@@ -905,8 +949,8 @@ export const osRouter = router({
           solicitanteNome: input.solicitanteNome || autor.nome,
           solicitanteTipo: input.solicitanteTipo || (ctx.user ? "sindico" : "funcionario"),
           prazoLimite: input.prazoLimite,
-          // Fora do fluxo a etapa fica nula: é o que preserva a O.S. de sempre.
-          etapa: ligado ? ETAPA.solicitada : null,
+          equipeId: input.equipeId,
+          observacoes: input.observacoes,
         }).returning();
         
         // Adicionar evento na timeline
@@ -931,6 +975,34 @@ export const osRouter = router({
           console.error("[os] falha ao notificar abertura:", erro);
         }
 
+        // Designada já na abertura: o supervisor da equipe é avisado e o
+        // registro fica na linha do tempo, que é onde se confere quem soube.
+        if (input.equipeId) {
+          try {
+            const aviso = await notificarEquipeDesignada(
+              db,
+              {
+                id: result.id,
+                condominioId: input.condominioId,
+                protocolo,
+                titulo: input.titulo,
+                prazoLimite: input.prazoLimite,
+              },
+              input.equipeId,
+            );
+            await registrarEtapa(
+              db,
+              result.id,
+              `Equipe designada: ${aviso.equipe ?? "—"}${
+                aviso.avisados.length ? ` · avisado(s): ${aviso.avisados.join(", ")}` : ""
+              }`,
+              autor,
+            );
+          } catch (erro) {
+            console.error("[os] falha ao avisar a equipe designada:", erro);
+          }
+        }
+
         return { id: result.id, protocolo, success: true };
       }),
     
@@ -953,6 +1025,10 @@ export const osRouter = router({
         valorEstimado: z.string().optional(),
         valorReal: z.string().optional(),
         manutencaoId: z.number().nullable().optional(),
+        prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        /** `null` desfaz a designação sem apagar o histórico do aviso. */
+        equipeId: z.number().nullable().optional(),
+        observacoes: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const autor = autorDaRequisicao(ctx);
@@ -966,6 +1042,10 @@ export const osRouter = router({
           .where(eq(ordensServico.id, id));
         
         if (!osAtual) throw new Error("Ordem de serviço não encontrada");
+
+        if (input.equipeId) {
+          await exigirEquipeDaUnidade(db, input.equipeId, osAtual.condominioId, ctx);
+        }
 
         // Sem campo nenhum para gravar, o drizzle estoura com "No values to
         // set" — e a tela mostra erro interno num salvamento que não mudou nada.
@@ -1005,7 +1085,35 @@ export const osRouter = router({
             console.error("Erro ao enviar notificação de OS:", e);
           }
         }
-        
+
+        // Equipe designada depois da abertura: mesmo aviso da criação. Só
+        // dispara quando a equipe muda — salvar a O.S. de novo não reavisa.
+        if (input.equipeId && input.equipeId !== osAtual.equipeId) {
+          try {
+            const aviso = await notificarEquipeDesignada(
+              db,
+              {
+                id,
+                condominioId: osAtual.condominioId,
+                protocolo: osAtual.protocolo,
+                titulo: input.titulo ?? osAtual.titulo,
+                prazoLimite: input.prazoLimite ?? osAtual.prazoLimite,
+              },
+              input.equipeId,
+            );
+            await registrarEtapa(
+              db,
+              id,
+              `Equipe designada: ${aviso.equipe ?? "—"}${
+                aviso.avisados.length ? ` · avisado(s): ${aviso.avisados.join(", ")}` : ""
+              }`,
+              autor,
+            );
+          } catch (erro) {
+            console.error("[os] falha ao avisar a equipe designada:", erro);
+          }
+        }
+
         return { success: true };
       }),
     
@@ -1058,11 +1166,11 @@ export const osRouter = router({
       }),
     
     /**
-     * Programa o dia do serviço e, se vier, designa a equipe.
+     * Marca o dia em que o serviço vai ser feito e, se vier, quem executa.
      *
-     * É o passo 3 do fluxo: o gerente distribui a agenda. Serve também para
-     * reprogramar — o calendário chama a mesma rota quando a data muda, e cada
-     * mudança fica na linha do tempo com quem mexeu.
+     * Serve também para reprogramar — o calendário chama a mesma rota quando a
+     * data muda, e cada mudança fica na linha do tempo com quem mexeu. Fica em
+     * `osConfigProcedure`: distribuir agenda é de quem responde pela unidade.
      */
     programar: osConfigProcedure
       .input(
@@ -1078,26 +1186,19 @@ export const osRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
-        const { os, ligado } = await osComFluxo(db, input.id);
-        if (!ligado) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Esta unidade não usa o fluxo com programação.",
-          });
+        const [os] = await db
+          .select()
+          .from(ordensServico)
+          .where(eq(ordensServico.id, input.id));
+        if (!os) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Ordem de serviço não encontrada" });
         }
-        await exigirGerente(ctx, "programa a data do serviço");
 
         const reprogramando = !!os.dataProgramada;
 
         await db
           .update(ordensServico)
-          .set({
-            dataProgramada: input.dataProgramada,
-            // Reprogramar não puxa a O.S. de volta se a equipe já deu baixa:
-            // a data muda, a etapa fica onde está.
-            etapa:
-              os.etapa === ETAPA.solicitada || !os.etapa ? ETAPA.programada : os.etapa,
-          })
+          .set({ dataProgramada: input.dataProgramada })
           .where(eq(ordensServico.id, input.id));
 
         // Equipe: só acrescenta quem falta, para não apagar quem já estava.
@@ -1151,8 +1252,8 @@ export const osRouter = router({
      *
      * O prazo é obrigatório na abertura, e errar a digitação acontece. Sem esta
      * rota, o único jeito de consertar seria apagar a O.S. e abrir outra —
-     * perdendo protocolo, fotos e histórico. Fica em `osConfigProcedure`: é o
-     * combinado entre gestor e gerente, não algo que a equipe muda.
+     * perdendo protocolo, fotos e histórico. Fica em `osConfigProcedure`: é
+     * combinado da unidade, não algo que a equipe muda.
      */
     definirPrazo: osConfigProcedure
       .input(
@@ -1166,7 +1267,13 @@ export const osRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
-        const { os } = await osComFluxo(db, input.id);
+        const [os] = await db
+          .select({ prazoLimite: ordensServico.prazoLimite })
+          .from(ordensServico)
+          .where(eq(ordensServico.id, input.id));
+        if (!os) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Ordem de serviço não encontrada" });
+        }
 
         await db
           .update(ordensServico)
@@ -1185,200 +1292,6 @@ export const osRouter = router({
         return { success: true };
       }),
 
-    /**
-     * Baixa da equipe: "fiz o serviço".
-     *
-     * Não encerra a O.S. — encaminha para a conferência do gestor. Quem dá
-     * baixa é quem foi designado; o gerente também pode, para não travar a
-     * unidade em que a equipe não usa o sistema.
-     */
-    darBaixa: osProcedure
-      .input(z.object({ id: z.number(), observacao: z.string().max(1000).optional() }))
-      .mutation(async ({ input, ctx }) => {
-        const autor = autorDaRequisicao(ctx);
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-
-        const { os, ligado } = await osComFluxo(db, input.id);
-        if (!ligado) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Esta unidade não usa baixa com confirmação.",
-          });
-        }
-        // Só de "programada" sai baixa. Sem esta trava, dois caminhos ruins se
-        // abriam: baixa em serviço que o gerente nunca programou, e baixa em
-        // ordem já confirmada — que apagaria a conferência do gestor.
-        if (os.etapa !== ETAPA.programada) {
-          const motivo =
-            os.etapa === ETAPA.baixaPedida
-              ? "A baixa já foi dada e aguarda confirmação."
-              : os.etapa === ETAPA.baixaConfirmada
-                ? "A baixa já foi confirmada e aguarda o gerente finalizar."
-                : os.etapa === ETAPA.finalizada || os.dataFim
-                  ? "Esta ordem já está finalizada."
-                  : "O gerente ainda não programou a data deste serviço.";
-          throw new TRPCError({ code: "BAD_REQUEST", message: motivo });
-        }
-        if (os.dataFim) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Esta ordem já está finalizada." });
-        }
-
-        if (ctx.funcionario) {
-          const designado = await db
-            .select({ id: osResponsaveis.id })
-            .from(osResponsaveis)
-            .where(
-              and(
-                eq(osResponsaveis.ordemServicoId, input.id),
-                eq(osResponsaveis.funcionarioId, ctx.funcionario.id),
-              ),
-            )
-            .limit(1);
-          if (designado.length === 0) {
-            throw new TRPCError({
-              code: "FORBIDDEN",
-              message: "Só quem foi designado para esta ordem pode dar baixa.",
-            });
-          }
-        } else {
-          await exigirGerente(ctx, "dá baixa no lugar da equipe");
-        }
-
-        await db
-          .update(ordensServico)
-          .set({
-            baixaEm: new Date(),
-            baixaPorId: autor.userId,
-            baixaPorNome: autor.nome,
-            baixaObservacao: input.observacao?.trim() || null,
-            etapa: ETAPA.baixaPedida,
-            // Quem executou pode ter esquecido de apertar "Iniciar": sem data de
-            // início, o tempo do serviço sairia vazio no relatório.
-            dataInicio: os.dataInicio ?? new Date(),
-          })
-          .where(eq(ordensServico.id, input.id));
-
-        await registrarEtapa(
-          db,
-          input.id,
-          `Baixa dada pela equipe${input.observacao?.trim() ? `: ${input.observacao.trim()}` : ""}`,
-          autor,
-        );
-
-        return { success: true };
-      }),
-
-    /** Conferência do gestor da unidade: passo 4, antes de o gerente fechar. */
-    confirmarBaixa: osConfigProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        const autor = autorDaRequisicao(ctx);
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-
-        const { os, ligado } = await osComFluxo(db, input.id);
-        if (!ligado) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Esta unidade não usa confirmação de baixa." });
-        }
-        if (os.etapa !== ETAPA.baixaPedida) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Só há o que confirmar depois de a equipe dar baixa.",
-          });
-        }
-
-        await db
-          .update(ordensServico)
-          .set({
-            baixaConfirmadaEm: new Date(),
-            baixaConfirmadaPorId: autor.userId,
-            baixaConfirmadaPorNome: autor.nome,
-            etapa: ETAPA.baixaConfirmada,
-          })
-          .where(eq(ordensServico.id, input.id));
-
-        await registrarEtapa(db, input.id, "Baixa confirmada pelo gestor da unidade", autor);
-
-        return { success: true };
-      }),
-
-    /**
-     * Devolve a baixa para a equipe, com motivo.
-     *
-     * Sem isto, o gestor que recebe um serviço malfeito só tem dois caminhos
-     * ruins: confirmar o que está errado ou deixar a O.S. parada sem explicação.
-     */
-    devolverBaixa: osConfigProcedure
-      .input(z.object({ id: z.number(), motivo: z.string().min(3).max(500) }))
-      .mutation(async ({ input, ctx }) => {
-        const autor = autorDaRequisicao(ctx);
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-
-        const { os, ligado } = await osComFluxo(db, input.id);
-        if (!ligado) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Esta unidade não usa confirmação de baixa." });
-        }
-        if (os.etapa !== ETAPA.baixaPedida) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Só é possível devolver uma baixa que está aguardando confirmação.",
-          });
-        }
-
-        await db
-          .update(ordensServico)
-          .set({
-            baixaEm: null,
-            baixaPorId: null,
-            baixaPorNome: null,
-            baixaObservacao: null,
-            etapa: ETAPA.programada,
-          })
-          .where(eq(ordensServico.id, input.id));
-
-        await registrarEtapa(
-          db,
-          input.id,
-          `Baixa devolvida para a equipe: ${input.motivo.trim()}`,
-          autor,
-        );
-
-        return { success: true };
-      }),
-
-    /**
-     * A unidade usa o fluxo com prazo e confirmação?
-     *
-     * O portal do funcionário não lê `condominios` — ele não tem sessão de
-     * usuário. Sem esta resposta, a tela dele pediria uma O.S. sem prazo e só
-     * descobriria a exigência no erro do servidor.
-     */
-    configFluxo: osProcedure
-      .input(z.object({ condominioId: z.number() }))
-      .query(async ({ ctx }) => {
-        const db = await getDb();
-        if (!db) return { fluxoConfirmacao: false };
-        return { fluxoConfirmacao: await fluxoLigado(db, ctx.condominioId) };
-      }),
-
-    /** Liga o fluxo nesta unidade. Muda quem finaliza, então é do gerente. */
-    setFluxoConfirmacao: osConfigProcedure
-      .input(z.object({ condominioId: z.number(), ativo: z.boolean() }))
-      .mutation(async ({ input, ctx }) => {
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
-        await exigirGerente(ctx, "liga ou desliga o fluxo de confirmação");
-
-        await db
-          .update(condominios)
-          .set({ osFluxoConfirmacao: input.ativo })
-          .where(eq(condominios.id, input.condominioId));
-
-        return { success: true };
-      }),
-
     finalizarServico: osProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -1391,30 +1304,6 @@ export const osRouter = router({
 
         if (!os) throw new Error("Ordem de serviço não encontrada");
 
-        // No fluxo, finalizar é o último passo e é do gerente: a equipe dá
-        // baixa, o gestor confere, e só então a ordem fecha.
-        /**
-         * O fluxo vale para a ordem que entrou nele.
-         *
-         * `etapa` nula é ordem aberta antes de a unidade ligar a chave: ela
-         * fecha como sempre fechou. Sem esta ressalva, ligar o fluxo prendia
-         * toda O.S. em aberto — para finalizar, o gerente teria que programar,
-         * pedir baixa e confirmar um serviço que já estava pronto.
-         */
-        const comFluxo = (await fluxoLigado(db, os.condominioId)) && !!os.etapa;
-        if (comFluxo) {
-          await exigirGerente(ctx, "finaliza a ordem de serviço");
-          if (os.etapa !== ETAPA.baixaConfirmada) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message:
-                os.etapa === ETAPA.baixaPedida
-                  ? "A baixa ainda precisa ser confirmada pelo gestor da unidade."
-                  : "A equipe ainda não deu baixa neste serviço.",
-            });
-          }
-        }
-
         if (!os.dataInicio) throw new Error("Esta ordem de serviço ainda não foi iniciada");
 
         const dataFim = new Date();
@@ -1425,11 +1314,7 @@ export const osRouter = router({
         }
         
         await db.update(ordensServico)
-          .set({
-            dataFim,
-            tempoDecorridoMinutos,
-            etapa: comFluxo ? ETAPA.finalizada : os.etapa,
-          })
+          .set({ dataFim, tempoDecorridoMinutos })
           .where(eq(ordensServico.id, input.id));
 
         await db.insert(osTimeline).values({
@@ -1481,29 +1366,12 @@ export const osRouter = router({
           .orderBy(asc(osStatus.ordem))
           .limit(1);
 
-        // No fluxo, reabrir devolve a ordem para a equipe: a data programada
-        // continua, mas a baixa e a conferência anteriores saem do caminho —
-        // senão a O.S. voltaria já pronta para o gerente fechar de novo.
-        const noFluxo = await fluxoLigado(db, os.condominioId);
-
         await db
           .update(ordensServico)
           .set({
             dataFim: null,
             tempoDecorridoMinutos: null,
             statusId: statusAberto?.id ?? os.statusId,
-            ...(noFluxo
-              ? {
-                  etapa: ETAPA.programada,
-                  baixaEm: null,
-                  baixaPorId: null,
-                  baixaPorNome: null,
-                  baixaObservacao: null,
-                  baixaConfirmadaEm: null,
-                  baixaConfirmadaPorId: null,
-                  baixaConfirmadaPorNome: null,
-                }
-              : {}),
           })
           .where(eq(ordensServico.id, input.id));
 

@@ -11,7 +11,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta, etapaDoFluxo } from "@/lib/coresRegistro";
+import { useBootstrap } from "@/hooks/useBootstrap";
+import { useVocabulario } from "@/hooks/useVocabulario";
+import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import { prepareImageForUpload } from "@/lib/imageCompressor";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -32,6 +34,9 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+
+/** O seletor não aceita valor vazio; esta é a opção "tirar a equipe". */
+const SEM_EQUIPE = "nenhuma";
 
 const FASES = [
   { valor: "antes", rotulo: "Antes" },
@@ -98,48 +103,38 @@ function formatarDia(dia?: string | null): string {
 }
 
 /**
- * Os cinco passos do fluxo, com um botão por vez.
+ * As duas datas da ordem e quem executa.
  *
- * A regra de quem pode o quê é do servidor; aqui só se esconde o que a pessoa
- * não pode fazer, para ela não bater numa mensagem de erro. Cada passo mostra
- * quem fez e quando, porque é isso que o gestor e o gerente vêm conferir.
+ * Prazo máximo é o combinado com quem pediu; data programada é o dia em que a
+ * equipe vai. Ficam juntas porque a pergunta de quem abre a O.S. é sempre a
+ * mesma: "vence quando e vai ficar para quando?".
  */
-function PassosDoFluxo({
+function AgendaDaOs({
   os,
   condominioId,
-  ehGestor,
-  ehGerente,
+  podeEditar,
   onFeito,
 }: {
   os: {
     id: number;
-    etapa?: string | null;
     prazoLimite?: string | null;
     dataProgramada?: string | null;
-    baixaEm?: Date | string | null;
-    baixaPorNome?: string | null;
-    baixaObservacao?: string | null;
-    baixaConfirmadaEm?: Date | string | null;
-    baixaConfirmadaPorNome?: string | null;
     responsaveis?: { nome: string }[];
   };
   condominioId: number;
-  ehGestor: boolean;
-  ehGerente: boolean;
+  podeEditar: boolean;
   onFeito: () => Promise<void> | void;
 }) {
   const [data, setData] = useState(os.dataProgramada ?? "");
   const [equipe, setEquipe] = useState<number[]>([]);
-  const [observacao, setObservacao] = useState("");
 
   const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery(
     { condominioId },
-    { enabled: ehGerente },
+    { enabled: podeEditar },
   );
 
   const aoTerminar = async (mensagem: string) => {
     toast.success(mensagem);
-    setObservacao("");
     setEquipe([]);
     await onFeito();
   };
@@ -148,46 +143,21 @@ function PassosDoFluxo({
     onSuccess: () => aoTerminar("Serviço programado"),
     onError: (e) => toast.error(e.message),
   });
-  const darBaixa = trpc.ordensServico.darBaixa.useMutation({
-    onSuccess: () => aoTerminar("Baixa registrada — o gestor vai conferir"),
-    onError: (e) => toast.error(e.message),
-  });
-  const confirmar = trpc.ordensServico.confirmarBaixa.useMutation({
-    onSuccess: () => aoTerminar("Baixa confirmada"),
-    onError: (e) => toast.error(e.message),
-  });
-  const devolver = trpc.ordensServico.devolverBaixa.useMutation({
-    onSuccess: () => aoTerminar("Baixa devolvida para a equipe"),
-    onError: (e) => toast.error(e.message),
-  });
   const definirPrazo = trpc.ordensServico.definirPrazo.useMutation({
     onSuccess: () => aoTerminar("Data máxima atualizada"),
     onError: (e) => toast.error(e.message),
   });
 
-  const etapa = os.etapa ?? "solicitada";
-  const info = etapaDoFluxo(etapa);
-  const emAndamento =
-    programar.isPending || darBaixa.isPending || confirmar.isPending || devolver.isPending;
-
   return (
     <div className="border rounded-lg p-3 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium">Andamento</span>
-        <span
-          className="text-[11px] font-medium px-2 py-0.5 rounded-full border"
-          style={estiloEtiqueta(info)}
-        >
-          {info.rotulo}
-        </span>
-      </div>
+      <span className="text-sm font-medium">Datas e execução</span>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
         <span className="inline-flex items-center gap-1">
           <span className="font-medium">Prazo máximo:</span> {formatarDia(os.prazoLimite)}
           {/* Errar a data na abertura acontece; corrigir aqui evita apagar a
               O.S. e perder protocolo, fotos e histórico. */}
-          {ehGestor && (
+          {podeEditar && (
             <button
               type="button"
               className="text-blue-700 hover:underline"
@@ -221,14 +191,13 @@ function PassosDoFluxo({
         </span>
         {(os.responsaveis?.length ?? 0) > 0 && (
           <span>
-            <span className="font-medium">Equipe:</span>{" "}
+            <span className="font-medium">Executa:</span>{" "}
             {os.responsaveis!.map((r) => r.nome).join(", ")}
           </span>
         )}
       </div>
 
-      {/* Passo do gerente: marcar o dia e a equipe. Serve para reprogramar. */}
-      {ehGerente && etapa !== "finalizada" && (
+      {podeEditar && (
         <div className="border rounded-md p-2.5 space-y-2 bg-slate-50">
           <p className="text-xs font-medium text-slate-700">
             {os.dataProgramada ? "Reprogramar o serviço" : "Programar o serviço"}
@@ -242,7 +211,7 @@ function PassosDoFluxo({
             />
             <Button
               size="sm"
-              disabled={!data || emAndamento}
+              disabled={!data || programar.isPending}
               onClick={() =>
                 programar.mutate({
                   id: os.id,
@@ -263,7 +232,7 @@ function PassosDoFluxo({
           {(candidatos?.length ?? 0) > 0 && (
             <div>
               <p className="text-[11px] text-slate-500 mb-1">
-                Designar equipe (quem não estiver marcado continua como está):
+                Quem executa (quem não estiver marcado continua como está):
               </p>
               <div className="max-h-32 overflow-y-auto divide-y border rounded-md bg-white">
                 {candidatos!.map((c) => (
@@ -288,83 +257,6 @@ function PassosDoFluxo({
           )}
         </div>
       )}
-
-      {/* Passo da equipe: dar baixa. Não fecha a O.S., manda para conferência. */}
-      {!ehGestor && etapa === "programada" && (
-        <div className="border rounded-md p-2.5 space-y-2 bg-slate-50">
-          <p className="text-xs font-medium text-slate-700">Terminou o serviço?</p>
-          <Textarea
-            rows={2}
-            placeholder="O que foi feito (opcional)"
-            value={observacao}
-            onChange={(e) => setObservacao(e.target.value)}
-          />
-          <Button
-            size="sm"
-            disabled={emAndamento}
-            onClick={() =>
-              darBaixa.mutate({ id: os.id, observacao: observacao.trim() || undefined })
-            }
-          >
-            {darBaixa.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 mr-2" />
-            )}
-            Dar baixa
-          </Button>
-          <p className="text-[11px] text-slate-500">
-            A baixa vai para a conferência do gestor. Anexe as fotos antes de dar baixa.
-          </p>
-        </div>
-      )}
-
-      {/* Passo do gestor: conferir a baixa ou devolver com motivo. */}
-      {ehGestor && etapa === "baixa_pedida" && (
-        <div className="border rounded-md p-2.5 space-y-2 bg-slate-50">
-          <p className="text-xs font-medium text-slate-700">
-            Baixa dada por {os.baixaPorNome ?? "equipe"}
-            {os.baixaEm ? ` em ${formatarDataHora(os.baixaEm)}` : ""}
-          </p>
-          {os.baixaObservacao && (
-            <p className="text-xs text-slate-600">“{os.baixaObservacao}”</p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={emAndamento} onClick={() => confirmar.mutate({ id: os.id })}>
-              {confirmar.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-              )}
-              Confirmar baixa
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={emAndamento}
-              onClick={() => {
-                const motivo = window.prompt("Por que a baixa está sendo devolvida?");
-                if (motivo === null) return;
-                if (motivo.trim().length < 3) {
-                  toast.error("Escreva o motivo da devolução");
-                  return;
-                }
-                devolver.mutate({ id: os.id, motivo: motivo.trim() });
-              }}
-            >
-              <RotateCcw className="w-4 h-4 mr-2" /> Devolver
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {os.baixaConfirmadaEm && (
-        <p className="text-xs text-slate-500">
-          Baixa confirmada por {os.baixaConfirmadaPorNome ?? "gestor"} em{" "}
-          {formatarDataHora(os.baixaConfirmadaEm)}
-          {etapa === "baixa_confirmada" ? " · aguardando o gerente finalizar" : ""}
-        </p>
-      )}
     </div>
   );
 }
@@ -383,13 +275,15 @@ export function OsDetalhe({
   /**
    * Verdadeiro no painel do gestor, falso no portal do funcionário.
    *
-   * Decide o que é decisão de quem responde pela unidade: reabrir a ordem e a
-   * conferência da baixa. O servidor recusa o funcionário de qualquer forma;
-   * aqui é só para não mostrar botão que vai dar erro.
+   * Decide o que é decisão de quem responde pela unidade: reabrir a ordem,
+   * programar a data e designar a equipe. O servidor recusa o funcionário de
+   * qualquer forma; aqui é só para não mostrar botão que vai dar erro.
    */
   ehGestor?: boolean;
 }) {
   const utils = trpc.useUtils();
+  const { temModulo, modulosIndefinidos } = useBootstrap();
+  const v = useVocabulario();
 
   const {
     data: os,
@@ -398,11 +292,6 @@ export function OsDetalhe({
   } = trpc.ordensServico.getById.useQuery({ id: ordemServicoId }, { retry: false });
   const { data: anexos } = trpc.ordensServico.listarAnexos.useQuery({ ordemServicoId });
   const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery({ condominioId });
-  // Quem programa e finaliza no fluxo é o gerente. A pergunta só existe do lado
-  // do gestor: no portal do funcionário não há sessão de usuário para responder.
-  const { data: podeGerenciar } = trpc.gestores.podeGerenciar.useQuery(undefined, {
-    enabled: ehGestor,
-  });
 
   const [comentario, setComentario] = useState("");
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
@@ -435,6 +324,16 @@ export function OsDetalhe({
 
   const uploadImagem = trpc.ordensServico.uploadImagem.useMutation();
   const uploadAnexo = trpc.ordensServico.uploadAnexo.useMutation();
+
+  // Equipe designada e observações: gravam pela mesma rota de edição da O.S.
+  const atualizarOs = trpc.ordensServico.update.useMutation({
+    onSuccess: recarregar,
+    onError: (e) => toast.error(e.message || "Não foi possível salvar"),
+  });
+  const { data: equipesDaUnidade } = trpc.equipes.list.useQuery(
+    { condominioId },
+    { enabled: condominioId > 0 && !modulosIndefinidos && temModulo("equipes") },
+  );
 
   const gerarPdf = trpc.ordensServico.generatePDF.useMutation({
     onSuccess: (res) => {
@@ -565,14 +464,6 @@ export function OsDetalhe({
     );
   }
 
-  /**
-   * A ordem está dentro do fluxo?
-   *
-   * Não basta a unidade ter a chave ligada: ordem aberta antes disso tem
-   * `etapa` nula e continua fechando como sempre. É a mesma regra do servidor.
-   */
-  const noFluxo = !!os.fluxoConfirmacao && !!os.etapa;
-
   const imagensPorFase = (fase: string) =>
     (os.imagens ?? []).filter((img) => (img.tipo ?? "outro") === fase);
 
@@ -632,6 +523,11 @@ export function OsDetalhe({
       </div>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+        {os.unidade?.nome && (
+          <span>
+            {v.unidade}: <span className="text-slate-700">{os.unidade.nome}</span>
+          </span>
+        )}
         <span className="inline-flex items-center gap-1">
           <MapPin className="w-3.5 h-3.5" /> {os.endereco || "—"}
         </span>
@@ -639,23 +535,68 @@ export function OsDetalhe({
           <Calendar className="w-3.5 h-3.5" /> {formatarDataHora(os.createdAt)}
         </span>
         {os.solicitanteNome && <span>Aberta por {os.solicitanteNome}</span>}
+        {os.prazoLimite && <span>Prazo: {formatarDia(os.prazoLimite)}</span>}
       </div>
 
       <p className="text-sm text-slate-600">{os.descricao || "Sem descrição inicial."}</p>
 
-      {/* Fluxo com prazo e confirmação: aparece na unidade que ligou a chave,
-          inclusive nas ordens antigas — é assim que o gerente traz uma delas
-          para o fluxo, programando a data. Quem não entrou continua com o
-          botão de finalizar de sempre, logo abaixo. */}
-      {os.fluxoConfirmacao && (
-        <PassosDoFluxo
-          os={os}
-          condominioId={condominioId}
-          ehGestor={ehGestor}
-          ehGerente={!!podeGerenciar}
-          onFeito={recarregar}
-        />
+      {/* Equipe designada: mudar aqui avisa o supervisor da equipe nova. */}
+      {temModulo("equipes") && (
+        <div className="border rounded-lg p-3 space-y-1.5">
+          <span className="text-sm font-medium">Equipe designada</span>
+          <Select
+            value={os.equipeId ? String(os.equipeId) : ""}
+            disabled={!ehGestor || atualizarOs.isPending}
+            onValueChange={(valor) =>
+              atualizarOs.mutate({
+                id: ordemServicoId,
+                // Designação errada precisa ter volta, senão a ordem fica
+                // pendurada numa equipe que não vai fazer o serviço.
+                equipeId: valor === SEM_EQUIPE ? null : Number(valor),
+              })
+            }
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Nenhuma equipe designada" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_EQUIPE}>Nenhuma equipe</SelectItem>
+              {(equipesDaUnidade ?? []).map((e) => (
+                <SelectItem key={e.id} value={String(e.id)}>
+                  {e.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-slate-500">
+            {ehGestor
+              ? "Ao designar, o supervisor da equipe recebe o aviso com esta O.S."
+              : "Quem designa a equipe é quem responde pela unidade."}
+          </p>
+        </div>
       )}
+
+      {/* Observações adicionais: sai do campo e grava, como o resto da tela. */}
+      <div className="border rounded-lg p-3 space-y-1.5">
+        <span className="text-sm font-medium">Observações adicionais</span>
+        <Textarea
+          rows={2}
+          defaultValue={os.observacoes ?? ""}
+          placeholder="Acesso, horário, contato no local..."
+          onBlur={(e) => {
+            const valor = e.target.value.trim();
+            if (valor === (os.observacoes ?? "")) return;
+            atualizarOs.mutate({ id: ordemServicoId, observacoes: valor || null });
+          }}
+        />
+      </div>
+
+      <AgendaDaOs
+        os={os}
+        condominioId={condominioId}
+        podeEditar={ehGestor}
+        onFeito={recarregar}
+      />
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -667,24 +608,15 @@ export function OsDetalhe({
           <Play className="w-4 h-4 mr-2" />
           {os.dataInicio ? `Iniciada em ${formatarDataHora(os.dataInicio)}` : "Iniciar serviço"}
         </Button>
-        {/* No fluxo, quem fecha é o gerente e só depois da conferência: o botão
-            solto aqui confundiria a equipe, que agora usa "Dar baixa". */}
-        {(!noFluxo || podeGerenciar) && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={
-              !os.dataInicio ||
-              !!os.dataFim ||
-              finalizar.isPending ||
-              (noFluxo && os.etapa !== "baixa_confirmada")
-            }
-            onClick={() => finalizar.mutate({ id: ordemServicoId })}
-          >
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!os.dataInicio || !!os.dataFim || finalizar.isPending}
+          onClick={() => finalizar.mutate({ id: ordemServicoId })}
+        >
             <CheckCircle2 className="w-4 h-4 mr-2" />
-            {os.dataFim ? `Finalizada em ${formatarDataHora(os.dataFim)}` : "Finalizar serviço"}
-          </Button>
-        )}
+          {os.dataFim ? `Finalizada em ${formatarDataHora(os.dataFim)}` : "Finalizar serviço"}
+        </Button>
         {/* Só aparece depois de encerrada; o motivo fica na linha do tempo. */}
         {os.dataFim && ehGestor && (
           <Button

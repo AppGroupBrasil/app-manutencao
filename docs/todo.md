@@ -1,5 +1,26 @@
 # App Manutenção - TODO
 
+## Pendente: limpar as colunas do fluxo removido
+
+O fluxo de baixa e confirmação da O.S. saiu do código nesta versão. As colunas
+continuam no banco **de propósito**: o deploy volta para a imagem anterior se a
+versão nova não ficar saudável, e migração destrutiva quebraria essa volta — a
+versão antiga consultaria coluna que não existe mais.
+
+Depois de uma versão estável em produção, criar a migração com:
+
+```sql
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "etapa";
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "baixaEm";
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "baixaPorId";
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "baixaPorNome";
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "baixaObservacao";
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "baixaConfirmadaEm";
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "baixaConfirmadaPorId";
+ALTER TABLE "ordens_servico" DROP COLUMN IF EXISTS "baixaConfirmadaPorNome";
+ALTER TABLE "condominios" DROP COLUMN IF EXISTS "osFluxoConfirmacao";
+```
+
 ## Fase 1: Setup Inicial
 - [x] Inicializar projeto com scaffold web-db-user
 - [x] Copiar componentes UI do AppSindico

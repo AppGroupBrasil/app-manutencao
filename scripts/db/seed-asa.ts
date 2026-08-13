@@ -22,7 +22,7 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import postgres from 'postgres';
-import { modulosPadraoDoSegmento } from '../../shared/modules/registry';
+import { modulosPadrao } from '../../shared/modules/registry';
 
 const dryRun = process.argv.includes('--dry-run');
 
@@ -254,7 +254,7 @@ async function vincular(userId: number, condominioId: number, papel: 'chefe' | '
 async function seedModulos(condominioId: number): Promise<number> {
   if (dryRun || condominioId < 0) return 0;
 
-  const alvo = modulosPadraoDoSegmento(SEGMENTO);
+  const alvo = modulosPadrao();
 
   const existentes = await sql<{ funcaoId: string }[]>`
     SELECT "funcaoId" FROM "condominio_funcoes" WHERE "condominioId" = ${condominioId}

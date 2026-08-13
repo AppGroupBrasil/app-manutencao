@@ -352,28 +352,29 @@ ${aviso("Não procure o botão salvar:", "aqui tudo grava na hora. No alto fica 
 ${so("gestor", `${bo("Reabrir", "rotate-ccw")} , que só aparece depois de finalizada. O sistema pergunta
 <b>por que</b> está reabrindo, e o motivo entra no histórico.`)}
 
-<h4>Se a sua unidade usa o fluxo com prazo e confirmação</h4>
-<p>O gerente liga essa forma de trabalhar na própria O.S., em <b>Avisos ao abrir a O.S.</b>. Com
-ela, a ordem passa por cinco etapas, e a etiqueta do cartão mostra em qual delas está:</p>
+<h4>Como a O.S. anda, do começo ao fim</h4>
+<p>São quatro andamentos, e a etiqueta colorida do cartão mostra em qual deles a ordem está.
+<b>Cancelada</b> fica de fora da conta: é para a ordem aberta por engano.</p>
 ${passos([
-  `<b>O gestor abre</b> a O.S. com a <b>data máxima de finalização</b> — sem ela o sistema não
-   aceita, porque é o prazo que cobra a data no calendário.`,
-  `A ordem entra no calendário como ${et("Aguardando programação", "amarelo")} .`,
-  `<b>O gerente programa pelo calendário:</b> toca no item, em
-   ${bo("Programar data", "calendar-clock")} , escolhe a data e marca <b>quem vai fazer o
-   serviço</b> — tudo na mesma janela, uma ordem depois da outra. Dá no mesmo abrir a O.S. e usar
-   <b>Programar o serviço</b>.`,
-  `<b>A equipe executa</b> e, no lugar de finalizar, toca em ${bo("Dar baixa", "check-circle-2")}
-   — com as fotos já anexadas e uma observação do que foi feito.`,
-  `<b>O gestor confere:</b> ${bo("Confirmar baixa", "check-circle-2")} , ou
-   ${bo("Devolver", "rotate-ccw")} escrevendo o motivo, e a ordem volta para a equipe.`,
-  `<b>O gerente finaliza.</b> Antes da confirmação do gestor, o botão de finalizar não funciona
-   nem para ele.`,
+  `<b>Quem precisa do serviço abre a O.S.</b> com a <b>data máxima de finalização</b> — sem ela o
+   sistema não aceita, porque é o prazo que coloca a ordem no calendário.`,
+  `A ordem nasce em ${et("Aguardando início", "azul")} e já aparece no calendário na data máxima.`,
+  `<b>Quem responde pela unidade programa o dia:</b> abre a O.S., usa <b>Programar o serviço</b> e
+   marca quem executa. Dá no mesmo tocar no item pelo calendário e usar
+   ${bo("Programar data", "calendar-clock")} , uma ordem depois da outra.`,
+  `<b>A equipe executa</b> e a ordem passa para ${et("Em execução", "laranja")} .`,
+  `<b>No fim:</b> ${et("Finalizada parcialmente", "amarelo")} quando parte do serviço ficou para
+   depois, ou ${et("Finalizada totalmente", "verde")} quando acabou.`,
+  `${bo("Finalizar serviço", "check-circle-2")} encerra a ordem e guarda o tempo total.`,
 ])}
 ${aviso(
-  "Onde cada um vê o que falta:",
-  `na faixa do painel. O gerente tem <b>Serviços a programar</b> e <b>Ordens a finalizar</b>; o
-   gestor tem <b>Baixas a confirmar</b>. Cada linha leva direto à lista.`,
+  "Equipe designada:",
+  `marque a equipe na abertura ou dentro da O.S. O <b>supervisor</b> daquela equipe recebe o aviso
+   com a ordem — por isso vale manter as equipes montadas em <b>Equipes</b>.`,
+)}
+${aviso(
+  "Onde ver o que falta:",
+  `na faixa <b>Chamados em aberto</b>, no painel. Cada linha leva direto à lista da função.`,
 )}
 `)}
 
@@ -553,10 +554,9 @@ ${passos([
 <tr><td>Criar e excluir unidade</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
 <tr><td>Criar gestor / redefinir senha / bloquear</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
 <tr><td>Cadastrar funcionário e dar permissões</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
-<tr><td>Programar a data e a equipe (fluxo)</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
-<tr><td>Dar baixa no serviço (fluxo)</td><td class="c nao">não</td><td class="c nao">não</td><td class="c sim">se designado</td></tr>
-<tr><td>Confirmar a baixa (fluxo)</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
-<tr><td>Finalizar no fluxo com confirmação</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>Programar a data e quem executa</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Designar a equipe da O.S.</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Mudar o andamento e finalizar</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c">se liberado</td></tr>
 <tr><td>Reabrir O.S. finalizada</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
 <tr><td>Excluir registro</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c">só se liberado</td></tr>
 <tr><td>Ligar e desligar funções (Módulos)</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>

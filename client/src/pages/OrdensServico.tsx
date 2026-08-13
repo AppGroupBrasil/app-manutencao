@@ -22,8 +22,9 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
+import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
-import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta, etapaDoFluxo } from "@/lib/coresRegistro";
+import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import { prepareImageForUpload } from "@/lib/imageCompressor";
 import {
   ArrowLeft,
@@ -37,6 +38,8 @@ import {
   Search,
   Share2,
   Trash2,
+  UserCircle,
+  Users,
   Wrench,
   X,
 } from "lucide-react";
@@ -214,6 +217,9 @@ const FORM_VAZIO = {
   endereco: "",
   /** Data máxima de finalização; obrigatória nas unidades com o fluxo. */
   prazoLimite: "",
+  /** Equipe que fica com o serviço; o supervisor dela recebe o aviso. */
+  equipeId: "",
+  observacoes: "",
 };
 
 /** Página do gestor: resolve a unidade pela sessão e entrega o conteúdo. */
@@ -251,7 +257,6 @@ export default function OrdensServico({ osInicial }: { osInicial?: number }) {
           ? {
               nome: organizacaoAtiva.nome,
               autoNotificar: !!organizacaoAtiva.osAutoNotificar,
-              fluxoConfirmacao: !!organizacaoAtiva.osFluxoConfirmacao,
             }
           : undefined
       }
@@ -277,7 +282,7 @@ export function ConteudoOrdensServico({
 }: {
   condominioId: number;
   osInicial?: number;
-  organizacao?: { nome: string; autoNotificar: boolean; fluxoConfirmacao: boolean };
+  organizacao?: { nome: string; autoNotificar: boolean };
   onVoltar?: () => void;
   podeCriar?: boolean;
   /** Excluir e permissao a parte: o gestor libera por funcionario. */
@@ -287,17 +292,8 @@ export function ConteudoOrdensServico({
 }) {
   const utils = trpc.useUtils();
   const v = useVocabulario();
+  const { temModulo, modulosIndefinidos } = useBootstrap();
   const habilitado = condominioId > 0;
-  // Unidade no fluxo do gerente: muda o prazo obrigatório e o rótulo da etapa.
-  // O gestor recebe a resposta junto da organização; o portal do funcionário
-  // não tem essa lista, então pergunta ao servidor.
-  const { data: configFluxo } = trpc.ordensServico.configFluxo.useQuery(
-    { condominioId },
-    { enabled: habilitado && !organizacao },
-  );
-  const fluxoConfirmacao =
-    organizacao?.fluxoConfirmacao ?? !!configFluxo?.fluxoConfirmacao;
-
   // O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
   // isso preserva o comportamento das abas e do gráfico, que somam tudo.
   const { data: lista, isLoading: carregandoLista } = trpc.ordensServico.list.useQuery(
@@ -319,6 +315,11 @@ export function ConteudoOrdensServico({
   const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery(
     { condominioId },
     { enabled: habilitado },
+  );
+  // Equipes da unidade: sem o módulo ligado a lista volta vazia e o campo some.
+  const { data: equipesDaUnidade } = trpc.equipes.list.useQuery(
+    { condominioId },
+    { enabled: habilitado && !modulosIndefinidos && temModulo("equipes") },
   );
 
   const [busca, setBusca] = useState("");
@@ -410,18 +411,6 @@ export function ConteudoOrdensServico({
   const setAutoNotificar = trpc.ordensServico.setAutoNotificar.useMutation({
     onSuccess: () => utils.condominio.list.invalidate(),
     onError: (e) => toast.error(e.message || "Erro ao salvar a configuração"),
-  });
-
-  // A chave do fluxo e quem pode virá-la: só o gerente vê o controle.
-  const { data: podeGerenciar } = trpc.gestores.podeGerenciar.useQuery(undefined, {
-    enabled: ehGestor,
-  });
-  const setFluxo = trpc.ordensServico.setFluxoConfirmacao.useMutation({
-    onSuccess: async () => {
-      await utils.condominio.list.invalidate();
-      toast.success("Fluxo atualizado nesta unidade");
-    },
-    onError: (e) => toast.error(e.message || "Erro ao salvar o fluxo"),
   });
 
   const setNotificarEmail = trpc.ordensServico.setNotificarEmail.useMutation({
@@ -626,36 +615,38 @@ export function ConteudoOrdensServico({
                     <span className="inline-flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5" /> {os.endereco || "—"}
                     </span>
+                    {/* Abertura: quando e por quem. É o que o cliente cobra
+                        primeiro quando pergunta "de quando é esse chamado?". */}
                     <span className="inline-flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5" /> {formatarDataHora(os.createdAt)}
                     </span>
+                    {os.solicitanteNome && (
+                      <span className="inline-flex items-center gap-1">
+                        <UserCircle className="w-3.5 h-3.5" /> {os.solicitanteNome}
+                      </span>
+                    )}
+                    {os.equipe?.nome && (
+                      <span
+                        className="inline-flex items-center gap-1"
+                        style={{ color: os.equipe.cor ?? undefined }}
+                      >
+                        <Users className="w-3.5 h-3.5" /> {os.equipe.nome}
+                      </span>
+                    )}
+                    {os.prazoLimite && (
+                      <span className={textoDoPrazo(os.prazoLimite, !!os.dataFim).classe}>
+                        {textoDoPrazo(os.prazoLimite, !!os.dataFim).texto}
+                      </span>
+                    )}
                     {os.categoria?.nome && <span>{os.categoria.nome}</span>}
                   </div>
 
-                  {/* Fluxo: a etapa e as duas datas que a governam. Só aparece
-                      na unidade que ligou o fluxo — o cartão dos outros clientes
-                      continua igual. */}
-                  {os.etapa && (
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <span
-                        className="text-[11px] font-medium px-2 py-0.5 rounded-full border"
-                        style={estiloEtiqueta(etapaDoFluxo(os.etapa))}
-                      >
-                        {etapaDoFluxo(os.etapa).rotulo}
-                      </span>
-                      {os.dataProgramada ? (
-                        <span className="text-xs text-slate-500">
-                          programada para {formatarDia(os.dataProgramada)}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-amber-700">sem data programada</span>
-                      )}
-                      {os.prazoLimite && (
-                        <span className={`text-xs ${textoDoPrazo(os.prazoLimite, !!os.dataFim).classe}`}>
-                          {textoDoPrazo(os.prazoLimite, !!os.dataFim).texto}
-                        </span>
-                      )}
-                    </div>
+                  {/* O dia marcado: sem ele a ordem aparece só pelo prazo, e
+                      quem olha não sabe se já entrou na agenda de alguém. */}
+                  {os.dataProgramada && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      programada para {formatarDia(os.dataProgramada)}
+                    </p>
                   )}
 
                   <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
@@ -767,6 +758,16 @@ export function ConteudoOrdensServico({
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
+                de digitar qualquer coisa, para onde esta ordem vai. */}
+            {organizacao && (
+              <div className="rounded-lg border bg-slate-50 px-3 py-2">
+                <span className="text-xs text-slate-500">
+                  {v.unidade} de atendimento
+                </span>
+                <p className="text-sm font-medium text-slate-800">{organizacao.nome}</p>
+              </div>
+            )}
             <div>
               <Label>Título</Label>
               <Input
@@ -888,22 +889,60 @@ export function ConteudoOrdensServico({
               </div>
             </div>
 
-            {/* Prazo: é ele que coloca a O.S. no calendário e cobra o gerente. */}
+            {/* Prazo: é ele que coloca a O.S. no calendário e cobra alguém. */}
             <div>
-              <Label>
-                Data máxima de finalização
-                {fluxoConfirmacao ? "" : " (opcional)"}
-              </Label>
+              <Label>Data máxima de finalização</Label>
               <Input
                 type="date"
                 value={form.prazoLimite}
                 onChange={(e) => setForm({ ...form, prazoLimite: e.target.value })}
               />
-              {fluxoConfirmacao && (
-                <p className="text-xs text-slate-500 mt-1">
-                  O gerente usa esta data para programar o serviço no calendário.
-                </p>
-              )}
+              <p className="text-xs text-slate-500 mt-1">
+                É esta data que coloca o serviço no calendário.
+              </p>
+            </div>
+
+            {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
+                sem precisar reabrir a ordem depois. */}
+            {temModulo("equipes") && (
+              <div>
+                <Label>Equipe designada</Label>
+                <Select
+                  value={form.equipeId}
+                  onValueChange={(valor) => setForm({ ...form, equipeId: valor })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Designar depois" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(equipesDaUnidade ?? []).map((e) => (
+                      <SelectItem key={e.id} value={String(e.id)}>
+                        {e.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(equipesDaUnidade?.length ?? 0) === 0 && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Nenhuma equipe cadastrada nesta {v.unidade.toLowerCase()} ainda.
+                  </p>
+                )}
+                {form.equipeId && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    O supervisor da equipe recebe o aviso com esta O.S.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div>
+              <Label>Observações adicionais</Label>
+              <Textarea
+                rows={2}
+                placeholder="Acesso, horário, contato no local..."
+                value={form.observacoes}
+                onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+              />
             </div>
 
             {/* Responsáveis */}
@@ -941,26 +980,6 @@ export function ConteudoOrdensServico({
             {organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
                 <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
-
-                {/* Ligar o fluxo muda quem finaliza, então é decisão do gerente. */}
-                {podeGerenciar && (
-                  <label className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={fluxoConfirmacao}
-                      disabled={!habilitado || setFluxo.isPending}
-                      onChange={(e) =>
-                        setFluxo.mutate({ condominioId, ativo: e.target.checked })
-                      }
-                    />
-                    <span>
-                      <strong>Fluxo com prazo e confirmação de baixa</strong> — a O.S. nasce com data
-                      máxima, o gerente programa o dia e a equipe, a equipe dá baixa, o gestor
-                      confirma e o gerente finaliza.
-                    </span>
-                  </label>
-                )}
 
                 <label className="flex items-start gap-2 text-sm">
                   <input
@@ -1017,7 +1036,7 @@ export function ConteudoOrdensServico({
                 criar.isPending ||
                 form.titulo.trim().length < 3 ||
                 !habilitado ||
-                (fluxoConfirmacao && !form.prazoLimite)
+                !form.prazoLimite
               }
               onClick={() =>
                 criar.mutate({
@@ -1028,7 +1047,9 @@ export function ConteudoOrdensServico({
                   prioridadeId: form.prioridadeId ? Number(form.prioridadeId) : undefined,
                   statusId: form.statusId ? Number(form.statusId) : undefined,
                   endereco: form.endereco.trim() || undefined,
-                  prazoLimite: form.prazoLimite || undefined,
+                  prazoLimite: form.prazoLimite,
+                  equipeId: form.equipeId ? Number(form.equipeId) : undefined,
+                  observacoes: form.observacoes.trim() || undefined,
                 })
               }
             >

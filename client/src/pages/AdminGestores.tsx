@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { useVocabulario } from "@/hooks/useVocabulario";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,8 @@ type Gestor = {
 export default function AdminGestores() {
   const [, setLocation] = useLocation();
   const utils = trpc.useContext();
+  // "Gerente" aqui, "Síndico" em condomínio: o termo vem do cliente.
+  const v = useVocabulario();
 
   const { data: gestores, isLoading } = trpc.gestores.listar.useQuery();
   const { data: organizacoes } = trpc.condominio.list.useQuery();
@@ -238,7 +241,7 @@ export default function AdminGestores() {
                       {g.nome ?? "(sem nome)"}
                       {g.dono && (
                         <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white">
-                          <Crown className="w-3 h-3 mr-1" /> Gestor master
+                          <Crown className="w-3 h-3 mr-1" /> {v.gerente}
                         </Badge>
                       )}
                     </p>

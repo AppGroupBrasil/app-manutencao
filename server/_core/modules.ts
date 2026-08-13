@@ -8,16 +8,15 @@
  * Um módulo restrito a outro tenant responde "não" para (1) e por isso nunca
  * aparece em catálogo, menu ou API — mesmo que alguém force o ID na chamada.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   catalogoDoTenant,
   getModulo,
-  modulosPadraoDoSegmento,
+  modulosPadrao,
   tenantPodeVerModulo,
   type ModuloManifest,
-  type Segmento,
 } from '../../shared/modules/registry';
-import { condominioFuncoes, condominios } from '../../drizzle/schema';
+import { condominioFuncoes } from '../../drizzle/schema';
 import { getDb } from '../db';
 
 /**
@@ -59,23 +58,10 @@ async function carregarHabilitados(tenantId: number): Promise<Set<string> | null
     return new Set(linhas.filter((l) => l.habilitada).map((l) => l.funcaoId));
   }
 
-  // Sem configuração explícita: cai no pacote padrão do segmento (opt-in).
-  // Nunca "tudo habilitado" — senão todo módulo novo vazaria para todos.
-  let segmento: Segmento = 'condominio';
-  try {
-    const [org] = await db
-      .select({ segmento: condominios.segmento })
-      .from(condominios)
-      .where(eq(condominios.id, tenantId))
-      .limit(1);
-    segmento = (org?.segmento as Segmento) || 'condominio';
-  } catch (erro) {
-    // Coluna `segmento` ainda não existe (migration pendente): mantém o
-    // comportamento antigo em vez de derrubar o cliente.
-    console.error('[modules] coluna segmento indisponível, usando padrão:', erro);
-  }
-
-  return new Set(modulosPadraoDoSegmento(segmento));
+  // Sem configuração explícita: cai no pacote padrão do sistema (opt-in).
+  // Nunca "tudo habilitado" — senão todo módulo novo vazaria para todos, e o
+  // legado de condomínio voltaria para a tela de quem nunca pediu.
+  return new Set(modulosPadrao());
 }
 
 async function habilitadosOuNulo(tenantId: number): Promise<Set<string> | null> {
@@ -120,29 +106,10 @@ export function getCatalogoVisivel(tenantId: number): ModuloManifest[] {
   return catalogoDoTenant(tenantId);
 }
 
-/** Segmento gravado na organização (fallback: generico). */
-export async function getSegmentoDoTenant(tenantId: number): Promise<Segmento> {
-  const db = await getDb();
-  if (!db) return 'generico';
-
-  const [org] = await db
-    .select({ segmento: condominios.segmento })
-    .from(condominios)
-    .where(eq(condominios.id, tenantId))
-    .limit(1);
-
-  return (org?.segmento as Segmento) || 'generico';
-}
-
-/** Grava o pacote padrão do segmento para um tenant recém-criado. */
-export async function seedModulosDoTenant(
-  tenantId: number,
-  segmento?: Segmento,
-): Promise<number> {
+/** Grava o pacote padrão para um tenant recém-criado. */
+export async function seedModulosDoTenant(tenantId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-
-  const segmentoAlvo = segmento ?? (await getSegmentoDoTenant(tenantId));
 
   const existentes = await db
     .select({ funcaoId: condominioFuncoes.funcaoId })
@@ -150,7 +117,7 @@ export async function seedModulosDoTenant(
     .where(eq(condominioFuncoes.condominioId, tenantId));
 
   const jaGravados = new Set(existentes.map((e) => e.funcaoId));
-  const alvo = modulosPadraoDoSegmento(segmentoAlvo).filter((id) => !jaGravados.has(id));
+  const alvo = modulosPadrao().filter((id) => !jaGravados.has(id));
 
   if (alvo.length > 0) {
     await db.insert(condominioFuncoes).values(
@@ -160,6 +127,69 @@ export async function seedModulosDoTenant(
 
   invalidarCacheModulos(tenantId);
   return alvo.length;
+}
+
+/**
+ * Grava vários módulos de um tenant de uma vez.
+ *
+ * Existe para a rede de unidades: uma organização com 45 módulos × 15 unidades
+ * daria quase 700 idas ao banco pelo caminho de um módulo por vez, e a
+ * requisição estoura antes de terminar. Aqui são três comandos por
+ * organização, independentemente do tamanho da lista.
+ *
+ * Módulo fora do catálogo visível do tenant é ignorado em silêncio — é o mesmo
+ * critério de `setModuloHabilitado`, que recusa um a um.
+ */
+export async function setModulosHabilitados(
+  tenantId: number,
+  itens: { funcaoId: string; habilitada: boolean }[],
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+
+  const permitidos = itens.filter((i) => {
+    const modulo = getModulo(i.funcaoId);
+    return modulo && tenantPodeVerModulo(modulo, tenantId);
+  });
+  if (permitidos.length === 0) return 0;
+
+  const existentes = await db
+    .select({ funcaoId: condominioFuncoes.funcaoId })
+    .from(condominioFuncoes)
+    .where(eq(condominioFuncoes.condominioId, tenantId));
+
+  const jaGravados = new Set(existentes.map((e) => e.funcaoId));
+
+  const novos = permitidos.filter((i) => !jaGravados.has(i.funcaoId));
+  if (novos.length > 0) {
+    await db.insert(condominioFuncoes).values(
+      novos.map((i) => ({
+        condominioId: tenantId,
+        funcaoId: i.funcaoId,
+        habilitada: i.habilitada,
+      })),
+    );
+  }
+
+  for (const valor of [true, false]) {
+    const ids = permitidos
+      .filter((i) => i.habilitada === valor && jaGravados.has(i.funcaoId))
+      .map((i) => i.funcaoId);
+    if (ids.length === 0) continue;
+
+    await db
+      .update(condominioFuncoes)
+      .set({ habilitada: valor, updatedAt: new Date() })
+      .where(
+        and(
+          eq(condominioFuncoes.condominioId, tenantId),
+          inArray(condominioFuncoes.funcaoId, ids),
+        ),
+      );
+  }
+
+  invalidarCacheModulos(tenantId);
+  return permitidos.length;
 }
 
 /** Liga/desliga um módulo respeitando a visibilidade do registry. */

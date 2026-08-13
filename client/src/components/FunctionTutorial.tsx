@@ -602,7 +602,7 @@ const ordensServicoTutorial: TutorialConfig = {
       id: "os4",
       title: "Acompanhe o andamento",
       description:
-        "Altere o status da OS conforme progride: Aberta → Em Andamento → Concluída. Registre observações em cada etapa.",
+        "Altere o andamento conforme o serviço avança: Aguardando início → Em execução → Finalizada parcialmente ou totalmente. Cancelada é para a ordem aberta por engano.",
       icon: <Clock className="w-4 h-4" />,
     },
     {

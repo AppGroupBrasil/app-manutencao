@@ -1,25 +1,45 @@
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { useBootstrap } from "@/hooks/useBootstrap";
+import { useVocabulario } from "@/hooks/useVocabulario";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
 import { PainelPendencias } from "@/components/PainelPendencias";
 import { CalendarioGeral } from "@/components/CalendarioGeral";
-import { Loader2, LogOut, Building2, Users, UserCog, Wrench, AlertTriangle, Briefcase } from "lucide-react";
+import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, AlertTriangle, Briefcase } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
-/** O papel gravado em `users.role` é interno; na tela vale o nome do cargo. */
-const CARGO: Record<string, string> = {
-  sindico: "Gerente",
-  admin: "Administrador",
-  master: "Plataforma",
-  morador: "Morador",
-  user: "Usuário",
-};
+/**
+ * Funções que o hub de Manutenções reúne. Com todas desligadas o quadrado do
+ * hub levaria a uma tela vazia, então ele some junto.
+ */
+const MODULOS_DO_HUB = [
+  "calendario",
+  "ordens-servico",
+  "agenda-vencimentos",
+  "checklists",
+  "tarefas-agendadas",
+  "vistorias",
+  "quadro-atividades",
+  "qrcode",
+  "manutencoes",
+];
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const utils = trpc.useContext();
+  const { temModulo, modulosIndefinidos } = useBootstrap();
+  const v = useVocabulario();
+
+  /** `users.role` é papel interno; na tela vale o nome do cargo do cliente. */
+  const CARGO: Record<string, string> = {
+    sindico: v.gerente,
+    admin: "Administrador",
+    master: "Plataforma",
+    morador: "Morador",
+    user: "Usuário",
+  };
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: condominios } = trpc.condominio.list.useQuery(undefined, { enabled: !!user });
 
@@ -36,11 +56,11 @@ export default function AdminDashboard() {
   // Não existe visão somada das unidades: o número é o da organização ativa.
   const { data: manutencoes } = trpc.manutencao.getStats.useQuery(
     { condominioId: organizacaoAtiva?.id ?? 0 },
-    { enabled: !!organizacaoAtiva },
+    { enabled: !!organizacaoAtiva && !modulosIndefinidos && temModulo("manutencoes") },
   );
   const { data: funcionarios } = trpc.funcionario.list.useQuery(
     { condominioId: organizacaoAtiva?.id ?? 0 },
-    { enabled: !!organizacaoAtiva },
+    { enabled: !!organizacaoAtiva && !modulosIndefinidos && temModulo("funcionarios") },
   );
   const { data: gestores } = trpc.gestores.listar.useQuery(undefined, { enabled: !!user });
 
@@ -97,10 +117,14 @@ export default function AdminDashboard() {
 
         {/* Em destaque, antes de tudo: o que vence e quando. Cada dia leva à
             função de onde o item veio. */}
-        <CalendarioGeral condominioId={organizacaoAtiva?.id ?? 0} compacto />
+        {temModulo("calendario") && (
+          <CalendarioGeral condominioId={organizacaoAtiva?.id ?? 0} compacto />
+        )}
 
         {/* Atalho único para o que espera resposta, de todas as funções. */}
-        <PainelPendencias condominioId={organizacaoAtiva?.id ?? 0} />
+        {temModulo("painel-pendencias") && (
+          <PainelPendencias condominioId={organizacaoAtiva?.id ?? 0} />
+        )}
 
         {/* Quadrados, dois por linha: o mesmo desenho vale no celular. */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -127,30 +151,44 @@ export default function AdminDashboard() {
             descricao="responsáveis pelas unidades"
             onClick={() => setLocation("/admin/gestores")}
           />
-          <CardQuadrado
-            icone={<Users className="w-6 h-6 text-emerald-500" />}
-            titulo="Funcionários"
-            valor={funcionarios?.length ?? "—"}
-            descricao={organizacaoAtiva ? `em ${organizacaoAtiva.nome}` : "cadastrados"}
-            onClick={() => setLocation("/admin/funcionarios")}
-          />
-          <CardQuadrado
-            icone={<AlertTriangle className="w-6 h-6 text-red-500" />}
-            titulo="Ocorrências"
-            descricao="incidentes com foto e prioridade"
-            onClick={() => setLocation("/ocorrencias")}
-          />
-          <CardQuadrado
-            icone={<Wrench className="w-6 h-6 text-orange-500" />}
-            titulo="Manutenções"
-            valor={manutencoes?.total ?? "—"}
-            descricao={
-              manutencoes
-                ? `${manutencoes.pendentes} pendentes · ${manutencoes.requerAcao} requerem ação`
-                : "ordens de serviço, vencimentos e mais"
-            }
-            onClick={() => setLocation("/admin/manutencoes")}
-          />
+          {temModulo("funcionarios") && (
+            <CardQuadrado
+              icone={<Users className="w-6 h-6 text-emerald-500" />}
+              titulo="Funcionários"
+              valor={funcionarios?.length ?? "—"}
+              descricao={organizacaoAtiva ? `em ${organizacaoAtiva.nome}` : "cadastrados"}
+              onClick={() => setLocation("/admin/funcionarios")}
+            />
+          )}
+          {temModulo("equipes") && (
+            <CardQuadrado
+              icone={<UsersRound className="w-6 h-6 text-teal-500" />}
+              titulo="Equipes"
+              descricao="times que recebem a O.S. designada"
+              onClick={() => setLocation("/admin/equipes")}
+            />
+          )}
+          {temModulo("ocorrencias") && (
+            <CardQuadrado
+              icone={<AlertTriangle className="w-6 h-6 text-red-500" />}
+              titulo="Ocorrências"
+              descricao="incidentes com foto e prioridade"
+              onClick={() => setLocation("/ocorrencias")}
+            />
+          )}
+          {MODULOS_DO_HUB.some(temModulo) && (
+            <CardQuadrado
+              icone={<Wrench className="w-6 h-6 text-orange-500" />}
+              titulo="Manutenções"
+              valor={manutencoes?.total ?? "—"}
+              descricao={
+                manutencoes
+                  ? `${manutencoes.pendentes} pendentes · ${manutencoes.requerAcao} requerem ação`
+                  : "ordens de serviço, vencimentos e mais"
+              }
+              onClick={() => setLocation("/admin/manutencoes")}
+            />
+          )}
         </div>
       </main>
     </div>

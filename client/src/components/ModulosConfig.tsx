@@ -4,6 +4,7 @@ import { useBootstrap } from "@/hooks/useBootstrap";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
@@ -43,6 +44,8 @@ export function ModulosConfig() {
 
   // Alterações pendentes: funcaoId -> habilitada
   const [pendentes, setPendentes] = useState<Record<string, boolean>>({});
+  // Rede de unidades: a mesma configuração vale para todas, de uma vez.
+  const [aplicarEmTodas, setAplicarEmTodas] = useState(false);
 
   const salvar = trpc.funcoesCondominio.atualizarMultiplas.useMutation({
     onSuccess: async (res) => {
@@ -51,7 +54,11 @@ export function ModulosConfig() {
         utils.funcoesCondominio.listar.invalidate(),
         utils.system.bootstrap.invalidate(),
       ]);
-      toast.success(`${res.updated} módulo(s) atualizados`);
+      toast.success(
+        res.organizacoes > 1
+          ? `Configuração aplicada a ${res.organizacoes} organizações`
+          : `${res.updated} módulo(s) atualizados`,
+      );
     },
     onError: (e) => toast.error(e.message || "Não foi possível salvar"),
   });
@@ -90,6 +97,27 @@ export function ModulosConfig() {
     // O tenant vai no cabeçalho de toda chamada; recarregar é o caminho mais
     // simples e seguro para revalidar tudo de uma vez.
     window.location.reload();
+  };
+
+  /**
+   * O que a gravação leva.
+   *
+   * Numa organização só, bastam as alterações. Aplicando a todas, vai o estado
+   * inteiro desta tela: a promessa é que as unidades fiquem iguais, e mandar só
+   * as alterações deixaria cada uma com a configuração antiga no resto.
+   */
+  const oQueGravar = () => {
+    const alterado = Object.entries(pendentes).map(([funcaoId, habilitada]) => ({
+      funcaoId,
+      habilitada,
+    }));
+
+    if (!aplicarEmTodas || !organizacoes) return { funcoes: alterado };
+
+    return {
+      organizacoesIds: organizacoes.map((o) => o.id),
+      funcoes: (catalogo ?? []).map((m) => ({ funcaoId: m.id, habilitada: valorDe(m.id) })),
+    };
   };
 
   const totalPendentes = Object.keys(pendentes).length;
@@ -143,6 +171,21 @@ export function ModulosConfig() {
                 ))}
               </SelectContent>
             </Select>
+
+            <label className="mt-4 flex items-start gap-2.5 cursor-pointer">
+              <Checkbox
+                checked={aplicarEmTodas}
+                onCheckedChange={(v) => setAplicarEmTodas(v === true)}
+                className="mt-0.5"
+              />
+              <span className="text-sm">
+                Aplicar a todas as {organizacoes?.length} organizações
+                <span className="block text-xs text-slate-500">
+                  As mesmas alterações são gravadas em todas — o que estiver
+                  configurado diferente em outra unidade passa a seguir esta tela.
+                </span>
+              </span>
+            </label>
           </CardContent>
         )}
       </Card>
@@ -193,16 +236,11 @@ export function ModulosConfig() {
             Descartar
           </Button>
         )}
+        {/* Aplicar a todas vale mesmo sem alteração nova: é o jeito de copiar
+            a configuração desta unidade para as demais. */}
         <Button
-          onClick={() =>
-            salvar.mutate({
-              funcoes: Object.entries(pendentes).map(([funcaoId, habilitada]) => ({
-                funcaoId,
-                habilitada,
-              })),
-            })
-          }
-          disabled={totalPendentes === 0 || salvar.isPending}
+          onClick={() => salvar.mutate(oQueGravar())}
+          disabled={(totalPendentes === 0 && !aplicarEmTodas) || salvar.isPending}
         >
           {salvar.isPending ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />

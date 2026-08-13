@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { SITUACAO_PRAZO, etapaDoFluxo } from "@/lib/coresRegistro";
+import { SITUACAO_PRAZO } from "@/lib/coresRegistro";
 import {
   CalendarClock,
   CalendarDays,
@@ -34,8 +34,7 @@ type ItemCalendario = {
   concluido: boolean;
   detalhe: string | null;
   rota: string;
-  /** Só na O.S. do fluxo: etapa, prazo combinado e se a data já foi marcada. */
-  etapa?: string | null;
+  /** Prazo combinado e se o dia do serviço já foi marcado. */
   prazoLimite?: string | null;
   programada?: boolean;
 };
@@ -202,7 +201,7 @@ export function CalendarioGeral({
   // Redistribuir é a razão de o gerente abrir o calendário: ele muda a data sem
   // sair da tela, uma O.S. depois da outra.
   const podeReprogramar = (item: ItemCalendario) =>
-    !!podeGerenciar && item.fonte === "os" && !!item.etapa && item.etapa !== "finalizada";
+    !!podeGerenciar && item.fonte === "os" && !item.concluido;
 
   const programar = trpc.ordensServico.programar.useMutation({
     onSuccess: async () => {
@@ -370,9 +369,7 @@ export function CalendarioGeral({
                       <span className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
                         <span className="font-medium text-slate-600">{item.rotuloFonte}</span>
                         {item.protocolo ? <span className="font-mono">{item.protocolo}</span> : null}
-                        {item.etapa ? (
-                          <span className="truncate">· {etapaDoFluxo(item.etapa).curto}</span>
-                        ) : null}
+
                         {item.detalhe ? <span className="truncate">· {item.detalhe}</span> : null}
                         <Seta className="w-3.5 h-3.5 ml-auto shrink-0 text-slate-400" />
                       </span>

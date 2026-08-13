@@ -5,10 +5,12 @@ import {
   catalogoDoTenant,
   getModulo,
   isModuloRestrito,
-  modulosPadraoDoSegmento,
+  modulosPadrao,
   tenantPodeVerModulo,
   type ModuloManifest,
 } from "../shared/modules/registry";
+import { FUNCOES_FUNCIONARIO } from "../shared/funcoesFuncionario";
+import { labelsDoSegmento } from "../shared/vocabulario";
 import { createTenantAccess } from "./_core/tenant";
 import type { Funcionario, User } from "../drizzle/schema";
 
@@ -59,26 +61,69 @@ describe("Registry de módulos", () => {
     }
   });
 
-  it("pacote de segmento nunca inclui módulo restrito", () => {
-    for (const segmento of ["generico", "condominio", "metalurgia", "oficina"] as const) {
-      for (const id of modulosPadraoDoSegmento(segmento)) {
-        expect(isModuloRestrito(getModulo(id)!)).toBe(false);
-      }
+  it("pacote padrão nunca inclui módulo restrito ou legado", () => {
+    for (const id of modulosPadrao()) {
+      const modulo = getModulo(id)!;
+      expect(isModuloRestrito(modulo), id).toBe(false);
+      expect(modulo.legado, id).toBeFalsy();
     }
   });
 
-  it("segmentos diferentes recebem pacotes diferentes", () => {
-    const condominio = modulosPadraoDoSegmento("condominio");
-    const metalurgia = modulosPadraoDoSegmento("metalurgia");
+  it("toda função do portal do funcionário aponta para um módulo existente", () => {
+    // A chave da permissão não é o id do módulo ("ordens" x "ordens-servico").
+    // Confundir os dois já escondeu função liberada do funcionário; o mapa em
+    // `FUNCOES_FUNCIONARIO.modulo` é a amarração, e ele precisa fechar com o
+    // registry.
+    for (const funcao of FUNCOES_FUNCIONARIO) {
+      expect(getModulo(funcao.modulo), `função "${funcao.chave}"`).toBeDefined();
+    }
+  });
 
-    // O núcleo operacional é comum
-    expect(condominio).toContain("manutencoes");
-    expect(metalurgia).toContain("manutencoes");
+  it("o pacote padrão é o sistema de manutenção inteiro", () => {
+    const pacote = modulosPadrao();
 
-    // O que é específico de condomínio não vai para a metalúrgica
-    expect(condominio).toContain("votacoes");
-    expect(metalurgia).not.toContain("votacoes");
-    expect(metalurgia).not.toContain("moradores");
+    // O que todo cliente novo encontra ligado ao entrar pela primeira vez.
+    for (const id of [
+      "ordens-servico",
+      "calendario",
+      "painel-pendencias",
+      "agenda-vencimentos",
+      "manutencoes",
+      "vistorias",
+      "checklists",
+      "tarefas-agendadas",
+      "quadro-atividades",
+      "qrcode",
+      "ocorrencias",
+      "funcionarios",
+      "equipes",
+    ]) {
+      expect(pacote, id).toContain(id);
+    }
+
+    // Especialidade existe no catálogo, mas não vem ligada.
+    expect(pacote).not.toContain("leitura-medidores");
+    expect(pacote).not.toContain("jardinagem");
+  });
+
+  it("o legado de condomínio não entra em pacote nem em catálogo", () => {
+    // São funções de portaria e convivência do sistema de onde este código
+    // veio. Voltar para a tela de um cliente de manutenção é ruído.
+    const pacote = modulosPadrao();
+    const catalogo = catalogoDoTenant(1).map((m) => m.id);
+
+    for (const id of ["votacoes", "classificados", "moradores", "revistas", "caronas"]) {
+      expect(pacote, id).not.toContain(id);
+      expect(catalogo, id).not.toContain(id);
+    }
+  });
+
+  it("o que muda por segmento é a palavra, não o pacote", () => {
+    // A diferença entre segmentos passou a ser vocabulário: o sistema é o
+    // mesmo, e cada unidade desliga o que não usa.
+    expect(labelsDoSegmento("condominio")["vocab.gestor"]).toBe("Síndico");
+    expect(labelsDoSegmento("metalurgia")["vocab.unidade"]).toBe("Planta");
+    expect(labelsDoSegmento("educacional")["vocab.gestor"]).toBeUndefined();
   });
 });
 

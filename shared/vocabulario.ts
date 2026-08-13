@@ -17,6 +17,8 @@ export const VOCABULARIO_PADRAO = {
   setor: "Setor",
   local: "Local",
   gestor: "Gestor",
+  /** Quem responde por todas as unidades do cliente: programa e encerra. */
+  gerente: "Gerente",
   funcionario: "Funcionário",
   funcionarios: "Funcionários",
   equipe: "Equipe",
@@ -37,6 +39,73 @@ export const VOCABULARIO_PADRAO = {
 } as const;
 
 export type TermoVocabulario = keyof typeof VOCABULARIO_PADRAO;
+
+/**
+ * Ponto de partida de cada segmento.
+ *
+ * Só os substantivos que mudam de nome no dia a dia do cliente. O que não
+ * estiver aqui fica no padrão, e a plataforma pode ajustar qualquer termo na
+ * abertura do cliente — isto é sugestão, não regra.
+ */
+export const VOCABULARIO_POR_SEGMENTO: Record<string, Partial<Record<TermoVocabulario, string>>> = {
+  condominio: {
+    unidade: "Condomínio",
+    unidades: "Condomínios",
+    setor: "Bloco",
+    gestor: "Síndico",
+    gerente: "Administradora",
+  },
+  metalurgia: {
+    unidade: "Planta",
+    unidades: "Plantas",
+    setor: "Célula",
+    gestor: "Coordenador",
+    gerente: "Gerente industrial",
+  },
+  oficina: {
+    unidade: "Oficina",
+    unidades: "Oficinas",
+    setor: "Box",
+    gestor: "Encarregado",
+  },
+  academia: {
+    unidade: "Academia",
+    unidades: "Academias",
+    setor: "Sala",
+    gestor: "Coordenador",
+  },
+  facilities: {
+    unidade: "Site",
+    unidades: "Sites",
+    setor: "Área",
+    gestor: "Supervisor",
+    gerente: "Gerente de contrato",
+  },
+  educacional: {
+    unidade: "Unidade",
+    unidades: "Unidades",
+    setor: "Setor",
+  },
+};
+
+/**
+ * Labels (`vocab.*`) sugeridos para um segmento, prontos para gravar.
+ *
+ * Devolve só o que difere do padrão: gravar o dicionário inteiro faria toda
+ * mudança futura no texto padrão parar de chegar nos clientes já abertos.
+ */
+export function labelsDoSegmento(segmento?: string | null): Record<string, string> {
+  const preset = (segmento && VOCABULARIO_POR_SEGMENTO[segmento]) || {};
+  const labels: Record<string, string> = {};
+
+  for (const [termo, valor] of Object.entries(preset)) {
+    if (valor && valor !== VOCABULARIO_PADRAO[termo as TermoVocabulario]) {
+      labels[`${PREFIXO_VOCABULARIO}${termo}`] = valor;
+    }
+  }
+
+  return labels;
+}
 
 export type Vocabulario = Record<TermoVocabulario, string>;
 

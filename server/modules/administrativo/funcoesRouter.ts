@@ -6,11 +6,11 @@ import {
   getModulosHabilitados,
   seedModulosDoTenant,
   setModuloHabilitado,
+  setModulosHabilitados,
 } from "../../_core/modules";
 import { getUserHierarquiaNivel, HIERARQUIA_NIVEL } from "../../_core/trpc.types";
 import { getDb } from "../../db";
 import { podeAdministrarOrganizacao } from "../../_core/ownership";
-import type { Segmento } from "../../../shared/modules/registry";
 
 /**
  * Configuração de quais módulos cada organização enxerga.
@@ -102,10 +102,20 @@ export const funcoesCondominioRouter = router({
       return { success: true, condominioId: ctx.condominioId, funcaoId: input.funcaoId, habilitada: input.habilitada };
     }),
 
+  /**
+   * Grava o mesmo conjunto de módulos em uma ou em várias organizações.
+   *
+   * `organizacoesIds` existe para rede de unidades: repetir a configuração 15
+   * vezes trocando de organização no seletor é o tipo de trabalho que ninguém
+   * termina igual. Cada alvo passa pelas duas checagens (pertence a quem chamou
+   * e tem direito de configurar) ANTES de qualquer escrita — com uma unidade
+   * fora do alcance, nada é gravado.
+   */
   atualizarMultiplas: tenantProcedure
     .input(
       z.object({
         condominioId: z.number().optional(),
+        organizacoesIds: z.array(z.number().int().positive()).optional(),
         funcoes: z.array(
           z.object({
             funcaoId: z.string(),
@@ -115,27 +125,41 @@ export const funcoesCondominioRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      await exigirAdmin(ctx);
-      for (const funcao of input.funcoes) {
-        await setModuloHabilitado(ctx.condominioId, funcao.funcaoId, funcao.habilitada);
+      const alvos = input.organizacoesIds?.length
+        ? [...new Set(input.organizacoesIds)]
+        : [ctx.condominioId];
+
+      for (const condominioId of alvos) {
+        await ctx.tenant.assert(condominioId);
+        if (!(await podeConfigurarModulos({ user: ctx.user, condominioId }))) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Sem permissão para configurar os módulos de uma das organizações.",
+          });
+        }
       }
-      return { success: true, updated: input.funcoes.length };
+
+      for (const condominioId of alvos) {
+        // Organização sem nenhuma linha gravada vive do pacote do segmento.
+        // Gravar só as alterações desligaria em silêncio tudo que não veio na
+        // lista, porque a partir da primeira linha o pacote deixa de valer.
+        await seedModulosDoTenant(condominioId);
+        await setModulosHabilitados(condominioId, input.funcoes);
+      }
+
+      return {
+        success: true,
+        updated: input.funcoes.length * alvos.length,
+        organizacoes: alvos.length,
+      };
     }),
 
-  // Grava o pacote padrão do segmento para o tenant
+  // Grava o pacote padrão para o tenant
   inicializar: tenantProcedure
-    .input(
-      z.object({
-        condominioId: z.number().optional(),
-        segmento: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ input, ctx }) => {
+    .input(z.object({ condominioId: z.number().optional() }).optional())
+    .mutation(async ({ ctx }) => {
       await exigirAdmin(ctx);
-      const criados = await seedModulosDoTenant(
-        ctx.condominioId,
-        (input.segmento as Segmento) || undefined,
-      );
+      const criados = await seedModulosDoTenant(ctx.condominioId);
       return { initialized: criados > 0, count: criados };
     }),
 });

@@ -10,8 +10,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const registryFalso = {
   MODULOS: [
-    { id: "manutencoes", nome: "Manutenções", categoria: "operacional", descricao: "", segmentos: ["generico", "condominio"] },
-    { id: "votacoes", nome: "Votações", categoria: "interativo", descricao: "", segmentos: ["condominio"] },
+    { id: "manutencoes", nome: "Manutenções", categoria: "operacional", descricao: "" },
+    { id: "jardinagem", nome: "Jardinagem", categoria: "operacional", descricao: "", padrao: false },
+    { id: "votacoes", nome: "Votações", categoria: "interativo", descricao: "", legado: true },
     { id: "exclusivo-7", nome: "Exclusivo", categoria: "operacional", descricao: "", visibilidade: "restrito", tenants: [7] },
   ],
 } as const;
@@ -28,10 +29,10 @@ vi.mock("../shared/modules/registry", () => {
     tenantPodeVerModulo,
     getModulo: (id: string) => MODULOS.find((m) => m.id === id),
     catalogoDoTenant: (tenantId: number) =>
-      MODULOS.filter((m) => tenantPodeVerModulo(m, tenantId)),
-    modulosPadraoDoSegmento: (segmento: string) =>
+      MODULOS.filter((m: any) => !m.legado && tenantPodeVerModulo(m, tenantId)),
+    modulosPadrao: () =>
       MODULOS.filter(
-        (m) => !isModuloRestrito(m) && ((m as any).segmentos ?? []).includes(segmento),
+        (m: any) => !isModuloRestrito(m) && !m.legado && m.padrao !== false,
       ).map((m) => m.id),
     TODOS_MODULO_IDS: MODULOS.map((m) => m.id),
   };

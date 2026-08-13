@@ -5,7 +5,7 @@ import { getDb } from "../../db";
 import { condominios, condominioFuncoes, usuarioCondominios } from "../../../drizzle/schema";
 import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { seedModulosDoTenant } from "../../_core/modules";
+import { prepararUnidade } from "../../_core/seedUnidade";
 import { ehGestorMaster } from "../../_core/gestorMaster";
 import type { Segmento } from "../../../shared/modules/registry";
 
@@ -96,15 +96,10 @@ export const condominioRouter = router({
           console.error(`[condominio.create] vínculo de chefe falhou para #${id}:`, erro);
         }
 
-        // Grava explicitamente os módulos do segmento. Sem isto o tenant nasce
-        // dependendo do fallback e qualquer módulo novo mudaria o que ele vê.
-        // Falha aqui não invalida a organização já criada — ela cai no pacote
-        // do segmento até que alguém rode o seed de novo.
-        try {
-          await seedModulosDoTenant(id, segmento);
-        } catch (erro) {
-          console.error(`[condominio.create] seed de módulos falhou para #${id}:`, erro);
-        }
+        // Módulos, status, categorias e prioridades: a unidade nasce pronta,
+        // igual a todas as outras. Sem isto ela dependeria do fallback e cada
+        // cadastro apareceria na primeira vez que alguém abrisse a tela.
+        await prepararUnidade(id);
 
         return { id };
       }),

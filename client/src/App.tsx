@@ -35,12 +35,12 @@ const OrdemServicoPublica = lazy(() => import("./pages/OrdemServicoPublica"));
 const RegistroPublico = lazy(() => import("./pages/RegistroPublico"));
 const AdminFuncionarios = lazy(() => import("./pages/AdminFuncionarios"));
 const AdminGestores = lazy(() => import("./pages/AdminGestores"));
+const AdminEquipes = lazy(() => import("./pages/AdminEquipes"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
 const FuncionarioRecuperarSenha = lazy(() => import("./pages/FuncionarioRecuperarSenha"));
 const FuncionarioRedefinirSenha = lazy(() => import("./pages/FuncionarioRedefinirSenha"));
 
 // Public/shared pages — lazy loaded
-const Votar = lazy(() => import("./pages/Votar"));
 const ItemCompartilhadoPage = lazy(() => import("./pages/ItemCompartilhadoPage").then(m => ({ default: m.ItemCompartilhadoPage })));
 const Contrato = lazy(() => import("./pages/Contrato"));
 const Apresentacao = lazy(() => import("./pages/Apresentacao"));
@@ -114,6 +114,9 @@ function Router() {
       <Route path="/admin/gestores">
         <ExigeSenhaDefinida><AdminGestores /></ExigeSenhaDefinida>
       </Route>
+      <Route path="/admin/equipes">
+        <ExigeSenhaDefinida><AdminEquipes /></ExigeSenhaDefinida>
+      </Route>
       <Route path="/admin/manutencoes">
         <ExigeSenhaDefinida><AdminManutencoes /></ExigeSenhaDefinida>
       </Route>
@@ -174,9 +177,6 @@ function Router() {
       <Route path="/contrato" component={Contrato} />
       <Route path="/apresentacao" component={Apresentacao} />
       <Route path="/relatorio" component={LandingRelatorio} />
-
-      {/* Votação */}
-      <Route path="/votar/:id" component={Votar} />
 
       {/* Itens compartilhados */}
       <Route path="/compartilhado/:tipo/:token" component={ItemCompartilhadoPage} />
