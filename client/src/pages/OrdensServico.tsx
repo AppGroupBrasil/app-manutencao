@@ -201,6 +201,23 @@ function hojeISO(): string {
   return `${agora.getFullYear()}-${mes}-${dia}`;
 }
 
+/**
+ * Bloco do formulário com título.
+ *
+ * Doze campos em fila única viram um rolo sem fim no celular. Três grupos com
+ * nome deixam a mesma tela curta de ler, sem tirar nada.
+ */
+function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        {titulo}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
 /** Dia em `AAAA-MM-DD` como o brasileiro lê. */
 function formatarDia(dia?: string | null): string {
   if (!dia) return "—";
@@ -842,7 +859,8 @@ export function ConteudoOrdensServico({
           <DialogHeader>
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-5">
+            <Secao titulo="O chamado">
             {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
                 de digitar qualquer coisa, para onde esta ordem vai. */}
             {podeEscolherUnidade ? (
@@ -893,13 +911,10 @@ export function ConteudoOrdensServico({
             <div>
               <Label>Responsável pela abertura</Label>
               <Input
-                placeholder="Quem pediu o serviço"
+                placeholder="Quem pediu o serviço — em branco, fica você"
                 value={form.solicitanteNome}
                 onChange={(e) => setForm({ ...form, solicitanteNome: e.target.value })}
               />
-              <p className="text-xs text-slate-500 mt-1">
-                Em branco, fica registrado quem está com a conta aberta.
-              </p>
             </div>
 
             <div>
@@ -919,6 +934,9 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               />
             </div>
+            </Secao>
+
+            <Secao titulo="Prazos e execução">
             <div>
               <Label>Data de abertura do chamado</Label>
               <Input
@@ -939,9 +957,6 @@ export function ConteudoOrdensServico({
                 value={form.prazoLimite}
                 onChange={(e) => setForm({ ...form, prazoLimite: e.target.value })}
               />
-              <p className="text-xs text-slate-500 mt-1">
-                É esta data que coloca o serviço no calendário.
-              </p>
             </div>
 
             {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
@@ -996,6 +1011,54 @@ export function ConteudoOrdensServico({
               </div>
             )}
 
+            {/* Responsáveis */}
+            <div className="border rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">Responsáveis pela O.S.</span>
+                {/* Mesma ideia da equipe: quem falta na lista é cadastrado aqui,
+                    sem abandonar a O.S. começada. */}
+                {ehGestor && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-slate-500"
+                    onClick={() => setModalFuncionarios(true)}
+                    aria-label="Cadastrar funcionários"
+                    title="Cadastrar funcionários"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              {(candidatosNova?.length ?? 0) === 0 ? (
+                <p className="text-xs text-slate-400">Nenhuma pessoa cadastrada nesta unidade.</p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto divide-y border rounded-md">
+                  {candidatosNova!.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={responsaveisNova.includes(c.id)}
+                        onChange={() =>
+                          setResponsaveisNova((atual) =>
+                            atual.includes(c.id)
+                              ? atual.filter((id) => id !== c.id)
+                              : [...atual, c.id],
+                          )
+                        }
+                      />
+                      <span className="flex-1">{c.nome}</span>
+                      <span className="text-[11px] text-slate-400">{c.cargo ?? ""}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            </Secao>
+
+            <Secao titulo="Detalhes">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Categoria</Label>
@@ -1070,10 +1133,6 @@ export function ConteudoOrdensServico({
                 aqui ou dentro da própria ordem. */}
             <div className="border rounded-lg p-3 space-y-2">
               <span className="text-sm font-medium">Fotos de antes e depois</span>
-              <p className="text-xs text-slate-500">
-                A foto do problema é o “antes”. O “depois” pode entrar agora ou quando o serviço
-                for concluído, abrindo a O.S.
-              </p>
               <div className="grid grid-cols-1 gap-3">
                 {(["antes", "depois"] as const).map((fase) => (
                   <LadoDaFoto
@@ -1112,53 +1171,7 @@ export function ConteudoOrdensServico({
               />
             </div>
 
-            {/* Responsáveis */}
-            <div className="border rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium">Responsáveis pela O.S.</span>
-                {/* Mesma ideia da equipe: quem falta na lista é cadastrado aqui,
-                    sem abandonar a O.S. começada. */}
-                {ehGestor && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-slate-500"
-                    onClick={() => setModalFuncionarios(true)}
-                    aria-label="Cadastrar funcionários"
-                    title="Cadastrar funcionários"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-slate-500">
-                Marque uma ou mais pessoas da equipe desta unidade.
-              </p>
-              {(candidatosNova?.length ?? 0) === 0 ? (
-                <p className="text-xs text-slate-400">Nenhuma pessoa cadastrada nesta unidade.</p>
-              ) : (
-                <div className="max-h-40 overflow-y-auto divide-y border rounded-md">
-                  {candidatosNova!.map((c) => (
-                    <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={responsaveisNova.includes(c.id)}
-                        onChange={() =>
-                          setResponsaveisNova((atual) =>
-                            atual.includes(c.id)
-                              ? atual.filter((id) => id !== c.id)
-                              : [...atual, c.id],
-                          )
-                        }
-                      />
-                      <span className="flex-1">{c.nome}</span>
-                      <span className="text-[11px] text-slate-400">{c.cargo ?? ""}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
+            </Secao>
 
             {/* Avisos de abertura: configuração da unidade, só o gestor vê. */}
             {organizacao && (
@@ -1251,6 +1264,9 @@ export function ConteudoOrdensServico({
               </div>
             )}
 
+            {/* Rodapé colado: o botão sumia no fim de doze campos, e quem abre
+                O.S. pelo celular rolava a tela toda para achar. */}
+            <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-1 bg-white border-t">
             <Button
               className="w-full"
               disabled={
@@ -1283,6 +1299,7 @@ export function ConteudoOrdensServico({
               )}
               Criar Ordem de Serviço
             </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
