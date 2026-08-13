@@ -22,6 +22,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
+import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
@@ -376,6 +377,8 @@ export function ConteudoOrdensServico({
   const [modalNova, setModalNova] = useState(false);
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
   const [modalEquipes, setModalEquipes] = useState(false);
+  /** Ficha rápida de funcionário, pela engrenagem dos responsáveis. */
+  const [modalFuncionarios, setModalFuncionarios] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [responsaveisNova, setResponsaveisNova] = useState<number[]>([]);
   /**
@@ -1098,7 +1101,24 @@ export function ConteudoOrdensServico({
 
             {/* Responsáveis */}
             <div className="border rounded-lg p-3 space-y-2">
-              <span className="text-sm font-medium">Responsáveis pela O.S.</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">Responsáveis pela O.S.</span>
+                {/* Mesma ideia da equipe: quem falta na lista é cadastrado aqui,
+                    sem abandonar a O.S. começada. */}
+                {ehGestor && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-slate-500"
+                    onClick={() => setModalFuncionarios(true)}
+                    aria-label="Cadastrar funcionários"
+                    title="Cadastrar funcionários"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 Marque uma ou mais pessoas da equipe desta unidade.
               </p>
@@ -1226,6 +1246,19 @@ export function ConteudoOrdensServico({
           <GerenciarEquipes
             condominioId={unidadeNova}
             onMudou={() => utils.equipes.list.invalidate()}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Ficha rápida de funcionário, por cima da abertura da O.S. */}
+      <Dialog open={modalFuncionarios} onOpenChange={setModalFuncionarios}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Funcionários desta {v.unidade.toLowerCase()}</DialogTitle>
+          </DialogHeader>
+          <CadastroRapidoFuncionario
+            condominioId={unidadeNova}
+            onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
           />
         </DialogContent>
       </Dialog>
