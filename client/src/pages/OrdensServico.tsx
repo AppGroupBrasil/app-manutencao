@@ -1266,7 +1266,7 @@ export function ConteudoOrdensServico({
 
             {/* Rodapé colado: o botão sumia no fim de doze campos, e quem abre
                 O.S. pelo celular rolava a tela toda para achar. */}
-            <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-1 bg-white border-t">
+            <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 pt-3 pb-4 sm:pb-6 bg-white border-t shadow-[0_-10px_16px_-12px_rgba(15,23,42,0.25)]">
             <Button
               className="w-full"
               disabled={
