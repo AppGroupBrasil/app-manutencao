@@ -2,7 +2,7 @@ import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../../db";
-import { condominios, users, usuarioCondominios } from "../../../drizzle/schema";
+import { condominios, users, usuarioAcessos, usuarioCondominios } from "../../../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getSessionCookieOptions } from "../../_core/cookies";
 import { COOKIE_NAME, SENHA_ERR_MSG, SENHA_REGEX } from "@shared/const";
@@ -13,6 +13,22 @@ import { prepararUnidade } from "../../_core/seedUnidade";
 import { fimDoTeste, DIAS_DE_TESTE } from "../../_core/teste";
 import { SEGMENTOS_VALIDOS } from "../../../shared/modules/registry";
 import { labelsDoSegmento } from "../../../shared/vocabulario";
+
+/**
+ * Registra a entrada do gestor.
+ *
+ * Fire-and-forget: falhar aqui não pode impedir ninguém de entrar — é
+ * estatística para a plataforma cobrar, não parte da autenticação.
+ */
+async function registrarAcesso(userId: number, ip: string) {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.insert(usuarioAcessos).values({ userId, ip });
+  } catch (erro) {
+    console.error("[acessos] falha ao registrar entrada:", erro);
+  }
+}
 
 export const authRouter = router({
     me: publicProcedure.query(opts => {
@@ -186,6 +202,7 @@ export const authRouter = router({
               throw new TRPCError({ code: "FORBIDDEN", message: user.motivoBloqueio || "Conta bloqueada." });
             }
             await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, user.id));
+            await registrarAcesso(user.id, ip);
             const { sdk } = await import('../../_core/sdk');
             const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || '' });
             const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -289,6 +306,7 @@ export const authRouter = router({
         
         // Atualizar último login
         await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, user.id));
+        await registrarAcesso(user.id, getClientIp(ctx.req));
         
         // Criar sessão (cookie + token)
         const { sdk } = await import('../../_core/sdk');

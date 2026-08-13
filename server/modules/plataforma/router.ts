@@ -13,13 +13,19 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { router, protectedProcedure } from "../../_core/trpc";
 import { getDb } from "../../db";
-import { condominios, usuarioCondominios, users } from "../../../drizzle/schema";
+import {
+  condominios,
+  usuarioAcessos,
+  usuarioCondominios,
+  users,
+} from "../../../drizzle/schema";
 import { prepararUnidade } from "../../_core/seedUnidade";
 import { SEGMENTOS_VALIDOS } from "../../../shared/modules/registry";
 import { labelsDoSegmento } from "../../../shared/vocabulario";
+import { invalidarCacheTeste } from "../../_core/teste";
 
 /** Só a conta da plataforma abre cliente. */
 const plataformaProcedure = protectedProcedure.use(async ({ ctx, next }) => {
@@ -143,49 +149,216 @@ export const plataformaRouter = router({
       };
     }),
 
-  /** Clientes já abertos: um por gestor-chefe, com as unidades dele. */
-  listarClientes: plataformaProcedure.query(async () => {
-    const db = await getDb();
-    if (!db) return [];
+  /**
+   * Clientes abertos, com o que a plataforma precisa para cobrar.
+   *
+   * Além do cadastro: quando entrou, quanto usou na semana e no mês, e em que
+   * estado está (em teste, vencido, bloqueado). Sem isso a tela dizia apenas
+   * que o cliente existe — e existir não paga conta.
+   */
+  listarClientes: plataformaProcedure
+    .input(z.object({ incluirExcluidos: z.boolean().default(false) }).optional())
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
 
-    const linhas = await db
-      .select({
-        gestorId: users.id,
-        gestorNome: users.name,
-        gestorEmail: users.email,
-        senhaProvisoria: users.senhaProvisoria,
-        unidadeId: condominios.id,
-        unidadeNome: condominios.nome,
-        segmento: condominios.segmento,
-      })
-      .from(condominios)
-      .innerJoin(users, eq(users.id, condominios.sindicoId));
+      const seteDias = new Date(Date.now() - 7 * 86_400_000);
+      const trintaDias = new Date(Date.now() - 30 * 86_400_000);
 
-    const porGestor = new Map<
-      number,
-      {
-        gestorId: number;
-        gestorNome: string | null;
-        gestorEmail: string | null;
-        senhaProvisoria: boolean | null;
-        segmento: string | null;
-        unidades: { id: number; nome: string | null }[];
+      const linhas = await db
+        .select({
+          gestorId: users.id,
+          gestorNome: users.name,
+          gestorEmail: users.email,
+          gestorTelefone: users.phone,
+          senhaProvisoria: users.senhaProvisoria,
+          criadoEm: users.createdAt,
+          ultimoAcesso: users.lastSignedIn,
+          bloqueado: users.bloqueado,
+          motivoBloqueio: users.motivoBloqueio,
+          trialAte: users.trialAte,
+          excluidoEm: users.excluidoEm,
+          unidadeId: condominios.id,
+          unidadeNome: condominios.nome,
+          segmento: condominios.segmento,
+          acessos7: sql<number>`(
+            SELECT COUNT(*) FROM "usuario_acessos" a
+            WHERE a."userId" = ${users.id} AND a."em" >= ${seteDias}
+          )`,
+          acessos30: sql<number>`(
+            SELECT COUNT(*) FROM "usuario_acessos" a
+            WHERE a."userId" = ${users.id} AND a."em" >= ${trintaDias}
+          )`,
+        })
+        .from(condominios)
+        .innerJoin(users, eq(users.id, condominios.sindicoId))
+        .where(input?.incluirExcluidos ? undefined : isNull(users.excluidoEm));
+
+      const porGestor = new Map<
+        number,
+        {
+          gestorId: number;
+          gestorNome: string | null;
+          gestorEmail: string | null;
+          gestorTelefone: string | null;
+          senhaProvisoria: boolean | null;
+          criadoEm: Date;
+          ultimoAcesso: Date | null;
+          bloqueado: boolean | null;
+          motivoBloqueio: string | null;
+          trialAte: Date | null;
+          excluidoEm: Date | null;
+          acessos7: number;
+          acessos30: number;
+          segmento: string | null;
+          unidades: { id: number; nome: string | null }[];
+        }
+      >();
+
+      for (const l of linhas) {
+        const atual = porGestor.get(l.gestorId) ?? {
+          gestorId: l.gestorId,
+          gestorNome: l.gestorNome,
+          gestorEmail: l.gestorEmail,
+          gestorTelefone: l.gestorTelefone,
+          senhaProvisoria: l.senhaProvisoria,
+          criadoEm: l.criadoEm,
+          ultimoAcesso: l.ultimoAcesso,
+          bloqueado: l.bloqueado,
+          motivoBloqueio: l.motivoBloqueio,
+          trialAte: l.trialAte,
+          excluidoEm: l.excluidoEm,
+          acessos7: Number(l.acessos7),
+          acessos30: Number(l.acessos30),
+          segmento: l.segmento,
+          unidades: [],
+        };
+        atual.unidades.push({ id: l.unidadeId, nome: l.unidadeNome });
+        porGestor.set(l.gestorId, atual);
       }
-    >();
 
-    for (const l of linhas) {
-      const atual = porGestor.get(l.gestorId) ?? {
-        gestorId: l.gestorId,
-        gestorNome: l.gestorNome,
-        gestorEmail: l.gestorEmail,
-        senhaProvisoria: l.senhaProvisoria,
-        segmento: l.segmento,
-        unidades: [],
-      };
-      atual.unidades.push({ id: l.unidadeId, nome: l.unidadeNome });
-      porGestor.set(l.gestorId, atual);
-    }
+      return [...porGestor.values()];
+    }),
 
-    return [...porGestor.values()];
-  }),
+  /** Corrige nome, e-mail ou telefone do gestor-chefe. */
+  editarCliente: plataformaProcedure
+    .input(
+      z.object({
+        gestorId: z.number(),
+        nome: z.string().min(2).max(255).optional(),
+        email: z.string().email().optional(),
+        telefone: z.string().max(30).nullable().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      if (input.email) {
+        const email = input.email.trim().toLowerCase();
+        const [ocupado] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.email, email))
+          .limit(1);
+        if (ocupado && ocupado.id !== input.gestorId) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Já existe outra conta com este e-mail.",
+          });
+        }
+      }
+
+      await db
+        .update(users)
+        .set({
+          ...(input.nome ? { name: input.nome.trim() } : {}),
+          ...(input.email ? { email: input.email.trim().toLowerCase() } : {}),
+          ...(input.telefone !== undefined ? { phone: input.telefone } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, input.gestorId));
+
+      return { success: true };
+    }),
+
+  /**
+   * Bloqueia ou libera o acesso do cliente.
+   *
+   * O bloqueio já é respeitado no login, então vale para o gestor na hora. A
+   * equipe dele entra por outra porta e continua entrando: quem paga é o
+   * cliente, e derrubar a operação inteira por causa de fatura é decisão que
+   * ninguém quer tomar sem avisar.
+   */
+  bloquearCliente: plataformaProcedure
+    .input(
+      z.object({
+        gestorId: z.number(),
+        bloqueado: z.boolean(),
+        motivo: z.string().max(255).optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      await db
+        .update(users)
+        .set({
+          bloqueado: input.bloqueado,
+          motivoBloqueio: input.bloqueado
+            ? input.motivo?.trim() || "Acesso suspenso. Fale com o suporte."
+            : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, input.gestorId));
+
+      return { success: true, bloqueado: input.bloqueado };
+    }),
+
+  /** Encerra o teste ou devolve o prazo: `null` deixa a conta sem prazo. */
+  definirTeste: plataformaProcedure
+    .input(z.object({ gestorId: z.number(), dias: z.number().int().min(0).max(365).nullable() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const trialAte =
+        input.dias === null ? null : new Date(Date.now() + input.dias * 86_400_000);
+
+      await db
+        .update(users)
+        .set({ trialAte, updatedAt: new Date() })
+        .where(eq(users.id, input.gestorId));
+
+      invalidarCacheTeste();
+      return { success: true, trialAte };
+    }),
+
+  /**
+   * Exclusão em duas etapas.
+   *
+   * Marca a data e bloqueia: o cliente some da lista e não entra mais, e o
+   * dado continua no banco. Apagar de verdade significa varrer as tabelas de
+   * cinquenta funções, sem volta — com um toque na tela, cedo ou tarde o
+   * cliente errado seria apagado. Restaurar desfaz.
+   */
+  excluirCliente: plataformaProcedure
+    .input(z.object({ gestorId: z.number(), restaurar: z.boolean().default(false) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      await db
+        .update(users)
+        .set({
+          excluidoEm: input.restaurar ? null : new Date(),
+          bloqueado: !input.restaurar,
+          motivoBloqueio: input.restaurar ? null : "Conta encerrada.",
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, input.gestorId));
+
+      return { success: true, excluido: !input.restaurar };
+    }),
 });

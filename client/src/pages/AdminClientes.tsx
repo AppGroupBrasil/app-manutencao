@@ -28,7 +28,34 @@ import {
   PREFIXO_VOCABULARIO,
   type TermoVocabulario,
 } from "@shared/vocabulario";
-import { ArrowLeft, Building2, KeyRound, Loader2, Plus, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Ban,
+  Building2,
+  CalendarClock,
+  KeyRound,
+  Loader2,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+  Users,
+} from "lucide-react";
+
+/** Data curta, do jeito que se lê no Brasil. */
+function dia(valor?: Date | string | null): string {
+  if (!valor) return "—";
+  const d = new Date(valor);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
+}
+
+/** Dias inteiros que faltam para o fim do teste; zero quando venceu. */
+function diasDeTeste(trialAte?: Date | string | null): number | null {
+  if (!trialAte) return null;
+  const fim = new Date(trialAte);
+  if (Number.isNaN(fim.getTime())) return null;
+  return Math.max(0, Math.ceil((fim.getTime() - Date.now()) / 86_400_000));
+}
 
 const ROTULO_SEGMENTO: Record<string, string> = {
   generico: "Genérico",
@@ -60,10 +87,53 @@ export default function AdminClientes() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
 
+  const [verExcluidos, setVerExcluidos] = useState(false);
+  const [editando, setEditando] = useState<{
+    gestorId: number;
+    nome: string;
+    email: string;
+    telefone: string;
+  } | null>(null);
+
   const { data: user, isLoading: carregandoUser } = trpc.auth.me.useQuery();
-  const { data: clientes, isLoading } = trpc.plataforma.listarClientes.useQuery(undefined, {
-    enabled: !!user,
-    retry: false,
+  const { data: clientes, isLoading } = trpc.plataforma.listarClientes.useQuery(
+    { incluirExcluidos: verExcluidos },
+    { enabled: !!user, retry: false },
+  );
+
+  const recarregar = () => utils.plataforma.listarClientes.invalidate();
+
+  const editar = trpc.plataforma.editarCliente.useMutation({
+    onSuccess: async () => {
+      setEditando(null);
+      await recarregar();
+      toast.success("Cadastro atualizado");
+    },
+    onError: (e) => toast.error(e.message || "Não foi possível salvar"),
+  });
+
+  const bloquear = trpc.plataforma.bloquearCliente.useMutation({
+    onSuccess: async (res) => {
+      await recarregar();
+      toast.success(res.bloqueado ? "Cliente bloqueado" : "Cliente liberado");
+    },
+    onError: (e) => toast.error(e.message || "Não foi possível alterar"),
+  });
+
+  const definirTeste = trpc.plataforma.definirTeste.useMutation({
+    onSuccess: async () => {
+      await recarregar();
+      toast.success("Prazo atualizado");
+    },
+    onError: (e) => toast.error(e.message || "Não foi possível alterar o prazo"),
+  });
+
+  const excluir = trpc.plataforma.excluirCliente.useMutation({
+    onSuccess: async (res) => {
+      await recarregar();
+      toast.success(res.excluido ? "Cliente excluído" : "Cliente restaurado");
+    },
+    onError: (e) => toast.error(e.message || "Não foi possível excluir"),
   });
 
   const [aberto, setAberto] = useState(false);
@@ -119,9 +189,19 @@ export default function AdminClientes() {
               {clientes?.length ?? 0} cliente(s) na plataforma
             </p>
           </div>
-          <Button size="sm" onClick={() => setAberto(true)}>
-            <Plus className="w-4 h-4 mr-2" /> Novo cliente
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-500"
+              onClick={() => setVerExcluidos((v) => !v)}
+            >
+              {verExcluidos ? "Esconder excluídos" : "Ver excluídos"}
+            </Button>
+            <Button size="sm" onClick={() => setAberto(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Novo cliente
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -169,11 +249,192 @@ export default function AdminClientes() {
                     </span>
                   ))}
                 </div>
+
+                {/* O que a plataforma olha para decidir cobrar ou ligar. */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-xs">
+                  <div>
+                    <p className="text-slate-400">Cadastro</p>
+                    <p className="text-slate-700">{dia(c.criadoEm)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Último acesso</p>
+                    <p className="text-slate-700">{dia(c.ultimoAcesso)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Acessos (7 dias)</p>
+                    <p className="text-slate-700">{c.acessos7}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Acessos (30 dias)</p>
+                    <p className="text-slate-700">{c.acessos30}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
+                  {(() => {
+                    const dias = diasDeTeste(c.trialAte);
+                    if (c.excluidoEm) {
+                      return (
+                        <span className="text-[11px] bg-slate-200 text-slate-700 rounded-full px-2 py-0.5">
+                          excluído em {dia(c.excluidoEm)}
+                        </span>
+                      );
+                    }
+                    if (c.bloqueado) {
+                      return (
+                        <span className="text-[11px] bg-red-100 text-red-700 rounded-full px-2 py-0.5">
+                          bloqueado
+                        </span>
+                      );
+                    }
+                    if (dias === null) {
+                      return (
+                        <span className="text-[11px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">
+                          sem prazo
+                        </span>
+                      );
+                    }
+                    return (
+                      <span
+                        className={`text-[11px] rounded-full px-2 py-0.5 ${
+                          dias === 0
+                            ? "bg-red-100 text-red-700"
+                            : dias <= 2
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {dias === 0 ? "teste vencido" : `teste: ${dias} dia(s)`}
+                      </span>
+                    );
+                  })()}
+
+                  <div className="ml-auto flex flex-wrap gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Editar cadastro"
+                      onClick={() =>
+                        setEditando({
+                          gestorId: c.gestorId,
+                          nome: c.gestorNome ?? "",
+                          email: c.gestorEmail ?? "",
+                          telefone: c.gestorTelefone ?? "",
+                        })
+                      }
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+
+                    {/* Libera de vez: tira o prazo e o cliente vira pagante. */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Liberar sem prazo (cliente pagante)"
+                      disabled={definirTeste.isPending || !c.trialAte}
+                      onClick={() => definirTeste.mutate({ gestorId: c.gestorId, dias: null })}
+                    >
+                      <CalendarClock className="w-4 h-4" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={c.bloqueado ? "text-emerald-700" : "text-amber-700"}
+                      title={c.bloqueado ? "Liberar acesso" : "Bloquear acesso"}
+                      disabled={bloquear.isPending}
+                      onClick={() =>
+                        bloquear.mutate({ gestorId: c.gestorId, bloqueado: !c.bloqueado })
+                      }
+                    >
+                      <Ban className="w-4 h-4" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      title={c.excluidoEm ? "Restaurar cliente" : "Excluir cliente"}
+                      disabled={excluir.isPending}
+                      onClick={() => {
+                        if (c.excluidoEm) {
+                          excluir.mutate({ gestorId: c.gestorId, restaurar: true });
+                          return;
+                        }
+                        if (
+                          confirm(
+                            `Excluir ${c.gestorNome}?\n\nEle perde o acesso e some desta lista. Os dados ficam guardados e dá para restaurar.`,
+                          )
+                        ) {
+                          excluir.mutate({ gestorId: c.gestorId });
+                        }
+                      }}
+                    >
+                      {c.excluidoEm ? (
+                        <RotateCcw className="w-4 h-4" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           ))
         )}
       </main>
+
+      <Dialog open={!!editando} onOpenChange={(a) => !a && setEditando(null)}>
+        <DialogContent className="max-w-md p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Editar cliente</DialogTitle>
+            <DialogDescription>
+              Nome, e-mail e telefone do gestor. O e-mail é o login dele.
+            </DialogDescription>
+          </DialogHeader>
+          {editando && (
+            <div className="space-y-3">
+              <div>
+                <Label>Nome</Label>
+                <Input
+                  value={editando.nome}
+                  onChange={(e) => setEditando({ ...editando, nome: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>E-mail</Label>
+                <Input
+                  type="email"
+                  value={editando.email}
+                  onChange={(e) => setEditando({ ...editando, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Telefone</Label>
+                <Input
+                  value={editando.telefone}
+                  onChange={(e) => setEditando({ ...editando, telefone: e.target.value })}
+                />
+              </div>
+              <Button
+                className="w-full"
+                disabled={editar.isPending || editando.nome.trim().length < 2}
+                onClick={() =>
+                  editar.mutate({
+                    gestorId: editando.gestorId,
+                    nome: editando.nome.trim(),
+                    email: editando.email.trim() || undefined,
+                    telefone: editando.telefone.trim() || null,
+                  })
+                }
+              >
+                {editar.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Salvar
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={aberto} onOpenChange={setAberto}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

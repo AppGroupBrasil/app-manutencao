@@ -134,10 +134,30 @@ export const users = pgTable("users", {
    * recusa gravação — ninguém perde dado por causa de prazo vencido.
    */
   trialAte: timestamp("trialAte"),
+  /**
+   * Exclusão em duas etapas: a conta some da lista e não entra mais, o dado
+   * fica. Apagar de verdade varre cinquenta tabelas e não tem volta.
+   */
+  excluidoEm: timestamp("excluidoEm"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
+
+/**
+ * Uma linha por entrada do gestor no sistema.
+ *
+ * `lastSignedIn` responde "quando foi a última vez"; a plataforma precisa de
+ * "quanto ele usou na semana", que é a pergunta de quem vai cobrar.
+ */
+export const usuarioAcessos = pgTable("usuario_acessos", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  em: timestamp("em").defaultNow().notNull(),
+  ip: varchar("ip", { length: 45 }),
+});
+
+export type UsuarioAcesso = typeof usuarioAcessos.$inferSelect;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
