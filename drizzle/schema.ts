@@ -2267,6 +2267,13 @@ export const ordensServico = pgTable("ordens_servico", {
    * segundo, com etapas de baixa e confirmação; foi removido antes de entrar em
    * uso porque duas noções de andamento na mesma tela não se explicam.
    */
+  /**
+   * Dia em que o pedido chegou, informado por quem registra.
+   *
+   * Diferente de `createdAt`, que é quando a linha entrou no banco: o chamado
+   * de sexta cadastrado na segunda tem de continuar sendo de sexta.
+   */
+  dataAbertura: date("dataAbertura"),
   /** Data máxima de finalização, pedida por quem abre a O.S. */
   prazoLimite: date("prazoLimite"),
   /** Dia marcado para o serviço acontecer. */

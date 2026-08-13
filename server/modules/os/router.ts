@@ -880,6 +880,8 @@ export const osRouter = router({
         manutencaoId: z.number().optional(),
         solicitanteNome: z.string().optional(),
         solicitanteTipo: z.enum(["sindico", "morador", "funcionario", "administradora"]).optional(),
+        /** Dia em que o pedido chegou (`AAAA-MM-DD`); em branco, é hoje. */
+        dataAbertura: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         /** Data máxima de finalização (`AAAA-MM-DD`). Toda O.S. nasce com uma. */
         prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         /** Equipe que fica com o serviço; o supervisor dela recebe o aviso. */
@@ -948,6 +950,7 @@ export const osRouter = router({
           solicitanteId: autor.userId,
           solicitanteNome: input.solicitanteNome || autor.nome,
           solicitanteTipo: input.solicitanteTipo || (ctx.user ? "sindico" : "funcionario"),
+          dataAbertura: input.dataAbertura,
           prazoLimite: input.prazoLimite,
           equipeId: input.equipeId,
           observacoes: input.observacoes,
@@ -1025,6 +1028,7 @@ export const osRouter = router({
         valorEstimado: z.string().optional(),
         valorReal: z.string().optional(),
         manutencaoId: z.number().nullable().optional(),
+        dataAbertura: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         /** `null` desfaz a designação sem apagar o histórico do aviso. */
         equipeId: z.number().nullable().optional(),

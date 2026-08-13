@@ -190,6 +190,14 @@ function LadoDaFoto({
   );
 }
 
+/** Hoje em `AAAA-MM-DD`, no fuso de quem está usando. */
+function hojeISO(): string {
+  const agora = new Date();
+  const mes = String(agora.getMonth() + 1).padStart(2, "0");
+  const dia = String(agora.getDate()).padStart(2, "0");
+  return `${agora.getFullYear()}-${mes}-${dia}`;
+}
+
 /** Dia em `AAAA-MM-DD` como o brasileiro lê. */
 function formatarDia(dia?: string | null): string {
   if (!dia) return "—";
@@ -220,6 +228,8 @@ const FORM_VAZIO = {
   endereco: "",
   /** Quem pediu o serviço. Em branco, fica quem está com a conta aberta. */
   solicitanteNome: "",
+  /** Dia em que o chamado chegou; a tela abre com hoje. */
+  dataAbertura: "",
   /** Data máxima de finalização; obrigatória nas unidades com o fluxo. */
   prazoLimite: "",
   /** Equipe que fica com o serviço; o supervisor dela recebe o aviso. */
@@ -554,7 +564,16 @@ export function ConteudoOrdensServico({
             </p>
           </div>
           {podeCriar && (
-            <Button size="sm" onClick={() => setModalNova(true)} disabled={!habilitado}>
+            <Button
+              size="sm"
+              disabled={!habilitado}
+              onClick={() => {
+                // Abre com hoje preenchido: é o caso comum, e quem registra um
+                // chamado antigo só troca a data.
+                setForm((atual) => ({ ...atual, dataAbertura: atual.dataAbertura || hojeISO() }));
+                setModalNova(true);
+              }}
+            >
               <Plus className="w-4 h-4 mr-2" /> Nova O.S.
             </Button>
           )}
@@ -660,8 +679,11 @@ export function ConteudoOrdensServico({
                     </span>
                     {/* Abertura: quando e por quem. É o que o cliente cobra
                         primeiro quando pergunta "de quando é esse chamado?". */}
+                    {/* A data que vale é a que a pessoa informou; sem ela, a
+                        do registro. */}
                     <span className="inline-flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" /> {formatarDataHora(os.createdAt)}
+                      <Calendar className="w-3.5 h-3.5" />{" "}
+                      {os.dataAbertura ? formatarDia(os.dataAbertura) : formatarDataHora(os.createdAt)}
                     </span>
                     {os.solicitanteNome && (
                       <span className="inline-flex items-center gap-1">
@@ -877,6 +899,18 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               />
             </div>
+            <div>
+              <Label>Data de abertura do chamado</Label>
+              <Input
+                type="date"
+                value={form.dataAbertura}
+                onChange={(e) => setForm({ ...form, dataAbertura: e.target.value })}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                O dia em que o pedido chegou — pode ser anterior ao de hoje.
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Categoria</Label>
@@ -1140,6 +1174,7 @@ export function ConteudoOrdensServico({
                   statusId: form.statusId ? Number(form.statusId) : undefined,
                   endereco: form.endereco.trim() || undefined,
                   solicitanteNome: form.solicitanteNome.trim() || undefined,
+                  dataAbertura: form.dataAbertura || undefined,
                   prazoLimite: form.prazoLimite,
                   equipeId: form.equipeId ? Number(form.equipeId) : undefined,
                   observacoes: form.observacoes.trim() || undefined,
