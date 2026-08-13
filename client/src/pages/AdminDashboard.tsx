@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
 import { PainelPendencias } from "@/components/PainelPendencias";
 import { CalendarioGeral } from "@/components/CalendarioGeral";
-import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, AlertTriangle, Briefcase } from "lucide-react";
+import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, AlertTriangle, Briefcase, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 /**
@@ -63,6 +63,13 @@ export default function AdminDashboard() {
     { enabled: !!organizacaoAtiva && !modulosIndefinidos && temModulo("funcionarios") },
   );
   const { data: gestores } = trpc.gestores.listar.useQuery(undefined, { enabled: !!user });
+  // Ligar e desligar função é do dono da organização ou do gestor-chefe. Sem
+  // este cartão a tela só era alcançável digitando o endereço — o que no
+  // aplicativo, sem barra de endereço, significava não existir.
+  const { data: podeConfigurarModulos } = trpc.funcoesCondominio.podeConfigurar.useQuery(
+    undefined,
+    { enabled: !!user },
+  );
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: async () => {
@@ -151,6 +158,14 @@ export default function AdminDashboard() {
             descricao="responsáveis pelas unidades"
             onClick={() => setLocation("/admin/gestores")}
           />
+          {podeConfigurarModulos && (
+            <CardQuadrado
+              icone={<SlidersHorizontal className="w-6 h-6 text-slate-600" />}
+              titulo="Funções"
+              descricao="escolher o que cada organização usa"
+              onClick={() => setLocation("/admin/modulos")}
+            />
+          )}
           {temModulo("funcionarios") && (
             <CardQuadrado
               icone={<Users className="w-6 h-6 text-emerald-500" />}
