@@ -148,7 +148,7 @@ export function ModulosConfig() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Módulos da organização</CardTitle>
+          <CardTitle>Funções da organização</CardTitle>
           <CardDescription>
             Escolha o que esta organização enxerga. O que estiver desligado fica
             indisponível também na API, não só no menu.

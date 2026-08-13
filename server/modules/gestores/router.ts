@@ -47,8 +47,17 @@ async function assertPodeGerenciar(ctx: { user: { id: number } }) {
 const podeGerenciarGestores = ehGestorMaster;
 
 export const gestoresRouter = router({
-  /** A tela usa isto para esconder o que o gestor de unidade não pode fazer. */
-  podeGerenciar: protectedProcedure.query(({ ctx }) => podeGerenciarGestores(ctx.user.id)),
+  /**
+   * A tela usa isto para esconder o que o gestor de unidade não pode fazer.
+   *
+   * A conta da plataforma entra aqui mesmo sem ser dona de organização
+   * nenhuma: sem isso, ela abria Organizações e Gestores sem os botões de
+   * criar e excluir — as ações existiam e ficavam invisíveis justamente para
+   * quem administra o sistema.
+   */
+  podeGerenciar: protectedProcedure.query(({ ctx }) =>
+    ctx.tenant.isMaster() ? true : podeGerenciarGestores(ctx.user.id),
+  ),
 
   /** Gestores das organizações que o solicitante alcança, com seus vínculos. */
   /**

@@ -196,7 +196,7 @@ export default function AdminDashboard() {
           {podeConfigurarModulos && (
             <CardQuadrado
               icone={<SlidersHorizontal className="w-6 h-6 text-slate-600" />}
-              titulo="Funções"
+              titulo="Configurações"
               descricao="escolher o que cada organização usa"
               onClick={() => setLocation("/admin/modulos")}
             />

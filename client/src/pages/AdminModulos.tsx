@@ -43,7 +43,7 @@ export default function AdminModulos() {
           <Button variant="ghost" size="sm" onClick={() => setLocation("/admin")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <h1 className="text-lg font-bold">Módulos</h1>
+          <h1 className="text-lg font-bold">Configurações</h1>
         </div>
       </header>
 
