@@ -911,6 +911,19 @@ export function ConteudoOrdensServico({
               </p>
             </div>
 
+            {/* Prazo: é ele que coloca a O.S. no calendário e cobra alguém. */}
+            <div>
+              <Label>Data máxima de finalização</Label>
+              <Input
+                type="date"
+                value={form.prazoLimite}
+                onChange={(e) => setForm({ ...form, prazoLimite: e.target.value })}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                É esta data que coloca o serviço no calendário.
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Categoria</Label>
@@ -1013,19 +1026,6 @@ export function ConteudoOrdensServico({
                   />
                 ))}
               </div>
-            </div>
-
-            {/* Prazo: é ele que coloca a O.S. no calendário e cobra alguém. */}
-            <div>
-              <Label>Data máxima de finalização</Label>
-              <Input
-                type="date"
-                value={form.prazoLimite}
-                onChange={(e) => setForm({ ...form, prazoLimite: e.target.value })}
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                É esta data que coloca o serviço no calendário.
-              </p>
             </div>
 
             {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
