@@ -169,6 +169,8 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Antes e Depois',
     categoria: 'operacional',
     descricao: 'Registro de melhorias',
+    // não é função própria: é fase de foto na O.S. e tipo de registro rápido.
+    legado: true,
   },
   {
     id: 'ordens-servico',
@@ -181,6 +183,9 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Timeline',
     categoria: 'operacional',
     descricao: 'Registro de eventos e atualizações',
+    // Só a leitura pública por link está pronta; falta a tela de
+    // gestão no painel. Fica no catálogo, desligado.
+    padrao: false,
   },
   {
     id: 'tarefas-agendadas',
@@ -205,6 +210,8 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Leitura de Medidores',
     categoria: 'operacional',
     descricao: 'Registro de leituras de água, gás e energia',
+    // router existe, mas nem registrado no appRouter; nenhuma tela.
+    legado: true,
     padrao: false,
   },
   {
@@ -212,6 +219,8 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Controle de Pragas',
     categoria: 'operacional',
     descricao: 'Registros de dedetização e controle de pragas',
+    // router existe, mas nem registrado no appRouter; nenhuma tela.
+    legado: true,
     padrao: false,
   },
   {
@@ -219,6 +228,8 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Jardinagem',
     categoria: 'operacional',
     descricao: 'Serviços de jardinagem e áreas verdes',
+    // router existe, mas nem registrado no appRouter; nenhuma tela.
+    legado: true,
     padrao: false,
   },
 
@@ -371,6 +382,8 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Painel de Controlo',
     categoria: 'relatorios',
     descricao: 'Estatísticas e gráficos',
+    // o componente de gráficos existe e não é usado em tela nenhuma.
+    legado: true,
   },
   {
     id: 'painel-pendencias',
@@ -383,6 +396,8 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Relatórios',
     categoria: 'relatorios',
     descricao: 'Relatórios detalhados',
+    // não há tela de relatório no painel; /relatorio é página de venda.
+    legado: true,
   },
 
   // ==================== MÓDULOS EXCLUSIVOS DE CLIENTE ====================

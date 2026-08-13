@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
 import { PainelPendencias } from "@/components/PainelPendencias";
 import { CalendarioGeral } from "@/components/CalendarioGeral";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, AlertTriangle, Briefcase, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
@@ -102,9 +103,14 @@ export default function AdminDashboard() {
             <h1 className="text-lg font-bold">Painel Administrativo</h1>
             <p className="text-xs text-slate-500">{user.name} · {CARGO[user.role] ?? user.role}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()}>
-            <LogOut className="w-4 h-4 mr-2" /> Sair
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* Os avisos que o sistema grava — O.S. aberta, equipe designada —
+                caíam numa caixa que nenhuma tela mostrava. Só saía e-mail. */}
+            {temModulo("notificacoes") && <NotificationBell />}
+            <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()}>
+              <LogOut className="w-4 h-4 mr-2" /> Sair
+            </Button>
+          </div>
         </div>
       </header>
 
