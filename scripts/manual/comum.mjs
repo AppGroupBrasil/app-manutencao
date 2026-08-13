@@ -236,12 +236,15 @@ ${corpo}
  * iguais. Os dois arquivos são estáticos e entram no build junto com o resto de
  * `client/public` — produção não precisa de Chrome, só quem gera aqui.
  */
-export async function publicar({ base, html, rodapePdf }) {
-  const destinoHtml = path.join(PUBLICO, `${base}.html`);
+export async function publicar({ base, html, rodapePdf, pasta = PUBLICO }) {
+  // `pasta` existe para o documento que não é para o público: folha de teste,
+  // instrução de uma pessoa. Ela sai só no lugar pedido, sem ir para o site.
+  fs.mkdirSync(pasta, { recursive: true });
+  const destinoHtml = path.join(pasta, `${base}.html`);
   fs.writeFileSync(destinoHtml, html, "utf8");
   console.log("HTML:", destinoHtml, (html.length / 1024).toFixed(1) + " kB");
 
-  const destinoPdf = path.join(PUBLICO, `${base}.pdf`);
+  const destinoPdf = path.join(pasta, `${base}.pdf`);
   const puppeteer = await import("puppeteer");
   const navegador = await puppeteer.default.launch();
 

@@ -201,6 +201,19 @@ export default function Manutencoes() {
     onError: (e) => toast.error(e.message || "Erro ao gerar o PDF"),
   });
 
+  // Excluir pelo cartão, como nas outras funções. Antes só existia dentro do
+  // registro: para apagar, era preciso abrir a manutenção e descer até o rodapé.
+  const excluirDaLista = trpc.manutencao.delete.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.manutencao.list.invalidate(),
+        utils.manutencao.getStats.invalidate(),
+      ]);
+      toast.success("Manutenção excluída");
+    },
+    onError: (e) => toast.error(e.message || "Erro ao excluir"),
+  });
+
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return (lista ?? []).filter((m) => {
@@ -386,6 +399,24 @@ export default function Manutencoes() {
                       mensagem={mensagemDaManutencao(m)}
                       rotulo="Compartilhar"
                     />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      disabled={excluirDaLista.isPending}
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `Excluir "${m.titulo}" (protocolo #${m.protocolo})? Fotos e histórico vão junto.`,
+                          )
+                        ) {
+                          excluirDaLista.mutate({ id: m.id });
+                        }
+                      }}
+                      aria-label={`Excluir ${m.titulo}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
