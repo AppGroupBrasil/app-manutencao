@@ -220,8 +220,16 @@ async function resolverTenant(
  * enxergar o que cadastrou para decidir se contrata — e porque tirar a tela do
  * ar transformaria fim de teste em perda de dado aos olhos dela.
  */
-async function assegurarTesteVigente(condominioId: number, tipo: string) {
+async function assegurarTesteVigente(
+  ctx: TrpcContext,
+  condominioId: number,
+  tipo: string,
+) {
   if (tipo !== "mutation") return;
+  // A conta da plataforma nunca é barrada: é ela que abre, conserta e libera
+  // cliente. Bloquear o suporte junto com o cliente vencido deixaria o único
+  // caminho de solução fechado.
+  if (ctx.tenant.isMaster()) return;
   if (!(await testeVencido(condominioId))) return;
 
   throw new TRPCError({
@@ -235,7 +243,7 @@ async function assegurarTesteVigente(condominioId: number, tipo: string) {
 export const tenantProcedure = protectedOrFuncionarioProcedure.use(
   async ({ ctx, next, getRawInput, type }) => {
     const condominioId = await resolverTenant(ctx, getRawInput);
-    await assegurarTesteVigente(condominioId, type);
+    await assegurarTesteVigente(ctx, condominioId, type);
     return next({ ctx: { ...ctx, condominioId } });
   },
 );
@@ -248,7 +256,7 @@ export const tenantProcedure = protectedOrFuncionarioProcedure.use(
 export const tenantUserProcedure = protectedProcedure.use(
   async ({ ctx, next, getRawInput, type }) => {
     const condominioId = await resolverTenant(ctx, getRawInput);
-    await assegurarTesteVigente(condominioId, type);
+    await assegurarTesteVigente(ctx, condominioId, type);
     return next({ ctx: { ...ctx, condominioId } });
   },
 );
