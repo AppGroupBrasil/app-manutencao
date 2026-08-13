@@ -215,6 +215,8 @@ const FORM_VAZIO = {
   statusId: "",
   setorId: "",
   endereco: "",
+  /** Quem pediu o serviço. Em branco, fica quem está com a conta aberta. */
+  solicitanteNome: "",
   /** Data máxima de finalização; obrigatória nas unidades com o fluxo. */
   prazoLimite: "",
   /** Equipe que fica com o serviço; o supervisor dela recebe o aviso. */
@@ -840,6 +842,21 @@ export function ConteudoOrdensServico({
                 </div>
               )
             )}
+            {/* Quem pediu o serviço nem sempre é quem digita: o gerente abre
+                pelo coordenador da unidade, o gestor abre pela cozinheira que
+                avisou. Campo livre, porque não há cadastro para isso. */}
+            <div>
+              <Label>Responsável pela abertura</Label>
+              <Input
+                placeholder="Quem pediu o serviço"
+                value={form.solicitanteNome}
+                onChange={(e) => setForm({ ...form, solicitanteNome: e.target.value })}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Em branco, fica registrado quem está com a conta aberta.
+              </p>
+            </div>
+
             <div>
               <Label>Título</Label>
               <Input
@@ -1119,6 +1136,7 @@ export function ConteudoOrdensServico({
                   prioridadeId: form.prioridadeId ? Number(form.prioridadeId) : undefined,
                   statusId: form.statusId ? Number(form.statusId) : undefined,
                   endereco: form.endereco.trim() || undefined,
+                  solicitanteNome: form.solicitanteNome.trim() || undefined,
                   prazoLimite: form.prazoLimite,
                   equipeId: form.equipeId ? Number(form.equipeId) : undefined,
                   observacoes: form.observacoes.trim() || undefined,
