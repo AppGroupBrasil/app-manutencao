@@ -150,13 +150,19 @@ export default function FuncionarioLogin() {
               </a>
             </div>
 
-            {/* Porta de entrada de quem chega sozinho: sete dias de teste. */}
-            <div className="mt-4 text-center text-sm text-slate-600">
-              Ainda não tem conta?{" "}
-              <a href="/cadastrar" className="text-blue-600 hover:text-blue-700 font-medium">
-                Cadastre-se
-              </a>{" "}
-              — 7 dias grátis.
+            {/* Porta de entrada de quem chega sozinho. Botão, e não link no
+                meio do texto: é a segunda ação da tela, não uma nota de rodapé
+                — quem nunca usou o sistema precisa achar isto de primeira. */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <p className="text-center text-sm text-slate-600 mb-2">Ainda não tem conta?</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+                onClick={() => setLocation("/cadastrar")}
+              >
+                Cadastre-se — 7 dias grátis
+              </Button>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">
