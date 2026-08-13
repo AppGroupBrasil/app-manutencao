@@ -183,9 +183,10 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'Timeline',
     categoria: 'operacional',
     descricao: 'Registro de eventos e atualizações',
-    // Só a leitura pública por link está pronta; falta a tela de
-    // gestão no painel. Fica no catálogo, desligado.
-    padrao: false,
+    // A parte que serve — a linha do tempo pública de um item compartilhado —
+    // é rota pública e não passa por este portão. O que ele protege são
+    // cadastros auxiliares que nenhuma tela chama. Fora do catálogo.
+    legado: true,
   },
   {
     id: 'tarefas-agendadas',
@@ -204,33 +205,6 @@ export const MODULOS: readonly ModuloManifest[] = [
     nome: 'QR Code',
     categoria: 'operacional',
     descricao: 'Pontos com QR Code e registros enviados por quem escaneia',
-  },
-  {
-    id: 'leitura-medidores',
-    nome: 'Leitura de Medidores',
-    categoria: 'operacional',
-    descricao: 'Registro de leituras de água, gás e energia',
-    // router existe, mas nem registrado no appRouter; nenhuma tela.
-    legado: true,
-    padrao: false,
-  },
-  {
-    id: 'controle-pragas',
-    nome: 'Controle de Pragas',
-    categoria: 'operacional',
-    descricao: 'Registros de dedetização e controle de pragas',
-    // router existe, mas nem registrado no appRouter; nenhuma tela.
-    legado: true,
-    padrao: false,
-  },
-  {
-    id: 'jardinagem',
-    nome: 'Jardinagem',
-    categoria: 'operacional',
-    descricao: 'Serviços de jardinagem e áreas verdes',
-    // router existe, mas nem registrado no appRouter; nenhuma tela.
-    legado: true,
-    padrao: false,
   },
 
   // ==================== INTERATIVO ====================

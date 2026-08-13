@@ -16,9 +16,6 @@ import { relatorioConsolidadoRouter } from "./modules/administrativo/relatorioRo
 import { valoresSalvosRouter } from "./modules/administrativo/valoresSalvosRouter";
 import { funcoesCondominioRouter } from "./modules/administrativo/funcoesRouter";
 import { tiposInfracaoRouter, notificacoesInfracaoRouter, respostasInfracaoRouter, relatorioInfracoesRouter } from "./modules/infracao/router";
-import { leituraMedidoresRouter } from "./modules/leituraMedidores/router";
-import { controlePragasRouter } from "./modules/controlePragas/router";
-import { jardinagemRouter } from "./modules/jardinagem/router";
 import { systemRouter } from "./_core/systemRouter";
 import { router } from "./_core/trpc";
 import { appAcessoRouter } from "./appAcesso";
