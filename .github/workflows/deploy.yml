@@ -39,13 +39,26 @@ jobs:
                && echo 'imagem anterior guardada' \
                || echo 'sem imagem anterior (primeiro deploy)'"
 
-      # Build antes da troca: erro de compilação para o deploy aqui, com a
-      # versão antiga ainda servindo.
+      # Build AQUI, não no servidor.
+      #
+      # Em 13/08/2026 o `docker compose build` rodando na máquina de produção
+      # consumiu a memória que faltava e o kernel matou o MySQL compartilhado
+      # três vezes, derrubando o app portaria e o app correspondência — que não
+      # têm nada a ver com este projeto. São ~20 sistemas em 7,7 GB: construir
+      # lá dentro é cobrar dos vizinhos.
+      #
+      # Aqui a máquina é descartável. Se o build estourar, quem cai é o runner.
       - name: Build image
+        run: docker build -t app-manutencao:latest .
+
+      # Manda a imagem pronta. `docker load` é leitura de arquivo: gasta I/O,
+      # não a memória que derrubou o banco dos outros sistemas.
+      - name: Ship image to server
         run: |
-          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "cd ${{ env.APP_PATH }} && docker compose build app"
+          docker save app-manutencao:latest | gzip -1 | \
+            ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+              ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+              "gunzip | docker load"
 
       # Pré-voo num container descartável, com o site ainda servindo a versão
       # anterior: confere variáveis de ambiente, confere que o banco está na
@@ -62,6 +75,17 @@ jobs:
           ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
             "cd ${{ env.APP_PATH }} && docker compose up -d --no-build --remove-orphans"
+
+      # Imagem carregada a cada deploy deixa a anterior pendurada. Sem esta
+      # faxina o disco do servidor cresce sozinho — e ele é compartilhado.
+      # `prune -f` só apaga imagem sem tag: a `app-manutencao:anterior`, que é
+      # o plano de rollback, tem tag e fica.
+      - name: Clean dangling images
+        if: success()
+        run: |
+          ssh -o ServerAliveInterval=30 \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "docker image prune -f | tail -1"
 
       # Espera o container ficar `healthy` (o healthcheck bate em /api/saude).
       # Se não ficar, volta para a imagem anterior e falha o deploy. As
