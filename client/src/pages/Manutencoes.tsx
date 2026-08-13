@@ -27,6 +27,17 @@ import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { BotaoQrCode } from "@/components/BotaoQrCode";
 import { useBuscaInicial } from "@/hooks/useBuscaInicial";
 import {
+  FASE_FOTO,
+  PRIORIDADE_REGISTRO,
+  PRIORIDADES,
+  STATUS_ESCOLHA,
+  STATUS_REGISTRO,
+  TOM_ANEXO,
+  estiloEtiqueta,
+  estiloOpcao,
+  tomDe,
+} from "@/lib/coresRegistro";
+import {
   ArrowLeft,
   CalendarDays,
   FileDown,
@@ -79,45 +90,23 @@ function mensagemDaManutencao(m: {
     .join("\n");
 }
 
-const STATUS = ["pendente", "acao_necessaria", "realizada", "finalizada", "reaberta", "rascunho"] as const;
-const PRIORIDADES = ["baixa", "media", "alta", "urgente"] as const;
+/**
+ * O que a tela deixa escolher: as quatro situações do serviço, na ordem em que
+ * ele acontece. "Requer ação" e "Rascunho" saíram da escolha — seguem nomeadas
+ * e coloridas nos registros antigos, mas ninguém marca mais.
+ */
+const STATUS = STATUS_ESCOLHA;
 const TIPOS = ["corretiva", "preventiva", "emergencial", "programada"] as const;
 
+// Uniões literais, e não `string`: é o que as rotas do servidor aceitam, e o
+// TypeScript avisa se um valor novo entrar na lista sem passar por elas.
 type Status = (typeof STATUS)[number];
 type Prioridade = (typeof PRIORIDADES)[number];
 type Tipo = (typeof TIPOS)[number];
 
-const ROTULO_STATUS: Record<Status, string> = {
-  pendente: "Pendente",
-  acao_necessaria: "Requer ação",
-  realizada: "Realizada",
-  finalizada: "Finalizada",
-  reaberta: "Reaberta",
-  rascunho: "Rascunho",
-};
-
-const COR_STATUS: Record<Status, string> = {
-  pendente: "bg-amber-100 text-amber-800 border-amber-200",
-  acao_necessaria: "bg-red-100 text-red-800 border-red-200",
-  realizada: "bg-blue-100 text-blue-800 border-blue-200",
-  finalizada: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  reaberta: "bg-purple-100 text-purple-800 border-purple-200",
-  rascunho: "bg-slate-100 text-slate-700 border-slate-200",
-};
-
-const ROTULO_PRIORIDADE: Record<Prioridade, string> = {
-  baixa: "Baixa",
-  media: "Média",
-  alta: "Alta",
-  urgente: "Urgente",
-};
-
-const COR_PRIORIDADE: Record<Prioridade, string> = {
-  baixa: "bg-slate-100 text-slate-700",
-  media: "bg-sky-100 text-sky-800",
-  alta: "bg-orange-100 text-orange-800",
-  urgente: "bg-red-600 text-white",
-};
+/** Nome e cor vêm do vocabulário do sistema, igual em todas as telas. */
+const ROTULO_STATUS = (s?: string | null) => tomDe(STATUS_REGISTRO, s).rotulo;
+const ROTULO_PRIORIDADE = (p?: string | null) => tomDe(PRIORIDADE_REGISTRO, p).rotulo;
 
 const ROTULO_TIPO: Record<Tipo, string> = {
   corretiva: "Corretiva",
@@ -305,7 +294,7 @@ export default function Manutencoes() {
               <SelectItem value="todos">Todos os status</SelectItem>
               {STATUS.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {ROTULO_STATUS[s]}
+                  {ROTULO_STATUS(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -342,11 +331,14 @@ export default function Manutencoes() {
                 <CardContent className="py-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                   <span className="font-mono text-xs text-slate-500">#{m.protocolo}</span>
                   <span className="font-medium text-slate-800 mr-auto">{m.titulo}</span>
-                  <Badge variant="outline" className={COR_STATUS[m.status as Status]}>
-                    {ROTULO_STATUS[m.status as Status] ?? m.status}
+                  <Badge variant="outline" style={estiloEtiqueta(tomDe(STATUS_REGISTRO, m.status))}>
+                    {ROTULO_STATUS(m.status)}
                   </Badge>
-                  <Badge className={COR_PRIORIDADE[(m.prioridade ?? "media") as Prioridade]}>
-                    {ROTULO_PRIORIDADE[(m.prioridade ?? "media") as Prioridade]}
+                  <Badge
+                    variant="outline"
+                    style={estiloEtiqueta(tomDe(PRIORIDADE_REGISTRO, m.prioridade ?? "media"))}
+                  >
+                    {ROTULO_PRIORIDADE(m.prioridade ?? "media")}
                   </Badge>
                   <div className="w-full flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                     <span>{ROTULO_TIPO[(m.tipo ?? "corretiva") as Tipo]}</span>
@@ -560,7 +552,7 @@ function DialogNova({ aberta, condominioId, onFechar, onCriada }: DialogNovaProp
               <Select value={prioridade} onValueChange={(v) => setPrioridade(v as Prioridade)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PRIORIDADES.map((p) => <SelectItem key={p} value={p}>{ROTULO_PRIORIDADE[p]}</SelectItem>)}
+                  {PRIORIDADES.map((p) => <SelectItem key={p} value={p}>{ROTULO_PRIORIDADE(p)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -578,7 +570,7 @@ function DialogNova({ aberta, condominioId, onFechar, onCriada }: DialogNovaProp
               <Select value={status} onValueChange={(v) => setStatus(v as Status)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STATUS.map((s) => <SelectItem key={s} value={s}>{ROTULO_STATUS[s]}</SelectItem>)}
+                  {STATUS.map((s) => <SelectItem key={s} value={s}>{ROTULO_STATUS(s)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -814,17 +806,35 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
 
             <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-4">
               <div className="flex flex-wrap gap-2">
-                {STATUS.filter((s) => s !== rascunho.status).slice(0, 4).map((s) => (
-                  <Button
-                    key={s}
-                    size="sm"
-                    variant="outline"
-                    disabled={atualizar.isPending}
-                    onClick={() => atualizar.mutate({ id, status: s })}
-                  >
-                    Marcar como {ROTULO_STATUS[s].toLowerCase()}
-                  </Button>
-                ))}
+                {/* Quatro botões, um por situação, cada um na sua cor: o atual
+                    fica preenchido e os outros, claros. Sem "Marcar como" — o
+                    próprio nome da situação já diz o que o toque faz. */}
+                {STATUS.map((s) => {
+                  const tom = tomDe(STATUS_REGISTRO, s);
+                  const atual = rascunho.status === s;
+                  return (
+                    <Button
+                      key={s}
+                      size="sm"
+                      variant="outline"
+                      // Anel no hover: o estilo em linha vence as classes de
+                      // fundo, então sem isto o botão não dava retorno ao toque.
+                      className="font-medium border hover:ring-2 hover:ring-offset-1 transition-shadow"
+                      style={estiloOpcao(tom, atual)}
+                      // A situação atual não pode ficar desabilitada: o botão
+                      // desabilitado é desenhado a 50% de opacidade, e era
+                      // justamente a cor mais importante que aparecia apagada.
+                      aria-current={atual ? "true" : undefined}
+                      disabled={atualizar.isPending}
+                      onClick={() => {
+                        if (atual) return;
+                        atualizar.mutate({ id, status: s });
+                      }}
+                    >
+                      {tom.rotulo}
+                    </Button>
+                  );
+                })}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -845,7 +855,7 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                   <Select value={rascunho.status} onValueChange={(v) => setRascunho({ ...rascunho, status: v as Status })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {STATUS.map((s) => <SelectItem key={s} value={s}>{ROTULO_STATUS[s]}</SelectItem>)}
+                      {STATUS.map((s) => <SelectItem key={s} value={s}>{ROTULO_STATUS(s)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -854,7 +864,7 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                   <Select value={rascunho.prioridade} onValueChange={(v) => setRascunho({ ...rascunho, prioridade: v as Prioridade })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {PRIORIDADES.map((p) => <SelectItem key={p} value={p}>{ROTULO_PRIORIDADE[p]}</SelectItem>)}
+                      {PRIORIDADES.map((p) => <SelectItem key={p} value={p}>{ROTULO_PRIORIDADE(p)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -890,14 +900,29 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                 <div className="flex items-center justify-between mb-2">
                   <Label>Fotos</Label>
                   <div className="flex items-center gap-2">
+                    {/* A cor do seletor é a fase: âmbar em "Antes", verde em
+                        "Depois". É o recado de que existe a outra — antes disso
+                        muita gente anexava tudo em "Antes" sem perceber. */}
                     <Select value={faseFoto} onValueChange={(v) => setFaseFoto(v as "antes" | "depois")}>
-                      <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger
+                        className="h-8 w-28 text-xs font-semibold border"
+                        style={estiloEtiqueta(FASE_FOTO[faseFoto])}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="antes">Antes</SelectItem>
                         <SelectItem value="depois">Depois</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button size="sm" variant="outline" disabled={enviandoFoto} onClick={() => inputFoto.current?.click()}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="font-medium"
+                      style={estiloEtiqueta(TOM_ANEXO)}
+                      disabled={enviandoFoto}
+                      onClick={() => inputFoto.current?.click()}
+                    >
                       {enviandoFoto ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-1" />}
                       Anexar
                     </Button>

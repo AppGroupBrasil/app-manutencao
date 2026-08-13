@@ -24,6 +24,7 @@ import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { RegistroVencimento, rotuloStatus } from "@/components/RegistroVencimento";
 import { CalendarioManutencoes } from "@/components/CalendarioManutencoes";
 import { useBuscaInicial } from "@/hooks/useBuscaInicial";
+import { SITUACAO_PRAZO, TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import {
   ArrowLeft,
   Bell,
@@ -906,6 +907,8 @@ export default function AgendaVencimentos() {
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="border font-medium"
+                  style={estiloEtiqueta(TOM_ANEXO)}
                   disabled={enviandoImagem}
                   onClick={() => inputImagens.current?.click()}
                 >

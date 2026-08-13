@@ -436,30 +436,4 @@ export const calendarioRouter = router({
       });
     }),
 
-  /** Contagem por situação, para o cartão de destaque do painel. */
-  resumo: tenantUserProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ ctx }) => {
-      const db = await getDb();
-      if (!db) return { vencidos: 0, hoje: 0 };
-
-      const tenant = ctx.condominioId;
-      const hoje = chaveDoDia(new Date());
-
-      // Só vencimentos: é a única fonte com data obrigatória, e o cartão do
-      // painel precisa de um número que não custe seis consultas.
-      if (!(await isModuloHabilitado(tenant, FONTES.vencimento.modulo)) && !ctx.tenant.isMaster()) {
-        return { vencidos: 0, hoje: 0 };
-      }
-
-      const [linha] = await db
-        .select({
-          vencidos: sql<number>`count(*) filter (where date(${vencimentos.dataVencimento}) < ${hoje} and ${vencimentos.registroStatus} is null)`,
-          hoje: sql<number>`count(*) filter (where date(${vencimentos.dataVencimento}) = ${hoje})`,
-        })
-        .from(vencimentos)
-        .where(eq(vencimentos.condominioId, tenant));
-
-      return { vencidos: Number(linha?.vencidos ?? 0), hoje: Number(linha?.hoje ?? 0) };
-    }),
 });

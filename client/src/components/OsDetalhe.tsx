@@ -11,6 +11,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta, etapaDoFluxo } from "@/lib/coresRegistro";
+import { prepareImageForUpload } from "@/lib/imageCompressor";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Calendar,
@@ -89,15 +91,6 @@ function lerArquivoBase64(arquivo: File): Promise<string> {
   });
 }
 
-/** Rótulo e cor de cada etapa do fluxo, na ordem em que acontecem. */
-const ETAPAS: Record<string, { rotulo: string; cor: string; fundo: string }> = {
-  solicitada: { rotulo: "Aguardando programação", cor: "#92400e", fundo: "#fef3c7" },
-  programada: { rotulo: "Programada", cor: "#1e40af", fundo: "#dbeafe" },
-  baixa_pedida: { rotulo: "Baixa aguardando confirmação", cor: "#7c2d12", fundo: "#ffedd5" },
-  baixa_confirmada: { rotulo: "Confirmada — aguardando o gerente", cor: "#4c1d95", fundo: "#ede9fe" },
-  finalizada: { rotulo: "Finalizada", cor: "#166534", fundo: "#dcfce7" },
-};
-
 function formatarDia(dia?: string | null): string {
   if (!dia) return "—";
   const [ano, mes, d] = dia.split("-");
@@ -173,7 +166,7 @@ function PassosDoFluxo({
   });
 
   const etapa = os.etapa ?? "solicitada";
-  const info = ETAPAS[etapa] ?? ETAPAS.solicitada;
+  const info = etapaDoFluxo(etapa);
   const emAndamento =
     programar.isPending || darBaixa.isPending || confirmar.isPending || devolver.isPending;
 
@@ -182,8 +175,8 @@ function PassosDoFluxo({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium">Andamento</span>
         <span
-          className="text-[11px] font-medium px-2 py-0.5 rounded-full"
-          style={{ color: info.cor, backgroundColor: info.fundo }}
+          className="text-[11px] font-medium px-2 py-0.5 rounded-full border"
+          style={estiloEtiqueta(info)}
         >
           {info.rotulo}
         </span>
@@ -507,7 +500,10 @@ export function OsDetalhe({
     setEnviando(true);
     try {
       for (const arquivo of Array.from(arquivos)) {
-        const base64 = await lerArquivoBase64(arquivo);
+        // Comprime antes de subir: a foto crua de celular passa de 5 MB e o
+        // corpo da requisição para em 10 MB — a foto do "depois" sumia com erro
+        // de rede justamente na hora de encerrar o serviço.
+        const base64 = await prepareImageForUpload(arquivo, "quarterA4");
         // O próprio upload já registra a imagem com a fase: chamar `addImagem`
         // em seguida criaria uma segunda linha para o mesmo arquivo.
         await uploadImagem.mutateAsync({
@@ -568,6 +564,14 @@ export function OsDetalhe({
       </div>
     );
   }
+
+  /**
+   * A ordem está dentro do fluxo?
+   *
+   * Não basta a unidade ter a chave ligada: ordem aberta antes disso tem
+   * `etapa` nula e continua fechando como sempre. É a mesma regra do servidor.
+   */
+  const noFluxo = !!os.fluxoConfirmacao && !!os.etapa;
 
   const imagensPorFase = (fase: string) =>
     (os.imagens ?? []).filter((img) => (img.tipo ?? "outro") === fase);
@@ -639,7 +643,10 @@ export function OsDetalhe({
 
       <p className="text-sm text-slate-600">{os.descricao || "Sem descrição inicial."}</p>
 
-      {/* Fluxo com prazo e confirmação: só aparece nas unidades que o ligaram. */}
+      {/* Fluxo com prazo e confirmação: aparece na unidade que ligou a chave,
+          inclusive nas ordens antigas — é assim que o gerente traz uma delas
+          para o fluxo, programando a data. Quem não entrou continua com o
+          botão de finalizar de sempre, logo abaixo. */}
       {os.fluxoConfirmacao && (
         <PassosDoFluxo
           os={os}
@@ -662,7 +669,7 @@ export function OsDetalhe({
         </Button>
         {/* No fluxo, quem fecha é o gerente e só depois da conferência: o botão
             solto aqui confundiria a equipe, que agora usa "Dar baixa". */}
-        {(!os.fluxoConfirmacao || podeGerenciar) && (
+        {(!noFluxo || podeGerenciar) && (
           <Button
             variant="outline"
             size="sm"
@@ -670,7 +677,7 @@ export function OsDetalhe({
               !os.dataInicio ||
               !!os.dataFim ||
               finalizar.isPending ||
-              (os.fluxoConfirmacao && os.etapa !== "baixa_confirmada")
+              (noFluxo && os.etapa !== "baixa_confirmada")
             }
             onClick={() => finalizar.mutate({ id: ordemServicoId })}
           >
@@ -768,8 +775,14 @@ export function OsDetalhe({
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium">Fotos</span>
           <div className="flex items-center gap-2">
+            {/* A cor do seletor é a da fase escolhida: âmbar em "Antes", azul
+                em "Durante", verde em "Depois". É o recado de que existem as
+                outras — sem isso, quase tudo era anexado em "Antes". */}
             <Select value={faseFoto} onValueChange={(v) => setFaseFoto(v as typeof faseFoto)}>
-              <SelectTrigger className="h-8 w-28 text-xs">
+              <SelectTrigger
+                className="h-8 w-28 text-xs font-semibold border"
+                style={estiloEtiqueta(FASE_FOTO[faseFoto])}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -780,19 +793,26 @@ export function OsDetalhe({
                 ))}
               </SelectContent>
             </Select>
+            {/* Anexar tem cor própria, a mesma em todas as funções. */}
             <Button
               variant="outline"
               size="sm"
+              className="border"
+              style={estiloEtiqueta(TOM_ANEXO)}
               disabled={enviando}
               onClick={() => inputCamera.current?.click()}
+              aria-label="Tirar foto agora"
             >
               <Camera className="w-4 h-4" />
             </Button>
             <Button
               variant="outline"
               size="sm"
+              className="border"
+              style={estiloEtiqueta(TOM_ANEXO)}
               disabled={enviando}
               onClick={() => inputFoto.current?.click()}
+              aria-label="Escolher foto do aparelho"
             >
               {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             </Button>
@@ -865,6 +885,8 @@ export function OsDetalhe({
           <Button
             variant="outline"
             size="sm"
+            className="border font-medium"
+            style={estiloEtiqueta(TOM_ANEXO)}
             disabled={enviando}
             onClick={() => inputAnexo.current?.click()}
           >

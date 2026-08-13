@@ -10,6 +10,16 @@ import { toast } from "@/components/ui/sonner";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { BotaoQrCode } from "@/components/BotaoQrCode";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, MapPin, Printer, Search, Trash2, Wrench, X } from "lucide-react";
+import {
+  PRIORIDADE_REGISTRO,
+  PRIORIDADES,
+  STATUS_REGISTRO,
+  TOM_ANEXO,
+  estiloEtiqueta,
+  estiloOpcao,
+  tomDe,
+  type Rotulado,
+} from "@/lib/coresRegistro";
 
 type CoreSection = "checklists" | "manutencoes" | "ocorrencias" | "vistorias";
 
@@ -139,17 +149,16 @@ function formatDate(value?: string | Date | null) {
   return Number.isNaN(date.getTime()) ? "Agora" : date.toLocaleString("pt-BR");
 }
 
-function statusVariant(status?: string | null) {
-  switch (status) {
-    case "finalizada":
-    case "realizada":
-      return "default" as const;
-    case "urgente":
-    case "reaberta":
-      return "destructive" as const;
-    default:
-      return "secondary" as const;
-  }
+/** Etiqueta com a cor do vocabulário: a mesma em todas as telas. */
+function Etiqueta({ tom }: { tom: Rotulado }) {
+  return (
+    <span
+      className="text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap"
+      style={estiloEtiqueta(tom)}
+    >
+      {tom.rotulo}
+    </span>
+  );
 }
 
 /**
@@ -276,8 +285,10 @@ function SectionLayout({
                 <p className="mt-1 text-sm text-slate-500">Protocolo #{item.protocolo}</p>
               </div>
               <div className="flex gap-2">
-                <Badge variant={statusVariant(item.status)}>{item.status || "pendente"}</Badge>
-                {item.prioridade ? <Badge variant={statusVariant(item.prioridade)}>{item.prioridade}</Badge> : null}
+                <Etiqueta tom={tomDe(STATUS_REGISTRO, item.status || "pendente")} />
+                {item.prioridade ? (
+                  <Etiqueta tom={tomDe(PRIORIDADE_REGISTRO, item.prioridade)} />
+                ) : null}
               </div>
             </div>
             {item.descricao ? <p className="mt-3 text-sm text-slate-600">{item.descricao}</p> : null}
@@ -464,23 +475,38 @@ function SectionLayout({
               </div>
               <div className="space-y-2">
                 <Label>Prioridade</Label>
+                {/* Cada nível com a sua cor; o escolhido fica preenchido. Assim
+                    dá para escolher pela cor, sem ler. */}
                 <div className="grid grid-cols-2 gap-2">
-                  {(["baixa", "media", "alta", "urgente"] as const).map((nivel) => (
-                    <Button
-                      key={nivel}
-                      type="button"
-                      variant={prioridade === nivel ? "default" : "outline"}
-                      className="capitalize"
-                      onClick={() => setPrioridade(nivel)}
-                    >
-                      {nivel}
-                    </Button>
-                  ))}
+                  {PRIORIDADES.map((nivel) => {
+                    const tom = PRIORIDADE_REGISTRO[nivel];
+                    return (
+                      <Button
+                        key={nivel}
+                        type="button"
+                        variant="outline"
+                        className="border font-medium hover:ring-2 hover:ring-offset-1 transition-shadow"
+                        style={estiloOpcao(tom, prioridade === nivel)}
+                        onClick={() => setPrioridade(nivel)}
+                      >
+                        {tom.rotulo}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="space-y-2">
                 <Label>Imagens</Label>
-                <label className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">
+                {/* Anexar tem cor própria — é ação, não situação — e a mesma
+                    em todas as funções. */}
+                <label
+                  className="flex cursor-pointer items-center justify-center rounded-md border px-3 py-2.5 text-sm font-medium"
+                  style={{
+                    color: TOM_ANEXO.texto,
+                    backgroundColor: TOM_ANEXO.fundo,
+                    borderColor: TOM_ANEXO.borda,
+                  }}
+                >
                   <input
                     type="file"
                     accept="image/*"

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { SITUACAO_PRAZO, etapaDoFluxo } from "@/lib/coresRegistro";
 import {
   CalendarClock,
   CalendarDays,
@@ -41,14 +42,6 @@ type ItemCalendario = {
 
 type Situacao = "vencido" | "proximo" | "em_dia" | "concluido";
 
-/** Rótulo curto da etapa da O.S., para caber na linha do dia. */
-const ETAPA_CURTA: Record<string, string> = {
-  solicitada: "aguardando programação",
-  programada: "programada",
-  baixa_pedida: "baixa a confirmar",
-  baixa_confirmada: "a finalizar",
-  finalizada: "finalizada",
-};
 
 const DIAS_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
@@ -58,12 +51,18 @@ const DIAS_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
  */
 const DIAS_AMARELO = 7;
 
-const CORES: Record<Situacao, { ponto: string; texto: string; fundo: string; rotulo: string }> = {
-  vencido: { ponto: "#c62828", texto: "#991b1b", fundo: "#fee2e2", rotulo: "Passou do prazo" },
-  proximo: { ponto: "#e0a800", texto: "#92400e", fundo: "#fef3c7", rotulo: "Está chegando" },
-  em_dia: { ponto: "#2e7d32", texto: "#166534", fundo: "#dcfce7", rotulo: "Dentro do prazo" },
-  concluido: { ponto: "#94a3b8", texto: "#475569", fundo: "#f1f5f9", rotulo: "Já resolvido" },
-};
+/**
+ * A cor sai do vocabulário do sistema: a mesma que a etiqueta de prazo usa nas
+ * outras telas. `forte` marca o dia no calendário, `suave` tinge a linha do
+ * chamado sem atrapalhar a leitura.
+ */
+const CORES: Record<Situacao, { ponto: string; texto: string; fundo: string; suave: string; borda: string; rotulo: string }> =
+  Object.fromEntries(
+    (["vencido", "proximo", "em_dia", "concluido"] as Situacao[]).map((s) => {
+      const tom = SITUACAO_PRAZO[s];
+      return [s, { ponto: tom.forte, texto: tom.texto, fundo: tom.fundo, suave: tom.suave, borda: tom.borda, rotulo: tom.rotulo }];
+    }),
+  ) as Record<Situacao, { ponto: string; texto: string; fundo: string; suave: string; borda: string; rotulo: string }>;
 
 /** Dia em `AAAA-MM-DD` como o brasileiro lê. */
 function formatarDia(dia: string): string {
@@ -349,10 +348,13 @@ export function CalendarioGeral({
                 const cor = CORES[situacaoDe(item, hoje)];
                 return (
                   <li key={item.chave}>
+                    {/* O fundo da linha é a situação do prazo: dá para varrer o
+                        dia com o olho, sem ler cada etiqueta. */}
                     <button
                       type="button"
                       onClick={() => irPara(item)}
-                      className="w-full text-left border rounded-lg px-3 py-2 hover:border-slate-300 hover:shadow-sm transition-all"
+                      className="w-full text-left border rounded-lg px-3 py-2 hover:shadow-sm transition-all"
+                      style={{ backgroundColor: cor.suave, borderColor: cor.borda }}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-slate-800 truncate">
@@ -369,7 +371,7 @@ export function CalendarioGeral({
                         <span className="font-medium text-slate-600">{item.rotuloFonte}</span>
                         {item.protocolo ? <span className="font-mono">{item.protocolo}</span> : null}
                         {item.etapa ? (
-                          <span className="truncate">· {ETAPA_CURTA[item.etapa] ?? item.etapa}</span>
+                          <span className="truncate">· {etapaDoFluxo(item.etapa).curto}</span>
                         ) : null}
                         {item.detalhe ? <span className="truncate">· {item.detalhe}</span> : null}
                         <Seta className="w-3.5 h-3.5 ml-auto shrink-0 text-slate-400" />

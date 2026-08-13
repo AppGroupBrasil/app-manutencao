@@ -19,6 +19,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import {
+  PRIORIDADE_REGISTRO,
+  SITUACAO_PRAZO,
+  TOM_ANEXO,
+  estiloEtiqueta,
+  tomDe,
+} from "@/lib/coresRegistro";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { BotaoQrCode } from "@/components/BotaoQrCode";
 import { useVocabulario } from "@/hooks/useVocabulario";
@@ -64,17 +71,23 @@ const RECORRENCIA_ROTULO: Record<string, string> = {
   mensal: "Mensal",
 };
 
-const PRIORIDADE_COR: Record<string, { cor: string; fundo: string; rotulo: string }> = {
-  baixa: { cor: "#2e7d32", fundo: "#e8f5e9", rotulo: "Baixa" },
-  media: { cor: "#1565c0", fundo: "#e3f2fd", rotulo: "Média" },
-  alta: { cor: "#e65100", fundo: "#fff3e0", rotulo: "Alta" },
-  urgente: { cor: "#c62828", fundo: "#ffebee", rotulo: "Urgente" },
-};
-
+/** Execução da tarefa: mesmas cores das outras telas, via vocabulário. */
 const STATUS_EXECUCAO: Record<string, { rotulo: string; cor: string; fundo: string }> = {
-  realizada: { rotulo: "Realizada", cor: "#2e7d32", fundo: "#e8f5e9" },
-  pendente: { rotulo: "Pendente", cor: "#e65100", fundo: "#fff3e0" },
-  nao_executada: { rotulo: "Não executada", cor: "#c62828", fundo: "#ffebee" },
+  realizada: {
+    rotulo: "Realizada",
+    cor: SITUACAO_PRAZO.em_dia.texto,
+    fundo: SITUACAO_PRAZO.em_dia.fundo,
+  },
+  pendente: {
+    rotulo: "Pendente",
+    cor: SITUACAO_PRAZO.proximo.texto,
+    fundo: SITUACAO_PRAZO.proximo.fundo,
+  },
+  nao_executada: {
+    rotulo: "Não executada",
+    cor: SITUACAO_PRAZO.vencido.texto,
+    fundo: SITUACAO_PRAZO.vencido.fundo,
+  },
 };
 
 /** Baixa o base64 devolvido pelo servidor como arquivo. */
@@ -665,7 +678,7 @@ export function ConteudoListaTarefas({
           ) : (
             <div className="space-y-3">
               {lista.map((t) => {
-                const prioridade = PRIORIDADE_COR[t.prioridade] ?? PRIORIDADE_COR.media;
+                const prioridade = tomDe(PRIORIDADE_REGISTRO, t.prioridade);
                 const daTarefa = (execucoes ?? []).filter((e) => e.tarefaId === t.id);
                 return (
                   <Card key={t.id}>
@@ -677,7 +690,7 @@ export function ConteudoListaTarefas({
                         </div>
                         <span
                           className="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
-                          style={{ color: prioridade.cor, backgroundColor: prioridade.fundo }}
+                          style={estiloEtiqueta(prioridade)}
                         >
                           {prioridade.rotulo}
                         </span>
@@ -975,7 +988,11 @@ function ModalExecucao({
                     e.target.value = "";
                   }}
                 />
-                <span className="inline-flex items-center text-xs border rounded-md px-3 py-1.5 hover:bg-slate-50">
+                {/* Anexar tem a mesma cor em toda função: é ação, não situação. */}
+                <span
+                  className="inline-flex items-center text-xs font-medium border rounded-md px-3 py-1.5"
+                  style={estiloEtiqueta(TOM_ANEXO)}
+                >
                   {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Anexar"}
                 </span>
               </label>

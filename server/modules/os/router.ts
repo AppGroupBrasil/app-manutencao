@@ -1393,7 +1393,15 @@ export const osRouter = router({
 
         // No fluxo, finalizar é o último passo e é do gerente: a equipe dá
         // baixa, o gestor confere, e só então a ordem fecha.
-        const comFluxo = await fluxoLigado(db, os.condominioId);
+        /**
+         * O fluxo vale para a ordem que entrou nele.
+         *
+         * `etapa` nula é ordem aberta antes de a unidade ligar a chave: ela
+         * fecha como sempre fechou. Sem esta ressalva, ligar o fluxo prendia
+         * toda O.S. em aberto — para finalizar, o gerente teria que programar,
+         * pedir baixa e confirmar um serviço que já estava pronto.
+         */
+        const comFluxo = (await fluxoLigado(db, os.condominioId)) && !!os.etapa;
         if (comFluxo) {
           await exigirGerente(ctx, "finaliza a ordem de serviço");
           if (os.etapa !== ETAPA.baixaConfirmada) {
@@ -2010,7 +2018,13 @@ export const osRouter = router({
         
         const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
         if (!allowedTypes.includes(input.fileType)) {
-          throw new Error("Tipo de ficheiro nao suportado");
+          // A mensagem antiga ("tipo não suportado") não dizia o que fazer.
+          // O caso real é iPhone com "Manter original", que entrega HEIC.
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Formato de foto não aceito. Use JPG ou PNG — no iPhone, em Ajustes > Câmera > Formatos, escolha \"Mais compatível\".",
+          });
         }
         
         const base64Data = input.fileData.replace(/^data:image\/\w+;base64,/, "");

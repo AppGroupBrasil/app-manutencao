@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import { TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { BotaoQrCode } from "@/components/BotaoQrCode";
 import { useBuscaInicial } from "@/hooks/useBuscaInicial";
@@ -154,6 +155,8 @@ function ItensAoVivo({
               size="sm"
               disabled={enviando !== null}
               onClick={() => inputs.current[item.chave]?.click()}
+              className="border"
+              style={estiloEtiqueta(TOM_ANEXO)}
               title="Tirar foto"
               aria-label={`Tirar foto do item ${i + 1}`}
             >
@@ -384,6 +387,7 @@ function CartaoVistoria({
                     {/* Câmera: foto e descrição do item, direto. */}
                     <button
                       onClick={() => setFotoDe({ id: item.id, descricao: item.descricao })}
+                      style={{ color: TOM_ANEXO.texto }}
                       title="Tirar foto e descrever"
                       aria-label="Tirar foto e descrever"
                       className="shrink-0"

@@ -322,6 +322,18 @@ describe("finalizar (passo do gerente)", () => {
     expect(gravado?.dataFim).toBeInstanceOf(Date);
   });
 
+  it("ordem aberta antes de a chave ser ligada continua fechando como antes", async () => {
+    // Unidade no fluxo, mas esta ordem nasceu fora dele: `etapa` nula. Sem esta
+    // ressalva, ligar a chave prendia toda O.S. em aberto — o gerente teria que
+    // programar e pedir baixa de um serviço que já estava pronto.
+    osAtual.etapa = null;
+
+    await comoUsuario().finalizarServico({ id: 50 });
+
+    expect(gravado?.dataFim).toBeInstanceOf(Date);
+    expect(gravado?.etapa ?? null).toBeNull();
+  });
+
   it("na unidade sem o fluxo, a equipe continua finalizando como antes", async () => {
     fluxoLigadoNaUnidade = false;
     osAtual.etapa = null;

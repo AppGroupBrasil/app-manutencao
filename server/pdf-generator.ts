@@ -203,13 +203,21 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
   // Pre-fetch de todas as imagens (antes de iniciar o doc)
   const imageBuffers: Array<{ buffer: Buffer; tipo?: string; descricao?: string; url: string }> = [];
   if (data.imagens && data.imagens.length > 0) {
-    const fetches = data.imagens.slice(0, 12).map(async (img) => {
-      const buf = await fetchImageBuffer(img.url);
-      if (buf && buf.length > 100) {
-        imageBuffers.push({ buffer: buf, tipo: img.tipo, descricao: img.descricao, url: img.url });
-      }
-    });
-    await Promise.all(fetches);
+    // Baixa em paralelo, mas guarda por índice: com `push` dentro do
+    // `Promise.all`, a folha saía na ordem em que a rede respondia — o "depois"
+    // aparecia antes do "antes" sem nenhum motivo visível.
+    const escolhidas = data.imagens.slice(0, 12);
+    const baixadas: Array<{ buffer: Buffer; tipo?: string; descricao?: string; url: string } | null> =
+      new Array(escolhidas.length).fill(null);
+    await Promise.all(
+      escolhidas.map(async (img, i) => {
+        const buf = await fetchImageBuffer(img.url);
+        if (buf && buf.length > 100) {
+          baixadas[i] = { buffer: buf, tipo: img.tipo, descricao: img.descricao, url: img.url };
+        }
+      }),
+    );
+    for (const linha of baixadas) if (linha) imageBuffers.push(linha);
   }
 
   // Gerar QR Code como PNG buffer
@@ -547,32 +555,37 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
       doc.restore();
       y += 42;
 
-      // Grid de imagens: 2 por linha
-      const imgCols = 2;
+      /**
+       * Antes e depois lado a lado, e não um grid na ordem de upload.
+       *
+       * É para isso que o relatório existe: quem cobra resultado compara as
+       * duas fotos na mesma linha. A i-ésima foto de "antes" fica à esquerda da
+       * i-ésima de "depois"; faltando uma das duas, o lugar dela fica marcado,
+       * porque a lacuna também é informação.
+       */
       const imgGap = 14;
-      const imgW = (contentWidth - imgGap * (imgCols - 1)) / imgCols;
+      const imgW = (contentWidth - imgGap) / 2;
       const imgH = 180;
       const cardPad = 6;
 
-      for (let i = 0; i < imageBuffers.length; i++) {
-        const col = i % imgCols;
-        if (col === 0) {
-          y = checkPageBreak(doc, imgH + 40, margin, y);
-        }
+      const CORES_FASE: Record<string, string> = {
+        antes: '#3b82f6',
+        durante: '#f59e0b',
+        depois: '#10b981',
+        orcamento: '#8b5cf6',
+      };
 
-        const cx = margin + col * (imgW + imgGap);
-        const imgInfo = imageBuffers[i];
+      type Foto = (typeof imageBuffers)[number];
 
+      /** Um cartão de foto na posição pedida. */
+      const desenharFoto = (foto: Foto, cx: number, cy: number, legendaPadrao: string) => {
         try {
           doc.save();
+          drawRoundedRect(doc, cx, cy, imgW, imgH + 28, 8, { fill: '#ffffff', stroke: COLORS.border, lineWidth: 0.5 });
 
-          // Card container com sombra sutil
-          drawRoundedRect(doc, cx, y, imgW, imgH + 28, 8, { fill: '#ffffff', stroke: COLORS.border, lineWidth: 0.5 });
-
-          // Clip para imagem arredondada dentro do card
           doc.save();
-          doc.roundedRect(cx + cardPad, y + cardPad, imgW - cardPad * 2, imgH - cardPad, 6).clip();
-          doc.image(imgInfo.buffer, cx + cardPad, y + cardPad, {
+          doc.roundedRect(cx + cardPad, cy + cardPad, imgW - cardPad * 2, imgH - cardPad, 6).clip();
+          doc.image(foto.buffer, cx + cardPad, cy + cardPad, {
             width: imgW - cardPad * 2,
             height: imgH - cardPad,
             fit: [imgW - cardPad * 2, imgH - cardPad],
@@ -581,33 +594,72 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
           });
           doc.restore();
 
-          // Label de tipo (badge dentro da imagem)
-          if (imgInfo.tipo && imgInfo.tipo !== 'outro') {
-            const tipoColors: Record<string, string> = {
-              'antes': '#3b82f6', 'durante': '#f59e0b', 'depois': '#10b981', 'orcamento': '#8b5cf6',
-            };
-            drawBadge(doc, imgInfo.tipo.toUpperCase(), cx + cardPad + 4, y + cardPad + 4, tipoColors[imgInfo.tipo] || COLORS.textLight);
+          if (foto.tipo && foto.tipo !== 'outro') {
+            drawBadge(
+              doc,
+              foto.tipo.toUpperCase(),
+              cx + cardPad + 4,
+              cy + cardPad + 4,
+              CORES_FASE[foto.tipo] || COLORS.textLight,
+            );
           }
 
-          // Legenda abaixo da imagem
-          const labelText = imgInfo.descricao || `Imagem ${i + 1}`;
           doc.fontSize(8).fillColor(COLORS.textLight).font('Helvetica');
-          doc.text(labelText, cx + cardPad + 2, y + imgH + 6, { width: imgW - cardPad * 2 - 4, align: 'center', ellipsis: true });
-
+          doc.text(foto.descricao || legendaPadrao, cx + cardPad + 2, cy + imgH + 6, {
+            width: imgW - cardPad * 2 - 4,
+            align: 'center',
+            ellipsis: true,
+          });
           doc.restore();
         } catch {
-          // Se falhar ao incorporar a imagem, mostrar placeholder
           doc.save();
-          drawRoundedRect(doc, cx, y, imgW, imgH + 28, 8, { fill: '#f8fafc', stroke: COLORS.border, lineWidth: 0.5 });
+          drawRoundedRect(doc, cx, cy, imgW, imgH + 28, 8, { fill: '#f8fafc', stroke: COLORS.border, lineWidth: 0.5 });
           doc.fontSize(9).fillColor(COLORS.textMuted).font('Helvetica');
-          doc.text('Imagem indisponivel', cx + 10, y + imgH / 2, { width: imgW - 20, align: 'center' });
+          doc.text('Imagem indisponivel', cx + 10, cy + imgH / 2, { width: imgW - 20, align: 'center' });
           doc.restore();
         }
+      };
 
-        // Avançar Y apenas na ultima coluna da linha
-        if (col === imgCols - 1 || i === imageBuffers.length - 1) {
+      /** Espaço vazio nomeado: diz qual fase está faltando. */
+      const desenharVazio = (rotulo: string, cx: number, cy: number) => {
+        doc.save();
+        drawRoundedRect(doc, cx, cy, imgW, imgH + 28, 8, { fill: '#f8fafc', stroke: COLORS.border, lineWidth: 0.5 });
+        doc.fontSize(9).fillColor(COLORS.textMuted).font('Helvetica');
+        doc.text(`Sem foto de ${rotulo}`, cx + 10, cy + imgH / 2, { width: imgW - 20, align: 'center' });
+        doc.restore();
+      };
+
+      const daFase = (fase: string) => imageBuffers.filter((f) => (f.tipo ?? 'outro') === fase);
+      const antes = daFase('antes');
+      const depois = daFase('depois');
+      const restantes = imageBuffers.filter((f) => !['antes', 'depois'].includes(f.tipo ?? 'outro'));
+
+      const pares = Math.max(antes.length, depois.length);
+      if (pares > 0) {
+        doc.fontSize(9).fillColor(COLORS.textLight).font('Helvetica-Bold');
+        doc.text('ANTES', margin, y, { width: imgW, align: 'center' });
+        doc.text('DEPOIS', margin + imgW + imgGap, y, { width: imgW, align: 'center' });
+        y += 14;
+
+        for (let i = 0; i < pares; i++) {
+          y = checkPageBreak(doc, imgH + 46, margin, y);
+          if (antes[i]) desenharFoto(antes[i], margin, y, `Antes ${i + 1}`);
+          else desenharVazio('antes', margin, y);
+
+          if (depois[i]) desenharFoto(depois[i], margin + imgW + imgGap, y, `Depois ${i + 1}`);
+          else desenharVazio('depois', margin + imgW + imgGap, y);
+
           y += imgH + 28 + 12;
         }
+        y += 4;
+      }
+
+      // Durante, orçamento e fotos sem fase: duas por linha, como antes.
+      for (let i = 0; i < restantes.length; i++) {
+        const col = i % 2;
+        if (col === 0) y = checkPageBreak(doc, imgH + 40, margin, y);
+        desenharFoto(restantes[i], margin + col * (imgW + imgGap), y, `Imagem ${i + 1}`);
+        if (col === 1 || i === restantes.length - 1) y += imgH + 28 + 12;
       }
       y += 12;
     }

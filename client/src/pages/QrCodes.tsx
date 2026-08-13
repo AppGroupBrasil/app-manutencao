@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowLeft,
@@ -499,7 +500,10 @@ export function ConteudoQrCodes({
               />
 
               <div>
-                <label className="flex cursor-pointer items-center justify-center rounded-md border border-dashed px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">
+                <label
+                  className="flex cursor-pointer items-center justify-center rounded-md border px-3 py-2.5 text-sm font-medium"
+                  style={estiloEtiqueta(TOM_ANEXO)}
+                >
                   <input
                     type="file"
                     accept="image/*"

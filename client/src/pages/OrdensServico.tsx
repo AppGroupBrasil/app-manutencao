@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -23,10 +23,14 @@ import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { useVocabulario } from "@/hooks/useVocabulario";
+import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta, etapaDoFluxo } from "@/lib/coresRegistro";
+import { prepareImageForUpload } from "@/lib/imageCompressor";
 import {
   ArrowLeft,
   Calendar,
+  Camera,
   Hash,
+  ImagePlus,
   Loader2,
   MapPin,
   Plus,
@@ -77,14 +81,108 @@ function Etiqueta({ texto, cor }: { texto?: string | null; cor?: string | null }
   );
 }
 
-/** Etapas do fluxo com confirmação de baixa, com a cor de cada uma. */
-const ETAPA_OS: Record<string, { rotulo: string; cor: string; fundo: string }> = {
-  solicitada: { rotulo: "Aguardando programação", cor: "#92400e", fundo: "#fef3c7" },
-  programada: { rotulo: "Programada", cor: "#1e40af", fundo: "#dbeafe" },
-  baixa_pedida: { rotulo: "Baixa a confirmar", cor: "#7c2d12", fundo: "#ffedd5" },
-  baixa_confirmada: { rotulo: "A finalizar", cor: "#4c1d95", fundo: "#ede9fe" },
-  finalizada: { rotulo: "Finalizada", cor: "#166534", fundo: "#dcfce7" },
-};
+/**
+ * Um lado do "antes e depois" na abertura da O.S.
+ *
+ * Dois botões: a câmera, para quem está no local, e a galeria, para quem já
+ * fotografou. A cor é a mesma de anexar em todo o sistema; o rótulo carrega a
+ * cor da fase, igual ao seletor de dentro da ordem.
+ */
+function LadoDaFoto({
+  fase,
+  fotos,
+  onEscolher,
+  onRemover,
+}: {
+  fase: "antes" | "depois";
+  fotos: { chave: string; previa: string }[];
+  onEscolher: (arquivos: FileList | null) => void;
+  onRemover: (chave: string) => void;
+}) {
+  const camera = useRef<HTMLInputElement>(null);
+  const galeria = useRef<HTMLInputElement>(null);
+  const tom = FASE_FOTO[fase];
+
+  return (
+    <div className="border rounded-md p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+          style={estiloEtiqueta(tom)}
+        >
+          {tom.rotulo}
+        </span>
+        <div className="flex gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border h-8 px-2"
+            style={estiloEtiqueta(TOM_ANEXO)}
+            onClick={() => camera.current?.click()}
+            aria-label={`Tirar foto de ${tom.rotulo.toLowerCase()}`}
+          >
+            <Camera className="w-4 h-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border h-8 px-2"
+            style={estiloEtiqueta(TOM_ANEXO)}
+            onClick={() => galeria.current?.click()}
+            aria-label={`Escolher foto de ${tom.rotulo.toLowerCase()} do aparelho`}
+          >
+            <ImagePlus className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      <input
+        ref={camera}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(e) => {
+          onEscolher(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={galeria}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          onEscolher(e.target.files);
+          e.target.value = "";
+        }}
+      />
+
+      {fotos.length === 0 ? (
+        <p className="text-xs text-slate-400 mt-2">Nenhuma foto.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {fotos.map((f) => (
+            <div key={f.chave} className="relative">
+              <img src={f.previa} alt="" className="w-16 h-16 object-cover rounded border" />
+              <button
+                type="button"
+                className="absolute -top-1.5 -right-1.5 bg-white border rounded-full p-0.5"
+                onClick={() => onRemover(f.chave)}
+                aria-label="Remover foto"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Dia em `AAAA-MM-DD` como o brasileiro lê. */
 function formatarDia(dia?: string | null): string {
@@ -229,6 +327,16 @@ export function ConteudoOrdensServico({
   const [modalNova, setModalNova] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [responsaveisNova, setResponsaveisNova] = useState<number[]>([]);
+  /**
+   * Fotos escolhidas na abertura, antes de a O.S. existir.
+   *
+   * Ficam como arquivo na mão até haver id para vincular — o mesmo caminho dos
+   * responsáveis. Sem isto, a foto do problema (o "antes") só entrava depois de
+   * criar e reabrir a ordem, e quase nunca entrava.
+   */
+  const [fotosNovas, setFotosNovas] = useState<
+    { chave: string; fase: "antes" | "depois"; arquivo: File; previa: string }[]
+  >([]);
   // Vindo do QR Code, a O.S. já abre; depois disso o estado é do usuário.
   const [detalheId, setDetalheId] = useState<number | null>(
     Number.isFinite(osInicial) && osInicial ? osInicial : null,
@@ -242,6 +350,15 @@ export function ConteudoOrdensServico({
   };
 
   const addResponsavel = trpc.ordensServico.addResponsavel.useMutation();
+  const uploadImagem = trpc.ordensServico.uploadImagem.useMutation();
+
+  /** Solta as prévias da memória; sem isto o navegador segura os arquivos. */
+  const limparFotosNovas = () => {
+    setFotosNovas((atual) => {
+      atual.forEach((f) => URL.revokeObjectURL(f.previa));
+      return [];
+    });
+  };
 
   const criar = trpc.ordensServico.create.useMutation({
     onSuccess: async (res) => {
@@ -260,9 +377,30 @@ export function ConteudoOrdensServico({
           })
           .catch(() => toast.error(`Não foi possível vincular ${pessoa.nome}`));
       }
+
+      // As fotos sobem com a fase que a pessoa escolheu. Falha aqui não desfaz
+      // a O.S.: ela já existe, e a foto pode ser anexada de novo lá dentro.
+      for (const foto of fotosNovas) {
+        try {
+          // Comprime antes de subir: foto de celular passa de 5 MB, e o corpo
+          // da requisição para em 10 MB. É o mesmo preparo dos outros uploads.
+          const base64 = await prepareImageForUpload(foto.arquivo, "quarterA4");
+          await uploadImagem.mutateAsync({
+            ordemServicoId: res.id,
+            fileName: foto.arquivo.name,
+            fileType: foto.arquivo.type,
+            fileData: base64,
+            tipo: foto.fase,
+          });
+        } catch {
+          toast.error(`Não foi possível enviar a foto de ${foto.fase}`);
+        }
+      }
+
       setModalNova(false);
       setForm(FORM_VAZIO);
       setResponsaveisNova([]);
+      limparFotosNovas();
       await invalidar();
       toast.success(`O.S. ${res.protocolo} criada`);
     },
@@ -500,13 +638,10 @@ export function ConteudoOrdensServico({
                   {os.etapa && (
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span
-                        className="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                        style={{
-                          color: ETAPA_OS[os.etapa]?.cor ?? "#475569",
-                          backgroundColor: ETAPA_OS[os.etapa]?.fundo ?? "#f1f5f9",
-                        }}
+                        className="text-[11px] font-medium px-2 py-0.5 rounded-full border"
+                        style={estiloEtiqueta(etapaDoFluxo(os.etapa))}
                       >
-                        {ETAPA_OS[os.etapa]?.rotulo ?? os.etapa}
+                        {etapaDoFluxo(os.etapa).rotulo}
                       </span>
                       {os.dataProgramada ? (
                         <span className="text-xs text-slate-500">
@@ -620,7 +755,13 @@ export function ConteudoOrdensServico({
       </main>
 
       {/* Nova O.S. */}
-      <Dialog open={modalNova} onOpenChange={setModalNova}>
+      <Dialog
+        open={modalNova}
+        onOpenChange={(aberto) => {
+          setModalNova(aberto);
+          if (!aberto) limparFotosNovas();
+        }}
+      >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
@@ -707,6 +848,43 @@ export function ConteudoOrdensServico({
                   value={form.endereco}
                   onChange={(e) => setForm({ ...form, endereco: e.target.value })}
                 />
+              </div>
+            </div>
+
+            {/* Antes e depois já na abertura: quem está no local fotografa o
+                problema agora, e o "depois" entra quando o serviço terminar —
+                aqui ou dentro da própria ordem. */}
+            <div className="border rounded-lg p-3 space-y-2">
+              <span className="text-sm font-medium">Fotos de antes e depois</span>
+              <p className="text-xs text-slate-500">
+                A foto do problema é o “antes”. O “depois” pode entrar agora ou quando o serviço
+                for concluído, abrindo a O.S.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {(["antes", "depois"] as const).map((fase) => (
+                  <LadoDaFoto
+                    key={fase}
+                    fase={fase}
+                    fotos={fotosNovas.filter((f) => f.fase === fase)}
+                    onEscolher={(arquivos) => {
+                      if (!arquivos || arquivos.length === 0) return;
+                      const novas = Array.from(arquivos).map((arquivo) => ({
+                        chave: `${fase}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                        fase,
+                        arquivo,
+                        previa: URL.createObjectURL(arquivo),
+                      }));
+                      setFotosNovas((atual) => [...atual, ...novas]);
+                    }}
+                    onRemover={(chave) =>
+                      setFotosNovas((atual) => {
+                        const alvo = atual.find((f) => f.chave === chave);
+                        if (alvo) URL.revokeObjectURL(alvo.previa);
+                        return atual.filter((f) => f.chave !== chave);
+                      })
+                    }
+                  />
+                ))}
               </div>
             </div>
 

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import { TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import { useBuscaInicial } from "@/hooks/useBuscaInicial";
 import {
   ModalAcoesItem,
@@ -335,6 +336,8 @@ function ItensAoVivo({
               size="sm"
               disabled={enviando !== null}
               onClick={() => inputs.current[item.chave]?.click()}
+              className="border"
+              style={estiloEtiqueta(TOM_ANEXO)}
               title="Tirar foto"
               aria-label={`Tirar foto do item ${i + 1}`}
             >
