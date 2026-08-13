@@ -108,35 +108,38 @@ function LadoDaFoto({
 
   return (
     <div className="border rounded-md p-3">
-      <div className="flex items-center justify-between gap-2">
+      {/* Uma linha por fase, ocupando a largura toda: a etiqueta fixa à
+          esquerda e os dois botões dividindo o resto. Espremido em duas
+          colunas, sobravam 118px por lado e o dedo não acertava. */}
+      <div className="flex items-center gap-2">
         <span
-          className="text-xs font-semibold px-2.5 py-1 rounded-full border"
+          className="text-xs font-semibold px-2.5 py-1 rounded-full border shrink-0"
           style={estiloEtiqueta(tom)}
         >
           {tom.rotulo}
         </span>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-1">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="border h-10 px-3.5"
+            className="border h-10 flex-1"
             style={estiloEtiqueta(TOM_ANEXO)}
             onClick={() => camera.current?.click()}
             aria-label={`Tirar foto de ${tom.rotulo.toLowerCase()}`}
           >
-            <Camera className="w-4 h-4" />
+            <Camera className="w-4 h-4 mr-1.5" /> Câmera
           </Button>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="border h-10 px-3.5"
+            className="border h-10 flex-1"
             style={estiloEtiqueta(TOM_ANEXO)}
             onClick={() => galeria.current?.click()}
             aria-label={`Escolher foto de ${tom.rotulo.toLowerCase()} do aparelho`}
           >
-            <ImagePlus className="w-4 h-4" />
+            <ImagePlus className="w-4 h-4 mr-1.5" /> Galeria
           </Button>
         </div>
       </div>
@@ -950,7 +953,7 @@ export function ConteudoOrdensServico({
                 A foto do problema é o “antes”. O “depois” pode entrar agora ou quando o serviço
                 for concluído, abrindo a O.S.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 {(["antes", "depois"] as const).map((fase) => (
                   <LadoDaFoto
                     key={fase}
