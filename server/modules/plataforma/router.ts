@@ -18,6 +18,7 @@ import { router, protectedProcedure } from "../../_core/trpc";
 import { getDb } from "../../db";
 import {
   condominios,
+  funcionarioAcessos,
   usuarioAcessos,
   usuarioCondominios,
   users,
@@ -26,6 +27,48 @@ import { prepararUnidade } from "../../_core/seedUnidade";
 import { SEGMENTOS_VALIDOS } from "../../../shared/modules/registry";
 import { labelsDoSegmento } from "../../../shared/vocabulario";
 import { invalidarCacheTeste } from "../../_core/teste";
+
+/**
+ * O alvo é mesmo um cliente?
+ *
+ * As rotas abaixo recebem um id de usuário. Sem esta conferência, um id errado
+ * — digitado, copiado ou vindo de uma tela desatualizada — bloquearia ou
+ * apagaria a conta da própria plataforma, e o caminho de volta seria pelo
+ * banco. Cliente é quem é dono de pelo menos uma organização.
+ */
+async function exigirCliente(gestorId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [conta] = await db
+    .select({ hierarquia: users.hierarquia })
+    .from(users)
+    .where(eq(users.id, gestorId))
+    .limit(1);
+
+  if (!conta) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Conta não encontrada." });
+  }
+  if (conta.hierarquia === "admin_master") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Esta é uma conta da plataforma, não um cliente.",
+    });
+  }
+
+  const [organizacao] = await db
+    .select({ id: condominios.id })
+    .from(condominios)
+    .where(eq(condominios.sindicoId, gestorId))
+    .limit(1);
+
+  if (!organizacao) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Esta conta não é dona de nenhuma organização.",
+    });
+  }
+}
 
 /** Só a conta da plataforma abre cliente. */
 const plataformaProcedure = protectedProcedure.use(async ({ ctx, next }) => {
@@ -165,7 +208,7 @@ export const plataformaRouter = router({
       const seteDias = new Date(Date.now() - 7 * 86_400_000);
       const trintaDias = new Date(Date.now() - 30 * 86_400_000);
 
-      const linhas = await db
+      const consulta = db
         .select({
           gestorId: users.id,
           gestorNome: users.name,
@@ -181,18 +224,32 @@ export const plataformaRouter = router({
           unidadeId: condominios.id,
           unidadeNome: condominios.nome,
           segmento: condominios.segmento,
-          acessos7: sql<number>`(
+          // Separados de propósito: o do gestor se repete em toda linha (uma
+          // por unidade) e o da equipe é daquela unidade. Somar direto na
+          // consulta contaria o gestor uma vez por unidade.
+          acessosGestor7: sql<number>`(
             SELECT COUNT(*) FROM "usuario_acessos" a
             WHERE a."userId" = ${users.id} AND a."em" >= ${seteDias}
           )`,
-          acessos30: sql<number>`(
+          acessosGestor30: sql<number>`(
             SELECT COUNT(*) FROM "usuario_acessos" a
             WHERE a."userId" = ${users.id} AND a."em" >= ${trintaDias}
           )`,
+          acessosEquipe7: sql<number>`(
+            SELECT COUNT(*) FROM "funcionario_acessos" f
+            WHERE f."condominioId" = ${condominios.id} AND f."dataHora" >= ${seteDias}
+          )`,
+          acessosEquipe30: sql<number>`(
+            SELECT COUNT(*) FROM "funcionario_acessos" f
+            WHERE f."condominioId" = ${condominios.id} AND f."dataHora" >= ${trintaDias}
+          )`,
         })
         .from(condominios)
-        .innerJoin(users, eq(users.id, condominios.sindicoId))
-        .where(input?.incluirExcluidos ? undefined : isNull(users.excluidoEm));
+        .innerJoin(users, eq(users.id, condominios.sindicoId));
+
+      const linhas = input?.incluirExcluidos
+        ? await consulta
+        : await consulta.where(isNull(users.excluidoEm));
 
       const porGestor = new Map<
         number,
@@ -228,12 +285,15 @@ export const plataformaRouter = router({
           motivoBloqueio: l.motivoBloqueio,
           trialAte: l.trialAte,
           excluidoEm: l.excluidoEm,
-          acessos7: Number(l.acessos7),
-          acessos30: Number(l.acessos30),
+          // Gestor entra uma vez na conta; a equipe soma por unidade.
+          acessos7: Number(l.acessosGestor7),
+          acessos30: Number(l.acessosGestor30),
           segmento: l.segmento,
           unidades: [],
         };
         atual.unidades.push({ id: l.unidadeId, nome: l.unidadeNome });
+        atual.acessos7 += Number(l.acessosEquipe7);
+        atual.acessos30 += Number(l.acessosEquipe30);
         porGestor.set(l.gestorId, atual);
       }
 
@@ -253,6 +313,8 @@ export const plataformaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
+
+      await exigirCliente(input.gestorId);
 
       if (input.email) {
         const email = input.email.trim().toLowerCase();
@@ -302,6 +364,8 @@ export const plataformaRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
+      await exigirCliente(input.gestorId);
+
       await db
         .update(users)
         .set({
@@ -322,6 +386,8 @@ export const plataformaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
+
+      await exigirCliente(input.gestorId);
 
       const trialAte =
         input.dias === null ? null : new Date(Date.now() + input.dias * 86_400_000);
@@ -348,6 +414,8 @@ export const plataformaRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
+
+      await exigirCliente(input.gestorId);
 
       await db
         .update(users)

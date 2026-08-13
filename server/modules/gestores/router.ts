@@ -35,7 +35,13 @@ async function assertOrganizacoes(
  * gestores. Sem isto, o gestor de uma unidade poderia redefinir a senha do
  * gestor-chefe, que aparece na lista dele por estar vinculado à mesma unidade.
  */
-async function assertPodeGerenciar(ctx: { user: { id: number } }) {
+async function assertPodeGerenciar(ctx: {
+  user: { id: number };
+  tenant: { isMaster: () => boolean };
+}) {
+  // A plataforma administra qualquer cliente: ela não é dona de organização
+  // nenhuma, então cairia fora desta regra e veria o botão sem poder usar.
+  if (ctx.tenant.isMaster()) return;
   if (!(await podeGerenciarGestores(ctx.user.id))) {
     throw new TRPCError({
       code: "FORBIDDEN",
@@ -69,7 +75,9 @@ export const gestoresRouter = router({
     const db = await getDb();
     if (!db) return [];
 
-    const master = await ehGestorMaster(ctx.user.id);
+    // Plataforma vê todos os gestores das organizações que alcança — que são
+    // todas. Sem isto, a tela de Gestores mostrava só a própria conta dela.
+    const master = ctx.tenant.isMaster() || (await ehGestorMaster(ctx.user.id));
 
     const idsOrg = await ctx.tenant.ids();
     if (idsOrg.length === 0) return [];
