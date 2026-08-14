@@ -1,4 +1,5 @@
-import { BookOpen, Download, MessageCircle } from "lucide-react";
+import { Link } from "wouter";
+import { BookOpen, Download, Tag } from "lucide-react";
 
 /**
  * Arquivos estáticos gerados por `pnpm manual` — não são rotas do app.
@@ -7,26 +8,18 @@ import { BookOpen, Download, MessageCircle } from "lucide-react";
 const PDF = "/manual-app-manutencao.pdf";
 
 /**
- * Manual de instruções na tela de entrada.
+ * Manual de instruções na tela de entrada, com o atalho para os preços ao lado.
  *
  * Fica antes do login de propósito: o público do cliente é idoso, e a dúvida
  * aparece justamente na hora de entrar. Sai como PDF porque o manual precisa
  * viver fora do sistema — vai para o grupo do WhatsApp, fica no celular e
  * continua servindo sem internet, sem ninguém ter que achar a tela de novo.
+ *
+ * O segundo botão era "enviar por WhatsApp", que repetia o botão de suporte
+ * logo abaixo. No lugar dele entrou <b>Preços</b>: quem chega direto no login
+ * nunca passa pela página inicial e não tinha onde ver o valor.
  */
 export function BotaoManual({ className = "" }: { className?: string }) {
-  // Absoluto: o link viaja para outra pessoa, e caminho relativo não abre nada
-  // dentro do WhatsApp.
-  const endereco =
-    typeof window !== "undefined" ? `${window.location.origin}${PDF}` : PDF;
-
-  const mensagem = [
-    "*Manual do App Manutenção*",
-    "Como usar o sistema, passo a passo, com os botões da tela.",
-    "",
-    endereco,
-  ].join("\n");
-
   return (
     <div className={`rounded-lg border border-slate-200 bg-white/70 p-3 ${className}`}>
       <p className="flex items-center gap-2 text-sm font-medium text-slate-700">
@@ -51,17 +44,13 @@ export function BotaoManual({ className = "" }: { className?: string }) {
           Baixar em PDF
         </a>
 
-        {/* wa.me sem número abre a lista de conversas: quem envia escolhe para
-            quem. O arquivo em si não vai por link — vai o endereço do PDF. */}
-        <a
-          href={`https://wa.me/?text=${encodeURIComponent(mensagem)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 rounded-lg border border-[#25D366] bg-white hover:bg-[#25D366]/10 text-[#0f7a3d] text-sm font-medium py-2.5 transition-colors"
+        <Link
+          href="/precos"
+          className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-sm font-medium py-2.5 transition-colors"
         >
-          <MessageCircle className="w-4 h-4" />
-          WhatsApp
-        </a>
+          <Tag className="w-4 h-4" />
+          Preços
+        </Link>
       </div>
     </div>
   );

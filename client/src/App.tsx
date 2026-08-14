@@ -16,6 +16,7 @@ const FuncionarioLogin = lazy(() => import("./pages/FuncionarioLogin"));
 const SindicoLogin = lazy(() => import("./pages/SindicoLogin"));
 const DefinirSenha = lazy(() => import("./pages/DefinirSenha"));
 const Cadastro = lazy(() => import("./pages/Cadastro"));
+const Precos = lazy(() => import("./pages/Precos"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminModulos = lazy(() => import("./pages/AdminModulos"));
 const Manutencoes = lazy(() => import("./pages/Manutencoes"));
@@ -95,6 +96,7 @@ function Router() {
       <Route path="/sindico/login" component={SindicoLogin} />
       <Route path="/definir-senha" component={DefinirSenha} />
       <Route path="/cadastrar" component={Cadastro} />
+      <Route path="/precos" component={Precos} />
       <Route path="/admin">
         <ExigeSenhaDefinida><AdminDashboard /></ExigeSenhaDefinida>
       </Route>
