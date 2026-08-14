@@ -1,6 +1,10 @@
 /**
  * Manual completo do usuário: passo a passo de cada tela, perfil por perfil.
  *
+ * Vale para qualquer cliente do App Manutenção — não para um em particular. Por
+ * isso os perfis aparecem pelo papel (gerente, gestor, funcionário) e nunca por
+ * nome de pessoa, e as palavras que mudam por ramo têm o aviso da parte 1.
+ *
  * Rode com `pnpm manual` depois de mexer em tela que o manual descreve — o
  * comando gera este e o resumo das funções. Casca, CSS e ícones vêm de
  * ./comum.mjs.
@@ -26,9 +30,9 @@ const corpo = `
 <div class="indice">
 <b>O que tem neste manual</b>
 <ul class="lista">
-  <li><a href="#comecar">1. Antes de começar — entrar, senha, sair</a></li>
+  <li><a href="#comecar">1. Antes de começar — criar a conta, entrar, senha, sair</a></li>
   <li><a href="#botoes">2. Os botões que aparecem em todas as telas</a></li>
-  <li><a href="#gerente">3. Gerente (Sr. Francisco)</a></li>
+  <li><a href="#gerente">3. Gerente — a conta principal</a></li>
   <li><a href="#gestor">4. Gestor da unidade</a></li>
   <li><a href="#funcionario">5. Funcionário</a></li>
   <li><a href="#funcoes">6. As funções, uma por uma</a></li>
@@ -39,6 +43,39 @@ const corpo = `
 
 <h2 id="comecar">1. Antes de começar</h2>
 
+${aviso(
+  "As palavras mudam conforme o seu ramo:",
+  `no cadastro você escolhe o ramo, e o sistema ajusta os nomes das telas. Onde este manual
+   escreve <b>unidade</b>, a sua tela pode dizer <b>condomínio</b>, <b>planta</b>, <b>site</b>,
+   <b>oficina</b> ou <b>academia</b>; onde diz <b>gestor</b>, pode dizer <b>síndico</b>,
+   <b>coordenador</b>, <b>encarregado</b> ou <b>supervisor</b>. O que a tela faz é o mesmo.`,
+)}
+
+<h3>${ic("plus")} Criar a sua conta — 7 dias grátis</h3>
+${passos([
+  `Abra <b>appmanutencao.com.br</b> no celular ou no computador e toque em ${bt("Entrar")} .`,
+  `No pé do cartão de entrada, toque em ${bo("Cadastre-se — 7 dias grátis")} .`,
+  `Preencha: <b>Seu nome</b>, <b>E-mail</b> (é com ele que você entra), <b>Telefone</b> (opcional).`,
+  `<b>Nome da empresa ou condomínio</b>: ${campo("Ex: Condomínio Vila Nova")} — vira a sua
+   <b>primeira unidade</b>. Dá para criar outras depois.`,
+  `<b>Ramo</b>: escolha na lista ▾. É o que ajusta o vocabulário das telas.`,
+  `<b>Senha de 6 números</b>: ${campo("• • • • • •")} — o olho ${ic("eye")} mostra o que você digitou.`,
+  `Toque em ${bt("Criar conta e começar")} . O sistema já abre o painel, com a unidade pronta
+   para uso: funções ligadas, categorias, prioridades e andamentos da O.S.`,
+])}
+<p>Essa primeira conta é a do <b>gerente</b> — quem manda em tudo. Gestores e funcionários são
+cadastrados por ela, depois, e não precisam se cadastrar sozinhos.</p>
+
+<h3>${ic("calendar-clock")} Como funciona o teste de 7 dias</h3>
+${lista([
+  `Enquanto o teste corre, uma faixa amarela no alto do painel avisa quantos dias faltam.`,
+  `Vencido o prazo, o sistema <b>continua abrindo</b>: você consulta tudo o que cadastrou, gera
+   PDF e mostra a quem quiser. O que ele recusa é <b>gravar</b> — aparece o recado
+   ${et("Seu teste de 7 dias terminou", "vermelho")} .`,
+  `Vale também para a sua equipe: enquanto o teste estiver vencido, ninguém registra nada.`,
+  `Para continuar, fale com a gente pelo botão do WhatsApp. Nenhum dado é apagado.`,
+])}
+
 <h3>${ic("log-out")} Entrar no sistema</h3>
 ${passos([
   `Abra o site <b>appmanutencao.com.br</b> no celular ou no computador.`,
@@ -46,12 +83,13 @@ ${passos([
   `Em <b>Usuário ou E-mail</b>, digite seu e-mail: ${campo("nome@email.com")}`,
   `Em <b>Senha</b>, digite seus <b>6 números</b>: ${campo("• • • • • •")} — para conferir o que digitou, toque no olho ${ic("eye")} .`,
   `Marque <b>Lembrar e-mail e senha neste dispositivo</b> para não digitar tudo de novo na próxima vez.`,
-  `Toque em ${bt("Entrar")} . Cada pessoa entra pelo mesmo endereço; o sistema já sabe qual tela abrir.`,
+  `Toque em ${bt("Entrar")} . Gerente, gestor e funcionário entram pelo mesmo endereço; o sistema
+   já sabe qual tela abrir.`,
 ])}
 
 <h3>${ic("key-round")} Primeira vez: criar a sua senha</h3>
 ${passos([
-  `A conta nova vem com uma senha temporária, informada por quem cadastrou você.`,
+  `A conta cadastrada por outra pessoa vem com uma senha temporária, informada por quem cadastrou você.`,
   `Ao entrar, abre a tela <b>Crie sua senha</b>.`,
   `Digite <b>6 números</b> em <b>Nova senha</b> e repita em <b>Confirmar senha</b>.`,
   `Toque em ${bt("Salvar e entrar")} .`,
@@ -62,10 +100,15 @@ ${aviso("Atenção:", "enquanto a senha temporária não for trocada, o sistema 
 ${lista([
   `<b>Funcionário:</b> na tela de entrada, toque em <b>Esqueceu a senha?</b>, digite o e-mail do
    login e confirme. Chega um link no e-mail — ele <b>vale 1 hora</b>.`,
-  `<b>Gerente e gestor:</b> peça ao gerente para redefinir (botão ${bg("key-round")} na tela
+  `<b>Gestor:</b> peça ao gerente para redefinir (botão ${bg("key-round")} na tela
    <b>Gestores</b>). A senha volta para a inicial e o sistema pede uma nova no próximo acesso.`,
   `<b>Se o próprio gerente perdeu a senha:</b> fale com o suporte pelo WhatsApp.`,
 ])}
+
+<h3>${ic("ban")} “Não consigo entrar de jeito nenhum”</h3>
+<p>Além de senha errada, existem dois motivos: a <b>unidade está suspensa</b> — e aí ninguém que
+trabalha nela entra, gestor ou equipe — ou o <b>acesso da pessoa foi bloqueado</b> na tela
+Gestores. Nos dois casos os dados continuam guardados; quem libera é o gerente.</p>
 
 <h3>${ic("log-out")} Sair</h3>
 <p>Toque em ${bo("Sair", "log-out")} no canto de cima, à direita. Em computador de uso comum, sempre saia ao terminar.</p>
@@ -84,6 +127,8 @@ ${lista([
 <tr><td>${bo("QR Code", "qr-code")}</td><td><b>Mostrar o código</b> do registro para imprimir e colar no local. Quem aponta a câmera vê o registro sem precisar de senha.</td></tr>
 <tr><td>${bo("Compartilhar", "share-2")}</td><td><b>Enviar por WhatsApp</b> para alguém da equipe, ou ${bo("Copiar", "copy")} o texto.</td></tr>
 <tr><td>${bg("sliders-horizontal")}</td><td><b>Permissões</b> — o que cada funcionário pode ver e fazer.</td></tr>
+<tr><td>${bg("settings")}</td><td><b>Cadastrar sem sair da tela</b>: a engrenagem ao lado de um campo abre o cadastro que falta (equipes, funcionários) e devolve você para onde estava.</td></tr>
+<tr><td>${bg("bell")}</td><td><b>Avisos</b> que o sistema gravou para você — O.S. aberta, equipe designada. Fica no alto do painel.</td></tr>
 <tr><td>${bo("3", "alert-triangle")}</td><td><b>Problemas reportados</b>. O número é a quantidade que ainda espera solução.</td></tr>
 <tr><td>${bg("camera")}</td><td><b>Tirar foto</b> na hora, com a câmera do celular.</td></tr>
 <tr><td>${bg("plus")}</td><td><b>Escolher foto</b> que já está guardada no aparelho.</td></tr>
@@ -95,11 +140,12 @@ ${aviso("Três coisas valem para tudo:", `
 ${et("As alterações são salvas automaticamente", "verde")} no alto da janela.
 <b>3)</b> a foto pode ser tirada no lugar do serviço, direto do celular.`)}
 
-<h2 id="gerente">3. Gerente (Sr. Francisco)</h2>
+<h2 id="gerente">3. Gerente — a conta principal</h2>
 <div class="perfil">
-<p><b>O que o gerente é no sistema:</b> responde por <b>todas as unidades</b>. Vê tudo, cadastra
-gestores e funcionários, e decide o que cada um pode fazer.</p>
-<p class="quem">Na tela de cadastro de gestor, esse papel aparece escrito como
+<p><b>O que o gerente é no sistema:</b> a conta que abriu o cadastro. Responde por <b>todas as
+unidades</b>, vê tudo, cadastra gestores e funcionários e decide o que cada um pode fazer.</p>
+<p class="quem">Na lista <b>Gestores</b> ele aparece com a coroa ${ic("crown")} . Ao cadastrar
+outra pessoa com esse mesmo alcance, o papel na lista se chama
 <b>“Gestor-chefe (várias unidades)”</b> — é a mesma coisa.</p>
 </div>
 
@@ -129,25 +175,28 @@ ${lista([
 <div class="grade">
   <div class="quadro">${ic("building-2")}<b>Organizações</b><span>as unidades — abrir, editar, excluir</span></div>
   <div class="quadro">${ic("user-cog")}<b>Gestores</b><span>responsáveis pelas unidades</span></div>
+  <div class="quadro">${ic("sliders-horizontal")}<b>Configurações</b><span>o que cada unidade usa</span></div>
   <div class="quadro">${ic("users")}<b>Funcionários</b><span>equipe e permissões</span></div>
-  <div class="quadro">${ic("alert-triangle")}<b>Ocorrências</b><span>incidentes com foto e prioridade</span></div>
-  <div class="quadro">${ic("wrench")}<b>Manutenções</b><span>entra aqui para as 9 funções</span></div>
+  <div class="quadro">${ic("users")}<b>Equipes</b><span>times que recebem a O.S.</span></div>
+  <div class="quadro">${ic("wrench")}<b>Manutenções</b><span>entra aqui para as funções do dia a dia</span></div>
 </div>
-<p>Toque no cartão para abrir. O número grande dentro do cartão é a quantidade já cadastrada.</p>
+<p>Toque no cartão para abrir. O número grande dentro do cartão é a quantidade já cadastrada.
+Cartão de função desligada em <b>Configurações</b> não aparece.</p>
 
-<h3>${ic("building-2")} Organizações (as unidades)</h3>
+<h3>${ic("building-2")} Organizações (as suas unidades)</h3>
 ${passos([
   `No painel, toque no cartão <b>Organizações</b>.`,
-  `Para cadastrar: ${bt("Nova", "plus")} → preencha <b>Nome</b>, <b>Endereço</b>, <b>Cidade</b>, <b>UF</b>, <b>CEP</b> → ${bt("Salvar")} .`,
+  `Para cadastrar: ${bt("Nova", "plus")} → preencha <b>Nome</b>, <b>Endereço</b>, <b>Cidade</b>, <b>UF</b>, <b>CEP</b> → ${bt("Salvar")} . A unidade nasce pronta para uso.`,
   `Para corrigir: ${bg("pencil")} no cartão da unidade.`,
-  `Para apagar: ${bd()} e confirme. Só o gerente vê este botão.`,
+  `Para fechar sem apagar: ${bg("ban")} <b>suspender</b>. Ninguém que trabalha nela entra — gestor e equipe — e os dados ficam guardados. O mesmo botão libera de novo.`,
+  `Para apagar: ${bd()} e confirme. Só o gerente vê estes botões.`,
 ])}
 
 <h3>${ic("user-cog")} Gestores</h3>
 ${passos([
   `No painel, toque no cartão <b>Gestores</b>.`,
   `${bt("Novo", "plus")} → <b>Nome</b>, <b>E-mail</b>, <b>Telefone</b>.`,
-  `Em <b>Papel</b>, escolha: <b>Gestor da unidade</b> (cuida de uma) ou <b>Gestor-chefe</b> (cuida de várias — é o caso do gerente).`,
+  `Em <b>Papel</b>, escolha: <b>Gestor da unidade</b> (cuida de uma) ou <b>Gestor-chefe</b> (cuida de várias — é o alcance do gerente).`,
   `Em <b>Unidades</b>, marque as unidades dessa pessoa.`,
   `${bt("Salvar")} . Aparece um aviso verde com a <b>senha inicial</b> — passe para a pessoa; ela troca no primeiro acesso.`,
 ])}
@@ -157,7 +206,7 @@ ${bg("key-round")} redefinir a senha ·
 ${bg("lock")} bloquear o acesso (${bg("lock-open")} para liberar de novo) ·
 ${bd()} excluir.</p>
 ${lista([
-  `A conta marcada com a coroa ${ic("crown")} <b>Gestor master</b> não pode ser bloqueada nem excluída — é a que manda em tudo.`,
+  `A conta com a coroa ${ic("crown")} é a do <b>gerente</b>: não pode ser bloqueada nem excluída — é a que manda em tudo.`,
   `${et("senha provisória", "amarelo")} no cartão quer dizer que a pessoa ainda não criou a senha dela.`,
   `${et("bloqueado", "vermelho")} quer dizer que a pessoa não consegue entrar.`,
 ])}
@@ -185,8 +234,36 @@ ${aviso("Como já nasce:", "toda função vem com <b>Ver</b> e <b>Criar</b> liga
 ${et("sem acesso", "azul")} só cadastrado. Botões: ${bg("sliders-horizontal")} permissões ·
 ${bg("pencil")} editar · ${bd()} excluir.</p>
 
-<h3>${ic("wrench")} Manutenções — a porta das 8 funções</h3>
-<p>No painel, toque no cartão <b>Manutenções</b>. Abre uma tela com nove quadrados:</p>
+<h3>${ic("users")} Equipes de serviço</h3>
+<p>Equipe é um <b>time de funcionários com um supervisor</b>. Serve para designar a O.S. a um
+grupo inteiro, em vez de pessoa por pessoa — o supervisor da equipe recebe o aviso.</p>
+${passos([
+  `No painel, toque no cartão <b>Equipes</b>.`,
+  `${bt("Nova", "plus")} → dê o <b>nome</b> da equipe, escolha o <b>supervisor</b> e marque os <b>membros</b>.`,
+  `${bt("Salvar")} . A equipe passa a aparecer no campo <b>Equipe designada</b> da O.S.`,
+])}
+${aviso(
+  "Dá para cadastrar sem sair da O.S.:",
+  `na abertura da ordem, a engrenagem ${bg("settings")} ao lado de <b>Equipe designada</b> abre
+   esta mesma tela por cima, e o que você já digitou na O.S. não se perde.`,
+)}
+
+<h3>${ic("sliders-horizontal")} Configurações — ligar e desligar funções</h3>
+${passos([
+  `No painel, toque no cartão <b>Configurações</b>.`,
+  `Escolha a unidade no seletor ${campo("Organização ▾")} .`,
+  `A lista vem separada por assunto. Cada função tem uma chave: ligada, ela aparece no sistema; desligada, some do painel, do portal do funcionário e do calendário.`,
+  `Para valer para a rede inteira, marque <b>Aplicar a todas as organizações</b>.`,
+  `${bt("Salvar")} .`,
+])}
+${aviso(
+  "Comece desligando o que não usa:",
+  `a conta nova vem com o sistema inteiro ligado. Menos função na tela é menos dúvida para a
+   equipe — e ligar de volta leva dois toques.`,
+)}
+
+<h3>${ic("wrench")} Manutenções — a porta das funções do dia a dia</h3>
+<p>No painel, toque no cartão <b>Manutenções</b>. Abre uma tela de quadrados:</p>
 <div class="grade">
   <div class="quadro">${ic("calendar-days")}<b>Calendário</b><span>tudo com data, num mês só</span></div>
   <div class="quadro">${ic("clipboard-list")}<b>Ordens de Serviço</b><span>abertura, execução, conclusão</span></div>
@@ -196,6 +273,7 @@ ${bg("pencil")} editar · ${bd()} excluir.</p>
   <div class="quadro">${ic("eye")}<b>Vistorias</b><span>inspeção item por item</span></div>
   <div class="quadro">${ic("columns-3")}<b>Quadro de Atividades</b><span>colunas do que está andando</span></div>
   <div class="quadro">${ic("qr-code")}<b>QR Code</b><span>etiqueta no local, registro pela câmera</span></div>
+  <div class="quadro">${ic("alert-triangle")}<b>Ocorrências</b><span>incidente com foto e prioridade</span></div>
   <div class="quadro">${ic("wrench")}<b>Registro de Manutenções</b><span>o que já foi registrado</span></div>
 </div>
 <p>O passo a passo de cada uma está na <a href="#funcoes">parte 6</a>.</p>
@@ -209,15 +287,15 @@ ${passos([
 ${aviso("Importante:", "os números do painel são sempre <b>de uma unidade só</b> — a que está escolhida. Não existe soma de todas as unidades numa tela.")}
 
 ${so("gerente (não aparece para os gestores de unidade)", `
-criar e excluir unidade ·
+criar, suspender e excluir unidade ·
 criar gestor, redefinir a senha de um gestor, bloquear e excluir gestor ·
 ver a equipe inteira de cada unidade ·
-ligar e desligar funções da unidade (tela <b>Módulos</b>, aberta digitando o endereço
-<b>appmanutencao.com.br/admin/modulos</b>).`)}
+ligar e desligar funções no cartão <b>Configurações</b> ·
+programar a data da O.S. direto pelo calendário.`)}
 
 <h2 id="gestor">4. Gestor da unidade</h2>
 <div class="perfil">
-<p><b>O que é:</b> responde por <b>uma unidade</b>. A tela é a mesma do gerente e as 8 funções
+<p><b>O que é:</b> responde por <b>uma unidade</b>. A tela é a mesma do gerente e as funções
 são as mesmas — só que tudo o que ele vê é da sua unidade.</p>
 </div>
 
@@ -225,15 +303,17 @@ são as mesmas — só que tudo o que ele vê é da sua unidade.</p>
 ${lista([
   `Vê a faixa <b>Chamados em aberto</b> e entra em qualquer função pelo cartão <b>Manutenções</b>.`,
   `Cadastra e edita <b>funcionários</b> da unidade e define as <b>permissões</b> de cada um.`,
-  `Cria, acompanha, finaliza, gera PDF e compartilha em todas as funções.`,
+  `Monta as <b>equipes de serviço</b> da unidade.`,
+  `Cria, acompanha, programa, finaliza, gera PDF e compartilha em todas as funções.`,
   `Reabre O.S. finalizada e responde os registros que chegam pelo QR Code.`,
 ])}
 
 <h3>O que não aparece para ele</h3>
 ${lista([
   `Em <b>Gestores</b>: o botão ${bt("Novo", "plus")} e os botões ${bg("key-round")} ${bg("lock")} ${bd()} . Ele vê apenas a própria conta na lista.`,
-  `Em <b>Organizações</b>: os botões ${bt("Nova", "plus")} e ${bd()} — ele vê só a unidade dele.`,
-  `A tela <b>Módulos</b>, que liga e desliga funções da unidade.`,
+  `Em <b>Organizações</b>: os botões ${bt("Nova", "plus")} , ${bg("ban")} e ${bd()} — ele vê só a unidade dele.`,
+  `O cartão <b>Configurações</b>, que liga e desliga funções da unidade.`,
+  `O botão de <b>programar a data pelo calendário</b> — pela própria O.S., ele programa.`,
 ])}
 ${aviso(
   "O gestor faz, sim:",
@@ -245,7 +325,7 @@ ${aviso("Sobre a lista de funcionários:", "o gestor de unidade vê na lista <b>
 <h2 id="funcionario">5. Funcionário</h2>
 <div class="perfil">
 <p><b>O que é:</b> quem executa e registra o serviço, normalmente pelo celular.
-Ele vê <b>somente as funções que o gerente liberou</b> para ele.</p>
+Ele vê <b>somente as funções que o gestor liberou</b> para ele.</p>
 </div>
 
 <h3>${ic("users")} A tela que abre depois de entrar</h3>
@@ -266,13 +346,14 @@ ${passos([
   `Faça o registro (o passo a passo está na <a href="#funcoes">parte 6</a>).`,
   `Para voltar aos cartões, toque em ${bg("arrow-left")} no canto de cima.`,
 ])}
-${aviso("Não aparece nenhum cartão?", "o gerente ainda não liberou funções para você. Fale com ele.")}
+${aviso("Não aparece nenhum cartão?", "o gestor ainda não liberou funções para você. Fale com ele.")}
 ${aviso("Trabalha em mais de uma unidade?", "a primeira tela mostra a lista de unidades. Toque na sua unidade para continuar.")}
 
 <h3>O que o funcionário não faz</h3>
 ${lista([
   `Não vê outras unidades, nem a equipe, nem gestores.`,
-  `Não <b>reabre</b> uma O.S. finalizada — isso é do gestor.`,
+  `Não <b>programa a data</b> nem <b>designa a equipe</b> da O.S. — isso é de quem responde pela unidade.`,
+  `Não <b>reabre</b> uma O.S. finalizada.`,
   `Só <b>exclui</b> se o gestor tiver ligado essa chave para ele.`,
   `Se a chave <b>Criar</b> estiver desligada, a tela abre <b>só para consulta</b>: aparece a lista, não aparece o formulário.`,
 ])}
@@ -302,29 +383,54 @@ ${passos([
   `Na tela cheia, os botões redondos filtram por função: <b>Vencimentos</b>, <b>Manutenções</b>,
    <b>Checklists</b>, <b>Vistorias</b>, <b>Tarefas</b>, <b>Atividades</b>.`,
 ])}
+${so("gerente", `${bo("Programar data", "calendar-clock")} na linha da Ordem de Serviço: ele marca o
+dia e quem executa <b>sem abrir a ordem</b>, uma depois da outra. O gestor da unidade faz o mesmo
+dentro da própria O.S.`)}
 ${aviso(
   "O que entra no calendário:",
   `a data de vencimento dos <b>vencimentos</b>; a data agendada de <b>manutenções</b>,
    <b>vistorias</b> e <b>checklists</b>; as <b>tarefas</b> — inclusive as que se repetem, que
-   aparecem em cada dia em que caem; e as <b>atividades</b> do quadro com data marcada.
-   e as <b>ordens de serviço</b>, pelo dia programado — ou pela data máxima, enquanto o
-   gerente não programou.`,
+   aparecem em cada dia em que caem; as <b>atividades</b> do quadro com data marcada;
+   e as <b>ordens de serviço</b>, pelo dia programado — ou pela data máxima, enquanto ninguém
+   programou. Só aparecem as funções ligadas para a unidade.`,
 )}
 `)}
 
 ${func("f-os", "clipboard-list", "Ordens de Serviço (O.S.)", "Gerente, gestor e funcionário com a função liberada. É a função mais completa: use quando o serviço tem começo, meio e fim.", `
 <h4>Abrir uma O.S.</h4>
+<p>O formulário vem em três blocos. Toque em ${bt("Nova O.S.", "plus")} , no canto de cima.</p>
+<h4>Bloco 1 — O chamado</h4>
 ${passos([
-  `Toque em ${bt("Nova O.S.", "plus")} , no canto de cima.`,
+  `<b>Unidade de atendimento</b>: quem cuida de várias escolhe na lista ▾ para onde vai a ordem.
+   Quem cuida de uma só vê o nome dela escrito.`,
+  `<b>Responsável pela abertura</b>: ${campo("Quem pediu o serviço")} — em branco, fica o seu nome.`,
   `<b>Título</b>: ${campo("Ex: Manutenção do elevador")}`,
   `<b>Descrição</b>: conte o problema com detalhe.`,
-  `<b>Categoria</b>, <b>Prioridade</b> e <b>Status inicial</b>: escolha nas listas ▾.`,
-  `<b>Local</b>: ${campo("Ex: Bloco A - 3º andar")}`,
-  `<b>Fotos de antes e depois</b>: já na abertura, dois lados com câmera e galeria. A foto do
-   problema é o “antes”; o “depois” pode entrar agora ou quando o serviço terminar.`,
-  `<b>Responsáveis pela O.S.</b>: marque uma ou mais pessoas da equipe.`,
-  `Toque em ${bt("Criar Ordem de Serviço", "plus")} . Aparece o aviso com o número: <b>O.S. OS-260810-0042 criada</b>.`,
 ])}
+<h4>Bloco 2 — Prazos e execução</h4>
+${passos([
+  `<b>Data de abertura do chamado</b>: já vem com hoje. Se o pedido chegou antes, troque — pode ser data anterior.`,
+  `<b>Data máxima de finalização</b>: <b>obrigatória</b>. É o prazo combinado, e é ele que coloca a ordem no calendário.`,
+  `<b>Equipe designada</b>: escolha na lista ▾. O <b>supervisor</b> da equipe recebe o aviso com a ordem.
+   Falta a equipe na lista? A engrenagem ${bg("settings")} ao lado cadastra na hora.`,
+  `<b>Responsáveis pela O.S.</b>: marque uma ou mais pessoas. A engrenagem ${bg("settings")} cadastra funcionário sem sair daqui.`,
+])}
+<h4>Bloco 3 — Detalhes</h4>
+${passos([
+  `<b>Categoria</b> e <b>Prioridade</b>: escolha nas listas ▾. A unidade já nasce com as duas listas prontas (Elétrica, Hidráulica, Limpeza… / Baixa, Normal, Alta, Urgente).`,
+  `<b>Status inicial</b>: normalmente <b>Aguardando início</b>.`,
+  `<b>Local</b>: ${campo("Ex: Bloco A - 3º andar, sala da caldeira")} — é o que faz a equipe achar o serviço sem telefonar.`,
+  `<b>Fotos de antes e depois</b>: dois lados, com câmera e galeria. A foto do problema é o “antes”;
+   o “depois” pode entrar agora ou quando o serviço terminar.`,
+  `<b>Observações adicionais</b>: acesso, horário, contato no local.`,
+  `Toque em ${bt("Criar Ordem de Serviço", "plus")} , no rodapé fixo. Aparece o aviso com o número: <b>O.S. OS-260810-0042 criada</b>.`,
+])}
+${aviso(
+  "Avisar a equipe ao abrir:",
+  `no fim do formulário, <b>Envio automático para funcionários</b> manda notificação no aplicativo
+   para a equipe da unidade a cada O.S. aberta; abaixo dele, marque <b>quem recebe por e-mail</b> —
+   fica salvo até desmarcar. É configuração de quem responde pela unidade.`,
+)}
 ${aviso(
   "No relatório em PDF:",
   `as fotos saem <b>lado a lado</b> — coluna ANTES à esquerda, DEPOIS à direita, uma linha por
@@ -340,6 +446,10 @@ ${lista([
 <h4>Dentro da O.S. — toque em ${bo("Abrir O.S.")}</h4>
 ${passos([
   `No alto: o <b>protocolo</b>, o <b>QR Code</b> da O.S. e ${bo("Baixar PDF", "printer")} .`,
+  `<b>Datas e execução:</b> o <b>prazo máximo</b> (com <b>corrigir</b> ao lado, se errou na abertura),
+   o dia <b>programado</b> e quem executa.`,
+  `Em <b>Programar o serviço</b>: escolha a data, marque <b>quem vai fazer</b> e toque em
+   ${bt("Programar", "calendar-clock")} . Quem não for marcado continua como está.`,
   `${bo("Iniciar serviço", "play")} — marca a hora em que o trabalho começou.`,
   `<b>Fotos:</b> escolha a fase ${campo("Antes ▾")} (Antes, Durante, Depois) e toque em ${bg("camera")} para fotografar ou ${bg("plus")} para pegar do aparelho. Antes e Depois ficam lado a lado. O seletor muda de cor conforme a fase — âmbar no Antes, verde no Depois.`,
   `<b>Anexos:</b> ${bo("Anexar arquivo")} para orçamento, nota, laudo.`,
@@ -349,7 +459,7 @@ ${passos([
   `<b>Avaliação:</b> toque nas estrelas ${ic("star")} , escreva um comentário se quiser, e ${bt("Avaliar")} .`,
 ])}
 ${aviso("Não procure o botão salvar:", "aqui tudo grava na hora. No alto fica escrito <b>As alterações são salvas automaticamente</b> e, depois de cada gravação, <b>Salvo às 14:32</b>.")}
-${so("gestor", `${bo("Reabrir", "rotate-ccw")} , que só aparece depois de finalizada. O sistema pergunta
+${so("gerente e gestor", `${bo("Reabrir", "rotate-ccw")} , que só aparece depois de finalizada. O sistema pergunta
 <b>por que</b> está reabrindo, e o motivo entra no histórico.`)}
 
 <h4>Como a O.S. anda, do começo ao fim</h4>
@@ -360,18 +470,13 @@ ${passos([
    sistema não aceita, porque é o prazo que coloca a ordem no calendário.`,
   `A ordem nasce em ${et("Aguardando início", "azul")} e já aparece no calendário na data máxima.`,
   `<b>Quem responde pela unidade programa o dia:</b> abre a O.S., usa <b>Programar o serviço</b> e
-   marca quem executa. Dá no mesmo tocar no item pelo calendário e usar
+   marca quem executa. Para o gerente dá no mesmo tocar no item pelo calendário e usar
    ${bo("Programar data", "calendar-clock")} , uma ordem depois da outra.`,
   `<b>A equipe executa</b> e a ordem passa para ${et("Em execução", "laranja")} .`,
   `<b>No fim:</b> ${et("Finalizada parcialmente", "amarelo")} quando parte do serviço ficou para
    depois, ou ${et("Finalizada totalmente", "verde")} quando acabou.`,
   `${bo("Finalizar serviço", "check-circle-2")} encerra a ordem e guarda o tempo total.`,
 ])}
-${aviso(
-  "Equipe designada:",
-  `marque a equipe na abertura ou dentro da O.S. O <b>supervisor</b> daquela equipe recebe o aviso
-   com a ordem — por isso vale manter as equipes montadas em <b>Equipes</b>.`,
-)}
 ${aviso(
   "Onde ver o que falta:",
   `na faixa <b>Chamados em aberto</b>, no painel. Cada linha leva direto à lista da função.`,
@@ -531,7 +636,7 @@ ${aviso(
 
 ${func("f-ocor", "alert-triangle", "Ocorrências", "Gerente, gestor e funcionário com a função liberada. O registro rápido de um problema ou incidente.", `
 ${passos([
-  `Abra <b>Ocorrências</b> (cartão do painel ou do portal).`,
+  `Abra <b>Manutenções → Ocorrências</b> (no portal do funcionário, o cartão <b>Ocorrências</b>).`,
   `No formulário: <b>Título</b>, <b>Descrição</b>, <b>Localização</b>.`,
   `<b>Prioridade</b>: toque em Baixa, Média, Alta ou Urgente.`,
   `${ic("image-plus")} <b>Anexar imagens</b> — pode ser a foto tirada na hora.`,
@@ -540,26 +645,37 @@ ${passos([
 ])}
 `)}
 
+${func("f-equipes", "users", "Equipes de Serviço", "Gerente e gestor. O time que recebe a O.S. designada, com um supervisor avisado a cada ordem.", `
+${passos([
+  `Painel → cartão <b>Equipes</b> — ou a engrenagem ${bg("settings")} ao lado de <b>Equipe designada</b>, na abertura da O.S.`,
+  `${bt("Nova", "plus")} → <b>nome</b> da equipe, <b>supervisor</b> e <b>membros</b> (as pessoas já cadastradas em Funcionários).`,
+  `${bt("Salvar")} .`,
+  `Na O.S., escolha a equipe em <b>Equipe designada</b>: o supervisor recebe o aviso com a ordem.`,
+])}
+${aviso("Se você não usa equipes:", "desligue a função em <b>Configurações</b>. O campo <b>Equipe designada</b> some da O.S. e o aviso ao supervisor deixa de existir.")}
+`)}
+
 <h2 id="quemve">7. Quem vê o quê</h2>
 <table>
 <tr>
   <th>O que é</th>
-  <th class="c">Gerente<br><span style="font-weight:400">(Sr. Francisco)</span></th>
+  <th class="c">Gerente<br><span style="font-weight:400">(conta principal)</span></th>
   <th class="c">Gestor da<br>unidade</th>
   <th class="c">Funcionário</th>
 </tr>
 <tr><td>Todas as unidades</td><td class="c sim">sim</td><td class="c nao">só a dele</td><td class="c nao">só a dele</td></tr>
 <tr><td>Faixa <b>Chamados em aberto</b></td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
-<tr><td>As 8 funções de manutenção</td><td class="c sim">todas</td><td class="c sim">todas</td><td class="c">só as liberadas</td></tr>
-<tr><td>Criar e excluir unidade</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>As funções de manutenção</td><td class="c sim">todas</td><td class="c sim">todas</td><td class="c">só as liberadas</td></tr>
+<tr><td>Criar, suspender e excluir unidade</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
 <tr><td>Criar gestor / redefinir senha / bloquear</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
 <tr><td>Cadastrar funcionário e dar permissões</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Montar equipes de serviço</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
 <tr><td>Programar a data e quem executa</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
-<tr><td>Designar a equipe da O.S.</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
+<tr><td>Programar pelo calendário, sem abrir a O.S.</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
 <tr><td>Mudar o andamento e finalizar</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c">se liberado</td></tr>
 <tr><td>Reabrir O.S. finalizada</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
 <tr><td>Excluir registro</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c">só se liberado</td></tr>
-<tr><td>Ligar e desligar funções (Módulos)</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
+<tr><td>Ligar e desligar funções (Configurações)</td><td class="c sim">sim</td><td class="c nao">não</td><td class="c nao">não</td></tr>
 <tr><td>Calendário de todas as datas</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c nao">não</td></tr>
 <tr><td>Gerar PDF e compartilhar</td><td class="c sim">sim</td><td class="c sim">sim</td><td class="c sim">sim</td></tr>
 </table>
@@ -573,6 +689,14 @@ Dentro da <b>Ordem de Serviço</b> não tem botão: grava sozinho.</p>
 <h4>Onde vejo o número do registro?</h4>
 <p>Sempre no alto do cartão, com o desenho ${ic("hash")} . É o <b>protocolo</b> — use ele para procurar
 ${ic("search")} , para citar no WhatsApp e para trazer o registro ao Quadro de Atividades.</p>
+
+<h4>Uma função sumiu da tela.</h4>
+<p>Ela foi desligada em <b>Configurações</b>, ou a chave <b>Ver</b> daquela pessoa está desligada
+em Funcionários. As duas voltam em dois toques.</p>
+
+<h4>O sistema não deixa mais gravar nada.</h4>
+<p>É o <b>teste de 7 dias vencido</b>: consulta continua liberada, gravação não. Fale com a gente
+pelo WhatsApp — nada é apagado.</p>
 
 <h4>Como envio para alguém?</h4>
 <p>${bo("Compartilhar", "share-2")} → a lista mostra as pessoas da equipe com WhatsApp cadastrado.

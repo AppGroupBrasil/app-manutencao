@@ -41,6 +41,7 @@
   .et-amarelo{background:#fef3c7;color:#92400e}
   .et-vermelho{background:#fee2e2;color:#991b1b}
   .et-azul{background:#dbeafe;color:#1e40af}
+  .et-laranja{background:#ffedd5;color:#9a3412}
   .aviso{background:#fff7ed;border-left:5px solid var(--laranja);padding:12px 14px;
      border-radius:10px;margin:12px 0;font-size:18px}
   .so{background:#eef2ff;border-left:5px solid #4f46e5;padding:12px 14px;
@@ -128,7 +129,7 @@
 
 <h2>2. As cores</h2>
 <ul class="lista"><li><span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#c62828"></span>
-   <b>Vermelho — passou do prazo.</b> A data já venceu e ninguém deu baixa nem registrou.</li><li><span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#e0a800"></span>
+   <b>Vermelho — passou do prazo.</b> A data já venceu e ninguém registrou a conclusão.</li><li><span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#e0a800"></span>
    <b>Amarelo — está chegando.</b> Vence <b>hoje ou nos próximos 7 dias</b>.</li><li><span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#2e7d32"></span>
    <b>Verde — dentro do prazo.</b> Ainda há tempo.</li><li><span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#94a3b8"></span>
    <b>Cinza — já resolvido.</b> Continua no calendário como histórico.</li></ul>
@@ -148,8 +149,9 @@ protocolo</b> e quanto falta (ou quanto passou) do prazo.</p>
    procurar numa lista grande.</li><li>Se for uma <b>Ordem de Serviço</b>, abre a própria ordem, com fotos, histórico e botões.</li></ol>
 
 <h2>5. Programar e redistribuir o serviço</h2>
-<div class="so"><b>Só o gerente:</b> este passo. O gestor da unidade e a equipe não veem estes botões — quem distribui a agenda é
-   uma pessoa só.</div>
+<div class="so"><b>Só o gerente:</b> este passo <b>pelo calendário</b>: é ele que distribui a agenda da rede, uma ordem depois da
+   outra. O gestor da unidade programa da mesma forma, mas <b>dentro da própria O.S.</b>; a equipe
+   não programa nada.</div>
 <ol class="passos"><li>Toque no dia e depois no item da Ordem de Serviço.</li><li>Toque em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-calendar-clock"/></svg>Programar data</span> — ou em <b>Reprogramar</b>, se já tiver
    data.</li><li>Escolha a <b>data</b> em que o serviço vai ser feito: <span class="campo">dd/mm/aaaa</span></li><li>Em <b>Quem vai fazer o serviço</b>, marque as pessoas da equipe.</li><li>Toque em <span class="bt bt-p"><svg class="ic" aria-hidden="true"><use href="#i-calendar-clock"/></svg>Salvar data e equipe</span> . A janela fecha e você já pode
    abrir o próximo dia.</li></ol>
@@ -173,7 +175,7 @@ entra — é o caso das ocorrências e dos registros recebidos por QR Code.</p>
 <b>Todas as funções</b> para limpar o filtro.</p>
 
 <h4>O dia está vermelho, mas o serviço já foi feito.</h4>
-<p>O item só fica cinza quando o sistema recebe a baixa: <span class="et et-verde">O.S. finalizada</span> ,
+<p>O item só fica cinza quando o sistema recebe o registro de conclusão: <span class="et et-verde">O.S. finalizada</span> ,
 vencimento com <b>Antes e depois</b> registrado, tarefa com <b>execução registrada</b>, checklist,
 vistoria ou manutenção com data de realização. Registre a baixa e a cor muda.</p>
 
@@ -182,8 +184,8 @@ vistoria ou manutenção com data de realização. Registre a baixa e a cor muda
 no calendário de novo.</p>
 
 <h4>Não vejo o botão de programar.</h4>
-<p>Ele é só do gerente, e só aparece em Ordem de Serviço da unidade que usa o fluxo com prazo e
-confirmação de baixa.</p>
+<p>No calendário ele é só do gerente, e só aparece na linha de uma <b>Ordem de Serviço</b> que
+ainda não foi concluída. Sendo gestor da unidade, abra a O.S. e programe por dentro dela.</p>
 
 <h4>Preciso de ajuda.</h4>
 <p>Balão verde <svg class="ic" aria-hidden="true"><use href="#i-message-circle"/></svg> no canto da tela, ou <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-message-circle"/></svg>Fale com suporte</span>

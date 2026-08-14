@@ -53,7 +53,7 @@ ${aviso(
 <h2>2. As cores</h2>
 ${lista([
   `<span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#c62828"></span>
-   <b>Vermelho — passou do prazo.</b> A data já venceu e ninguém deu baixa nem registrou.`,
+   <b>Vermelho — passou do prazo.</b> A data já venceu e ninguém registrou a conclusão.`,
   `<span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#e0a800"></span>
    <b>Amarelo — está chegando.</b> Vence <b>hoje ou nos próximos 7 dias</b>.`,
   `<span style="display:inline-block;width:11px;height:11px;border-radius:99px;background:#2e7d32"></span>
@@ -89,8 +89,9 @@ ${passos([
 <h2>5. Programar e redistribuir o serviço</h2>
 ${so(
   "gerente",
-  `este passo. O gestor da unidade e a equipe não veem estes botões — quem distribui a agenda é
-   uma pessoa só.`,
+  `este passo <b>pelo calendário</b>: é ele que distribui a agenda da rede, uma ordem depois da
+   outra. O gestor da unidade programa da mesma forma, mas <b>dentro da própria O.S.</b>; a equipe
+   não programa nada.`,
 )}
 ${passos([
   `Toque no dia e depois no item da Ordem de Serviço.`,
@@ -135,7 +136,7 @@ entra — é o caso das ocorrências e dos registros recebidos por QR Code.</p>
 <b>Todas as funções</b> para limpar o filtro.</p>
 
 <h4>O dia está vermelho, mas o serviço já foi feito.</h4>
-<p>O item só fica cinza quando o sistema recebe a baixa: ${et("O.S. finalizada", "verde")} ,
+<p>O item só fica cinza quando o sistema recebe o registro de conclusão: ${et("O.S. finalizada", "verde")} ,
 vencimento com <b>Antes e depois</b> registrado, tarefa com <b>execução registrada</b>, checklist,
 vistoria ou manutenção com data de realização. Registre a baixa e a cor muda.</p>
 
@@ -144,8 +145,8 @@ vistoria ou manutenção com data de realização. Registre a baixa e a cor muda
 no calendário de novo.</p>
 
 <h4>Não vejo o botão de programar.</h4>
-<p>Ele é só do gerente, e só aparece em Ordem de Serviço da unidade que usa o fluxo com prazo e
-confirmação de baixa.</p>
+<p>No calendário ele é só do gerente, e só aparece na linha de uma <b>Ordem de Serviço</b> que
+ainda não foi concluída. Sendo gestor da unidade, abra a O.S. e programe por dentro dela.</p>
 
 <h4>Preciso de ajuda.</h4>
 <p>Balão verde ${ic("message-circle")} no canto da tela, ou ${bo("Fale com suporte", "message-circle")}

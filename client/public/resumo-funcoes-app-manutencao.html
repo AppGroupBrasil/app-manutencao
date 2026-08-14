@@ -41,6 +41,7 @@
   .et-amarelo{background:#fef3c7;color:#92400e}
   .et-vermelho{background:#fee2e2;color:#991b1b}
   .et-azul{background:#dbeafe;color:#1e40af}
+  .et-laranja{background:#ffedd5;color:#9a3412}
   .aviso{background:#fff7ed;border-left:5px solid var(--laranja);padding:12px 14px;
      border-radius:10px;margin:12px 0;font-size:18px}
   .so{background:#eef2ff;border-left:5px solid #4f46e5;padding:12px 14px;
@@ -116,6 +117,7 @@
 <symbol id="i-columns-3" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
 <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
 <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
 <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
 <symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
 <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol></svg>
@@ -127,7 +129,7 @@
 <p class="sub">O que cada função faz, onde ela fica, quem envia para quem e quem vê o quê. Os botões são só ilustração — os de verdade estão na tela.</p>
 
 <div class="perfil">
-<p class="lin"><b>Gerente (Sr. Francisco):</b> responde por todas as unidades; cadastra gestores e funcionários e decide o que cada um vê.</p>
+<p class="lin"><b>Gerente (a conta principal):</b> responde por todas as unidades; cadastra gestores e funcionários e decide o que cada um vê.</p>
 <p class="lin"><b>Gestor da unidade:</b> mesma tela e as mesmas funções, só da unidade dele.</p>
 <p class="lin"><b>Funcionário:</b> vê apenas as funções liberadas para ele, normalmente pelo celular.</p>
 </div>
@@ -162,14 +164,16 @@
   <p class="lin"><b>Faz:</b> o serviço que tem começo, meio e fim: protocolo, responsáveis, fotos de antes,
     durante e depois, anexos, histórico e nota no final.</p>
   <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Ordens de Serviço</b> · no portal do funcionário, cartão <b>Ordens de Serviço</b>.</p>
-  <p class="lin"><b>Vai de quem para quem:</b> quem abre marca os <b>responsáveis</b> → a equipe da unidade recebe <b>aviso no
-    aplicativo</b> (se o gestor ligou o envio automático) e <b>e-mail</b> quem estiver marcado
-    para receber → o responsável <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Iniciar serviço</span> , registra as fotos e
+  <p class="lin"><b>Vai de quem para quem:</b> quem precisa do serviço abre a ordem com a <b>data máxima</b> (obrigatória) e marca os
+    <b>responsáveis</b> e a <b>equipe designada</b> → a equipe recebe <b>aviso no aplicativo</b>
+    (se o gestor ligou o envio automático), o <b>supervisor da equipe</b> recebe o dele e vai
+    <b>e-mail</b> para quem estiver marcado → quem responde pela unidade <b>programa o dia</b> e
+    quem executa → o responsável <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Iniciar serviço</span> , registra as fotos e
     <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Finalizar serviço</span> → o gestor confere, dá a nota e, se precisar,
     <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg>Reabrir</span> escrevendo o motivo.
-    <br><b>Na unidade com o fluxo do gerente:</b> o gestor abre com <b>data máxima</b> → o gerente
-    programa o dia e a equipe → a equipe <b>dá baixa</b> → o gestor <b>confirma</b> (ou devolve com
-    motivo) → o gerente <b>finaliza</b>.</p>
+    <br><b>Andamento:</b> <span class="et et-azul">Aguardando início</span> → <span class="et et-laranja">Em execução</span> →
+    <span class="et et-amarelo">Finalizada parcialmente</span> ou <span class="et et-verde">Finalizada totalmente</span> —
+    <b>Cancelada</b> é para a ordem aberta por engano.</p>
   <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
   Sem a chave <b>Criar</b>, a tela abre só para consulta. Quem recebe o QR ou o link vê aquela O.S. <b>sem entrar no sistema</b>.
     Reabrir é só de gerente e gestor.</p>
@@ -273,11 +277,24 @@
 <section class="fn compacta">
   <h3><svg class="ic" aria-hidden="true"><use href="#i-alert-triangle"/></svg> Ocorrências</h3>
   <p class="lin"><b>Faz:</b> o registro rápido de um incidente: título, local, prioridade e foto.</p>
-  <p class="lin"><b>Fica em:</b> <b>Painel → cartão Ocorrências</b> · no portal do funcionário, cartão <b>Ocorrências</b>.</p>
+  <p class="lin"><b>Fica em:</b> Painel → <svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg> <b>Manutenções</b> → <b>Ocorrências</b> · no portal do funcionário, cartão <b>Ocorrências</b>.</p>
   <p class="lin"><b>Vai de quem para quem:</b> quem viu registra na hora, do celular → o registro entra na lista da unidade → o gestor
     (ou quem tem a função) toca em <span class="bt bt-o"><svg class="ic" aria-hidden="true"><use href="#i-check-circle-2"/></svg>Finalizar</span> quando o caso é resolvido.</p>
   <p class="lin"><b>Vê:</b> gerente, gestor da unidade e funcionário com a chave <b>Ver</b> ligada.
   Sem a chave <b>Criar</b>, a tela abre só para consulta.</p>
+</section>
+
+
+<section class="fn compacta">
+  <h3><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg> Equipes de Serviço</h3>
+  <p class="lin"><b>Faz:</b> times de funcionários com um <b>supervisor</b>, para designar a O.S. ao grupo em vez de
+    pessoa por pessoa.</p>
+  <p class="lin"><b>Fica em:</b> <b>Painel → cartão Equipes</b> · ou pela engrenagem ao lado de <b>Equipe designada</b>,
+    na abertura da O.S.</p>
+  <p class="lin"><b>Vai de quem para quem:</b> o gestor monta a equipe → na O.S., escolhe a equipe em <b>Equipe designada</b> → o
+    <b>supervisor</b> recebe o aviso com a ordem.</p>
+  <p class="lin"><b>Vê:</b> <b>só gerente e gestor</b>. Desligada a função, o campo some da O.S. e o aviso ao supervisor
+    deixa de existir.</p>
 </section>
 
 <h2>Para onde vai cada aviso</h2>
@@ -285,8 +302,9 @@
 <tr><th style="width:210px">Caminho</th><th>Quando sai</th><th style="width:230px">Para quem</th></tr>
 <tr>
   <td><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg> Aviso no aplicativo</td>
-  <td>ao abrir uma Ordem de Serviço, se o gestor ligou o <b>envio automático</b></td>
-  <td>equipe da unidade</td>
+  <td>ao abrir uma Ordem de Serviço, se o gestor ligou o <b>envio automático</b>; e sempre que uma
+      <b>equipe é designada</b></td>
+  <td>equipe da unidade · supervisor da equipe designada</td>
 </tr>
 <tr>
   <td><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg> E-mail</td>
@@ -363,6 +381,11 @@
   <td class="c sim">todas as unidades</td>
   <td class="c sim">a unidade dele</td>
   <td class="c ">se liberada</td>
+</tr><tr>
+  <td>Equipes de Serviço</td>
+  <td class="c sim">todas as unidades</td>
+  <td class="c sim">a unidade dele</td>
+  <td class="c nao">não tem</td>
 </tr>
 </table>
 <div class="aviso"><b>Duas coisas que ninguém vê:</b> unidade que não é sua, e função com a chave <b>Ver</b> desligada. O gerente troca de unidade no

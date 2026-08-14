@@ -21,7 +21,7 @@ const ICONES = [
   "columns-3", "key-round", "lock", "lock-open", "crown", "eye", "star", "play",
   "rotate-ccw", "hash", "chevron-right", "chevron-left", "chevron-down", "image-plus", "mail",
   "inbox", "settings-2", "list", "calendar-days", "message-circle", "file-text",
-  "more-vertical", "save", "copy", "bell", "smartphone",
+  "more-vertical", "save", "copy", "bell", "smartphone", "settings", "ban",
 ];
 
 /**
@@ -147,6 +147,7 @@ const CSS = `
   .et-amarelo{background:#fef3c7;color:#92400e}
   .et-vermelho{background:#fee2e2;color:#991b1b}
   .et-azul{background:#dbeafe;color:#1e40af}
+  .et-laranja{background:#ffedd5;color:#9a3412}
   .aviso{background:#fff7ed;border-left:5px solid var(--laranja);padding:12px 14px;
      border-radius:10px;margin:12px 0;font-size:18px}
   .so{background:#eef2ff;border-left:5px solid #4f46e5;padding:12px 14px;

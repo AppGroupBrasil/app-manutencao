@@ -40,7 +40,7 @@ const LIBERADA = `gerente, gestor da unidade e funcionário com a chave <b>Ver</
 const corpo = `
 <div class="perfil">
 ${linha(
-  "Gerente (Sr. Francisco):",
+  "Gerente (a conta principal):",
   "responde por todas as unidades; cadastra gestores e funcionários e decide o que cada um vê.",
 )}
 ${linha(
@@ -84,14 +84,16 @@ ${fn("clipboard-list", "Ordens de Serviço", {
   faz: `o serviço que tem começo, meio e fim: protocolo, responsáveis, fotos de antes,
     durante e depois, anexos, histórico e nota no final.`,
   fica: `${CAMINHO("Ordens de Serviço")} · no ${PORTAL}, cartão <b>Ordens de Serviço</b>.`,
-  vai: `quem abre marca os <b>responsáveis</b> → a equipe da unidade recebe <b>aviso no
-    aplicativo</b> (se o gestor ligou o envio automático) e <b>e-mail</b> quem estiver marcado
-    para receber → o responsável ${bo("Iniciar serviço", "play")} , registra as fotos e
+  vai: `quem precisa do serviço abre a ordem com a <b>data máxima</b> (obrigatória) e marca os
+    <b>responsáveis</b> e a <b>equipe designada</b> → a equipe recebe <b>aviso no aplicativo</b>
+    (se o gestor ligou o envio automático), o <b>supervisor da equipe</b> recebe o dele e vai
+    <b>e-mail</b> para quem estiver marcado → quem responde pela unidade <b>programa o dia</b> e
+    quem executa → o responsável ${bo("Iniciar serviço", "play")} , registra as fotos e
     ${bo("Finalizar serviço", "check-circle-2")} → o gestor confere, dá a nota e, se precisar,
     ${bo("Reabrir", "rotate-ccw")} escrevendo o motivo.
-    <br><b>Na unidade com o fluxo do gerente:</b> o gestor abre com <b>data máxima</b> → o gerente
-    programa o dia e a equipe → a equipe <b>dá baixa</b> → o gestor <b>confirma</b> (ou devolve com
-    motivo) → o gerente <b>finaliza</b>.`,
+    <br><b>Andamento:</b> ${et("Aguardando início", "azul")} → ${et("Em execução", "laranja")} →
+    ${et("Finalizada parcialmente", "amarelo")} ou ${et("Finalizada totalmente", "verde")} —
+    <b>Cancelada</b> é para a ordem aberta por engano.`,
   ve: `${LIBERADA} Quem recebe o QR ou o link vê aquela O.S. <b>sem entrar no sistema</b>.
     Reabrir é só de gerente e gestor.`,
 })}
@@ -172,10 +174,21 @@ ${fn("wrench", "Registro de Manutenções", {
 
 ${fn("alert-triangle", "Ocorrências", {
   faz: `o registro rápido de um incidente: título, local, prioridade e foto.`,
-  fica: `<b>Painel → cartão Ocorrências</b> · no ${PORTAL}, cartão <b>Ocorrências</b>.`,
+  fica: `${CAMINHO("Ocorrências")} · no ${PORTAL}, cartão <b>Ocorrências</b>.`,
   vai: `quem viu registra na hora, do celular → o registro entra na lista da unidade → o gestor
     (ou quem tem a função) toca em ${bo("Finalizar", "check-circle-2")} quando o caso é resolvido.`,
   ve: LIBERADA,
+})}
+
+${fn("users", "Equipes de Serviço", {
+  faz: `times de funcionários com um <b>supervisor</b>, para designar a O.S. ao grupo em vez de
+    pessoa por pessoa.`,
+  fica: `<b>Painel → cartão Equipes</b> · ou pela engrenagem ao lado de <b>Equipe designada</b>,
+    na abertura da O.S.`,
+  vai: `o gestor monta a equipe → na O.S., escolhe a equipe em <b>Equipe designada</b> → o
+    <b>supervisor</b> recebe o aviso com a ordem.`,
+  ve: `<b>só gerente e gestor</b>. Desligada a função, o campo some da O.S. e o aviso ao supervisor
+    deixa de existir.`,
 })}
 
 <h2>Para onde vai cada aviso</h2>
@@ -183,8 +196,9 @@ ${fn("alert-triangle", "Ocorrências", {
 <tr><th style="width:210px">Caminho</th><th>Quando sai</th><th style="width:230px">Para quem</th></tr>
 <tr>
   <td>${ic("bell")} Aviso no aplicativo</td>
-  <td>ao abrir uma Ordem de Serviço, se o gestor ligou o <b>envio automático</b></td>
-  <td>equipe da unidade</td>
+  <td>ao abrir uma Ordem de Serviço, se o gestor ligou o <b>envio automático</b>; e sempre que uma
+      <b>equipe é designada</b></td>
+  <td>equipe da unidade · supervisor da equipe designada</td>
 </tr>
 <tr>
   <td>${ic("mail")} E-mail</td>
@@ -222,6 +236,7 @@ ${[
   ["QR Code", "todas as unidades", "a unidade dele", "se liberada"],
   ["Registro de Manutenções", "todas as unidades", "a unidade dele", "se liberada"],
   ["Ocorrências", "todas as unidades", "a unidade dele", "se liberada"],
+  ["Equipes de Serviço", "todas as unidades", "a unidade dele", "não tem"],
 ]
   .map(
     ([funcao, ger, ges, fun]) => `<tr>
