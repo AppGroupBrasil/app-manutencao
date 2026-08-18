@@ -2,13 +2,17 @@ import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../../db";
-import { condominios, users, usuarioAcessos, usuarioCondominios } from "../../../drizzle/schema";
+import { condominios, funcionarios, users, usuarioAcessos, usuarioCondominios } from "../../../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getSessionCookieOptions } from "../../_core/cookies";
 import { COOKIE_NAME, SENHA_ERR_MSG, SENHA_REGEX } from "@shared/const";
 import { rateLimiter, RATE_LIMIT_CONFIGS, getClientIp } from "../../_core/rateLimit";
 import { ENV } from "../../_core/env";
-import { sendEmail, isEmailConfigured } from "../../_core/email";
+import { sendEmail, isEmailConfigured, sendRecuperacaoSenhaEmail } from "../../_core/email";
+import {
+  findFuncionarioByLoginEmail,
+  findFuncionarioByResetToken,
+} from "../../_core/funcionarioCompat";
 import { prepararUnidade } from "../../_core/seedUnidade";
 import { fimDoTeste, DIAS_DE_TESTE } from "../../_core/teste";
 import { SEGMENTOS_VALIDOS } from "../../../shared/modules/registry";
@@ -333,7 +337,16 @@ export const authRouter = router({
         };
       }),
 
-    // Solicitar recuperação de senha
+    /**
+     * Esqueci minha senha: manda o link de cadastro de nova senha por e-mail.
+     *
+     * Atende as duas identidades que o login aceita — gestor (`users`) e
+     * funcionário (`funcionarios`) —, porque a tela de login é a mesma e quem
+     * digita o e-mail não sabe (nem precisa saber) em qual tabela está.
+     *
+     * A resposta é sempre a mesma, exista ou não a conta: dizer "este e-mail
+     * não está cadastrado" entrega a lista de quem usa o sistema a qualquer um.
+     */
     solicitarRecuperacao: publicProcedure
       .input(z.object({
         email: z.string().email("Email inválido"),
@@ -345,49 +358,72 @@ export const authRouter = router({
 
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
-        // Buscar utilizador por email
+
+        const resposta = {
+          success: true,
+          message: "Se o e-mail estiver cadastrado, você receberá um link para cadastrar uma nova senha.",
+        };
+
+        const email = input.email.trim().toLowerCase();
+
+        // Comparação sem diferenciar maiúsculas: o cadastro guarda em minúsculas,
+        // mas quem digita no celular costuma mandar a primeira letra maiúscula.
         const [user] = await db.select().from(users)
-          .where(eq(users.email, input.email))
+          .where(sql`lower(${users.email}) = ${email}`)
           .limit(1);
-        
-        // Não revelar se o email existe ou não (segurança)
-        if (!user) {
-          return { 
-            success: true, 
-            message: "Se o email estiver cadastrado, você receberá um link para redefinir sua senha." 
-          };
-        }
-        
-        // Gerar token de reset
+
+        const funcionario = user ? null : await findFuncionarioByLoginEmail(email);
+        const alvo = user
+          ? { nome: user.name || "", email: user.email }
+          : funcionario
+            ? { nome: funcionario.nome || "", email: funcionario.loginEmail || funcionario.email || email }
+            : null;
+
+        if (!alvo?.email) return resposta;
+
         const crypto = await import('crypto');
         const resetToken = crypto.randomBytes(32).toString('hex');
         const expira = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-        
-        await db.update(users).set({
-          resetToken: resetToken,
-          resetTokenExpira: expira,
-        }).where(eq(users.id, user.id));
-        
-        // Enviar notificação (em produção, enviar email)
-        try {
-          const { notifyOwner } = await import('../../_core/notification');
-          await notifyOwner({
-            title: `Recuperação de Senha - ${user.name || user.email}`,
-            content: `O utilizador ${user.name || 'N/A'} (${user.email}) solicitou recuperação de senha.\n\nToken: ${resetToken}\n\nLink: /redefinir-senha/${resetToken}`,
-          });
-        } catch (e) {
-          console.error('Erro ao enviar notificação:', e);
+
+        if (user) {
+          await db.update(users).set({
+            resetToken,
+            resetTokenExpira: expira,
+          }).where(eq(users.id, user.id));
+        } else if (funcionario) {
+          await db.update(funcionarios).set({
+            resetToken,
+            resetTokenExpira: expira,
+          }).where(eq(funcionarios.id, funcionario.id));
         }
-        
-        return { 
-          success: true, 
-          message: "Se o email estiver cadastrado, você receberá um link para redefinir sua senha.",
+
+        // O e-mail é o produto desta rota: sem ele a pessoa fica esperando uma
+        // mensagem que nunca chega, então a falha vai para o log com nome.
+        if (!isEmailConfigured()) {
+          console.error(
+            "[recuperacao] RESEND_API_KEY ausente: link não enviado para",
+            alvo.email,
+          );
+          return resposta;
+        }
+
+        const envio = await sendRecuperacaoSenhaEmail({
+          destinatario: alvo.email,
+          nome: alvo.nome || alvo.email,
+          linkRecuperacao: `${ENV.appUrl}/redefinir-senha/${resetToken}`,
+        });
+
+        if (!envio.success) {
+          console.error("[recuperacao] falha ao enviar para", alvo.email, envio.error);
+        }
+
+        return {
+          ...resposta,
           // Token apenas em desenvolvimento (NUNCA em produção)
           ...(ENV.isProduction ? {} : { _debug_token: resetToken }),
         };
       }),
-    
+
     // Validar token de recuperação
     validarTokenRecuperacao: publicProcedure
       .input(z.object({
@@ -396,23 +432,36 @@ export const authRouter = router({
       .query(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
+
         const [user] = await db.select().from(users)
           .where(eq(users.resetToken, input.token))
           .limit(1);
-        
-        if (!user) {
+
+        // O mesmo link serve para gestor e funcionário: a tela é uma só, e é o
+        // token que diz de quem é a conta.
+        const funcionario = user ? null : await findFuncionarioByResetToken(input.token);
+        const alvo = user
+          ? { nome: user.name, email: user.email, expira: user.resetTokenExpira }
+          : funcionario
+            ? {
+                nome: funcionario.nome,
+                email: funcionario.loginEmail || funcionario.email,
+                expira: funcionario.resetTokenExpira,
+              }
+            : null;
+
+        if (!alvo) {
           return { valido: false, mensagem: "Token inválido" };
         }
-        
-        if (user.resetTokenExpira && new Date(user.resetTokenExpira) < new Date()) {
-          return { valido: false, mensagem: "Token expirado. Solicite um novo link." };
+
+        if (alvo.expira && new Date(alvo.expira) < new Date()) {
+          return { valido: false, expirado: true, mensagem: "Token expirado. Solicite um novo link." };
         }
-        
-        return { 
-          valido: true, 
-          email: user.email,
-          nome: user.name,
+
+        return {
+          valido: true,
+          email: alvo.email,
+          nome: alvo.nome,
         };
       }),
     
@@ -425,23 +474,54 @@ export const authRouter = router({
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
+
         const [user] = await db.select().from(users)
           .where(eq(users.resetToken, input.token))
           .limit(1);
-        
-        if (!user) {
+
+        const funcionario = user ? null : await findFuncionarioByResetToken(input.token);
+
+        if (!user && !funcionario) {
           throw new Error("Token inválido");
         }
-        
-        if (user.resetTokenExpira && new Date(user.resetTokenExpira) < new Date()) {
+
+        const expira = user ? user.resetTokenExpira : funcionario!.resetTokenExpira;
+        if (expira && new Date(expira) < new Date()) {
           throw new Error("Token expirado. Solicite um novo link de recuperação.");
         }
-        
+
         // Hash da nova senha com bcrypt
         const bcrypt = await import('bcryptjs');
         const senhaHash = await bcrypt.hash(input.novaSenha, 10);
-        
+
+        /**
+         * Funcionário: troca a senha e manda entrar pelo portal dele.
+         *
+         * Não abrimos sessão aqui como fazemos com o gestor — a sessão do
+         * funcionário é outra, criada pelo login do portal.
+         */
+        if (funcionario) {
+          await db.update(funcionarios)
+            .set({
+              senha: senhaHash,
+              resetToken: null,
+              resetTokenExpira: null,
+              loginAtivo: true,
+            })
+            .where(eq(funcionarios.id, funcionario.id));
+
+          return {
+            success: true,
+            message: "Senha cadastrada com sucesso! Entre com a nova senha.",
+            token: null,
+            user: {
+              id: funcionario.id,
+              nome: funcionario.nome,
+              email: funcionario.loginEmail || funcionario.email,
+            },
+          };
+        }
+
         // Atualizar senha e limpar token
         await db.update(users).set({
           senha: senhaHash,

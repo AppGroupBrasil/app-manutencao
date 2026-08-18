@@ -19,7 +19,6 @@ import { tiposInfracaoRouter, notificacoesInfracaoRouter, respostasInfracaoRoute
 import { systemRouter } from "./_core/systemRouter";
 import { router } from "./_core/trpc";
 import { appAcessoRouter } from "./appAcesso";
-import { recuperacaoSenhaRouter } from "./recuperacaoSenha";
 
 import { authRouter } from "./modules/auth/router";
 import { condominioRouter } from "./modules/condominio/router";

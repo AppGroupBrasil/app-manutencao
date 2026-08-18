@@ -589,17 +589,22 @@ export async function sendResumoDiarioVencimentos(params: {
 
 
 /**
- * Envia email de recuperação de senha para membro da equipe
+ * Envia o e-mail de recuperação de senha.
+ *
+ * Recebe o link pronto: quem chama sabe para qual tela o token vale — gestor e
+ * funcionário caem em `/redefinir-senha/<token>`, membro de equipe na tela
+ * dele. Montar o endereço aqui dentro foi o que fez o e-mail do membro apontar
+ * para a tela errada.
+ *
+ * Ninguém envia senha por e-mail: a senha fica guardada como hash e não é
+ * recuperável. O link deixa a pessoa cadastrar uma nova, e vale por 1 hora.
  */
 export async function sendRecuperacaoSenhaEmail(params: {
   destinatario: string;
   nome: string;
-  token: string;
-  baseUrl: string;
+  linkRecuperacao: string;
 }): Promise<EmailResult> {
-  const { destinatario, nome, token, baseUrl } = params;
-
-  const linkRecuperacao = `${baseUrl}/equipe/redefinir-senha?token=${token}`;
+  const { destinatario, nome, linkRecuperacao } = params;
 
   const html = `
     <!DOCTYPE html>

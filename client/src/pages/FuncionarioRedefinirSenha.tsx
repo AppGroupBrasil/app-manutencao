@@ -1,30 +1,41 @@
-import { useState, useEffect } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useState } from "react";
+import { useLocation, useParams, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
+import { SENHA_ERR_MSG, SENHA_REGEX } from "@shared/const";
 import { Lock, Loader2, ArrowLeft, CheckCircle, XCircle, ShieldCheck } from "lucide-react";
 
+/**
+ * Cadastro da nova senha pelo link do e-mail — gestor ou funcionário.
+ *
+ * As rotas são as de `auth`, que resolvem o token nas duas identidades: o
+ * e-mail é um só e quem clica não sabe em qual tabela está cadastrado.
+ */
 export default function FuncionarioRedefinirSenha() {
   const [, setLocation] = useLocation();
-  const searchString = useSearch();
-  const params = new URLSearchParams(searchString);
-  const token = params.get("token") || "";
-  
+  /**
+   * O token vem no caminho (`/redefinir-senha/<token>`).
+   *
+   * A query fica como reserva porque links antigos, já enviados, usam
+   * `?token=` — e um link que abre "link inválido" é indistinguível, para quem
+   * recebeu, de um sistema quebrado.
+   */
+  const params = useParams<{ token?: string }>();
+  const busca = new URLSearchParams(useSearch());
+  const token = params.token || busca.get("token") || "";
+
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [sucesso, setSucesso] = useState(false);
 
-  // Validar token
-  const { data: tokenData, isLoading: validandoToken } = trpc.funcionario.validarToken.useQuery(
-    { token },
-    { enabled: !!token }
-  );
+  const { data: tokenData, isLoading: validandoToken } =
+    trpc.auth.validarTokenRecuperacao.useQuery({ token }, { enabled: !!token });
 
-  const redefinirMutation = trpc.funcionario.redefinirSenha.useMutation({
+  const redefinirMutation = trpc.auth.redefinirSenha.useMutation({
     onSuccess: (data) => {
       setSucesso(true);
       toast.success(data.message);
@@ -36,22 +47,24 @@ export default function FuncionarioRedefinirSenha() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!novaSenha || !confirmarSenha) {
       toast.error("Preencha todos os campos");
       return;
     }
-    
-    if (novaSenha.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
+
+    // Mesma regra do resto do sistema: a validação do servidor recusaria
+    // qualquer outra coisa, e o aviso aqui evita a viagem perdida.
+    if (!SENHA_REGEX.test(novaSenha)) {
+      toast.error(SENHA_ERR_MSG);
       return;
     }
-    
+
     if (novaSenha !== confirmarSenha) {
       toast.error("As senhas não coincidem");
       return;
     }
-    
+
     redefinirMutation.mutate({ token, novaSenha });
   };
 
@@ -114,7 +127,7 @@ export default function FuncionarioRedefinirSenha() {
   }
 
   // Token inválido ou expirado
-  if (tokenData && !tokenData.valid) {
+  if (tokenData && !tokenData.valido) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50 to-rose-100 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
@@ -123,10 +136,10 @@ export default function FuncionarioRedefinirSenha() {
               <XCircle className="w-8 h-8" />
             </div>
             <h1 className="text-2xl font-bold text-slate-800">
-              {tokenData.expired ? "Link Expirado" : "Link Inválido"}
+              {tokenData.expirado ? "Link Expirado" : "Link Inválido"}
             </h1>
             <p className="text-slate-500 mt-1">
-              {tokenData.expired 
+              {tokenData.expirado 
                 ? "O link de recuperação expirou" 
                 : "O link de recuperação não é válido"}
             </p>
@@ -136,7 +149,7 @@ export default function FuncionarioRedefinirSenha() {
             <CardContent className="pt-6">
               <div className="text-center space-y-4">
                 <p className="text-slate-600">
-                  {tokenData.expired 
+                  {tokenData.expirado 
                     ? "O link de recuperação de senha expirou. Os links são válidos por 1 hora."
                     : "O link de recuperação de senha não é válido ou já foi utilizado."}
                 </p>
@@ -234,15 +247,19 @@ export default function FuncionarioRedefinirSenha() {
                   <Input
                     id="novaSenha"
                     type="password"
-                    placeholder="••••••••"
+                    // Teclado numérico no celular: a senha do sistema é de
+                    // dígitos, e o teclado de letras faz a pessoa errar.
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    placeholder="••••••"
                     value={novaSenha}
                     onChange={(e) => setNovaSenha(e.target.value)}
                     className="pl-10"
                     disabled={redefinirMutation.isPending}
-                    minLength={6}
+                    maxLength={6}
                   />
                 </div>
-                <p className="text-xs text-slate-500">Mínimo de 6 caracteres</p>
+                <p className="text-xs text-slate-500">{SENHA_ERR_MSG}</p>
               </div>
 
               <div className="space-y-2">
@@ -252,11 +269,14 @@ export default function FuncionarioRedefinirSenha() {
                   <Input
                     id="confirmarSenha"
                     type="password"
-                    placeholder="••••••••"
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    placeholder="••••••"
                     value={confirmarSenha}
                     onChange={(e) => setConfirmarSenha(e.target.value)}
                     className="pl-10"
                     disabled={redefinirMutation.isPending}
+                    maxLength={6}
                   />
                 </div>
               </div>

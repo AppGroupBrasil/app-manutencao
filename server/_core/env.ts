@@ -22,6 +22,9 @@ const envSchema = z.object({
   BUILT_IN_FORGE_API_URL: z.string().optional(),
   BUILT_IN_FORGE_API_KEY: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
+  // Endereço público do sistema: é o que entra nos links enviados por e-mail.
+  APP_URL: z.string().optional(),
+  VITE_APP_URL: z.string().optional(),
   // VAPID Push Notifications
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
@@ -54,6 +57,14 @@ export const ENV = {
   oAuthServerUrl: env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: env.OWNER_OPEN_ID ?? "",
   isProduction: env.NODE_ENV === "production",
+  /**
+   * Endereço público, sem barra no fim — a base dos links de e-mail.
+   *
+   * O padrão é o domínio de produção porque link de recuperação com endereço
+   * errado é pior que e-mail nenhum: a pessoa clica, cai em lugar nenhum e
+   * conclui que o sistema está fora do ar.
+   */
+  appUrl: (env.APP_URL || env.VITE_APP_URL || "https://appmanutencao.com.br").replace(/\/+$/, ""),
   forgeApiUrl: env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: env.BUILT_IN_FORGE_API_KEY ?? "",
   // S3

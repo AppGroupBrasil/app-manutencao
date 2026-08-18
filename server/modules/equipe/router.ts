@@ -1405,38 +1405,17 @@ export const equipeRouter = router({
             resetTokenExpira: expira
         }).where(eq(membrosEquipe.id, membro.id));
 
-        // Enviar email com link de recuperação
+        // Enviar email com link de recuperação. O endereço é o da tela do
+        // membro: apontava para `/recuperar-senha`, que é o formulário de pedir
+        // o link e ignora o token — quem clicava voltava ao começo.
         try {
-            const { sendEmail } = await import("../../_core/email");
-            const baseUrl = process.env.APP_URL || process.env.VITE_APP_URL || "https://app.appmanutencao.com.br";
-            const resetLink = `${baseUrl}/recuperar-senha?token=${token}`;
-            
-            await sendEmail({
-                to: input.email,
-                subject: "Recuperação de Senha - App Manutenção",
-                html: `
-                    <!DOCTYPE html>
-                    <html>
-                    <head><meta charset="utf-8"></head>
-                    <body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f8fafc;">
-                        <div style="max-width:600px;margin:0 auto;padding:20px;">
-                            <div style="background:linear-gradient(135deg,#EA580C 0%,#F97316 100%);border-radius:16px 16px 0 0;padding:32px;text-align:center;">
-                                <h1 style="color:white;margin:0;font-size:24px;">🔐 Recuperação de Senha</h1>
-                            </div>
-                            <div style="background:white;padding:32px;border-radius:0 0 16px 16px;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-                                <p style="color:#374151;font-size:16px;">Olá <strong>${membro.nome}</strong>,</p>
-                                <p style="color:#374151;font-size:16px;">Recebemos uma solicitação para redefinir sua senha. Clique no botão abaixo para criar uma nova senha:</p>
-                                <div style="text-align:center;margin:32px 0;">
-                                    <a href="${resetLink}" style="background:linear-gradient(135deg,#EA580C,#F97316);color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">Redefinir Senha</a>
-                                </div>
-                                <p style="color:#6B7280;font-size:14px;">Este link é válido por <strong>1 hora</strong>. Se você não solicitou a recuperação de senha, ignore este email.</p>
-                                <hr style="border:none;border-top:1px solid #E5E7EB;margin:24px 0;">
-                                <p style="color:#9CA3AF;font-size:12px;text-align:center;">App Manutenção - Sistema de Gestão Condominial</p>
-                            </div>
-                        </div>
-                    </body>
-                    </html>
-                `,
+            const { sendRecuperacaoSenhaEmail } = await import("../../_core/email");
+            const { ENV } = await import("../../_core/env");
+
+            await sendRecuperacaoSenhaEmail({
+                destinatario: input.email,
+                nome: membro.nome,
+                linkRecuperacao: `${ENV.appUrl}/equipe/redefinir-senha?token=${token}`,
             });
         } catch (emailError) {
             console.error("[Equipe] Erro ao enviar email de recuperação:", emailError);

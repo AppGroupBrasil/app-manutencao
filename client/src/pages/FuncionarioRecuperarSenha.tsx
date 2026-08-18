@@ -8,12 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "@/components/ui/sonner";
 import { KeyRound, Mail, Loader2, ArrowLeft, CheckCircle } from "lucide-react";
 
+/**
+ * Esqueci minha senha, para quem entra pelo sistema — gestor ou funcionário.
+ *
+ * Uma tela só porque o login também é um só: `auth.solicitarRecuperacao`
+ * procura o e-mail nas duas identidades e manda o link de cadastro de nova
+ * senha. Antes esta tela chamava a rota do funcionário, que não enviava e-mail
+ * nenhum — avisava o administrador para repassar o link à mão — e nem
+ * encontrava o gestor, que fica em outra tabela.
+ */
 export default function FuncionarioRecuperarSenha() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [enviado, setEnviado] = useState(false);
 
-  const recuperarMutation = trpc.funcionario.solicitarRecuperacao.useMutation({
+  const recuperarMutation = trpc.auth.solicitarRecuperacao.useMutation({
     onSuccess: (data) => {
       setEnviado(true);
       toast.success(data.message);
@@ -40,18 +49,19 @@ export default function FuncionarioRecuperarSenha() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white mb-4 shadow-lg">
               <CheckCircle className="w-8 h-8" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-800">Solicitação Enviada</h1>
-            <p className="text-slate-500 mt-1">Verifique com o administrador</p>
+            <h1 className="text-2xl font-bold text-slate-800">E-mail enviado</h1>
+            <p className="text-slate-500 mt-1">Verifique sua caixa de entrada</p>
           </div>
 
           <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
             <CardContent className="pt-6">
               <div className="text-center space-y-4">
                 <p className="text-slate-600">
-                  Se o email <strong>{email}</strong> estiver cadastrado, o administrador receberá uma notificação com o link de recuperação.
+                  Se o e-mail <strong>{email}</strong> estiver cadastrado, você receberá uma mensagem
+                  com o link para cadastrar uma nova senha.
                 </p>
                 <p className="text-sm text-slate-500">
-                  Entre em contacto com o gestor ou administrador da organização para receber o link de recuperação de senha.
+                  O link vale por 1 hora. Não achou a mensagem? Procure na caixa de spam.
                 </p>
                 <div className="pt-4">
                   <Button
@@ -80,7 +90,7 @@ export default function FuncionarioRecuperarSenha() {
             <KeyRound className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Recuperar Senha</h1>
-          <p className="text-slate-500 mt-1">Solicite um link de recuperação</p>
+          <p className="text-slate-500 mt-1">Enviamos o link para o seu e-mail</p>
         </div>
 
         {/* Card de Recuperação */}
@@ -88,7 +98,7 @@ export default function FuncionarioRecuperarSenha() {
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl text-center">Esqueceu a senha?</CardTitle>
             <CardDescription className="text-center">
-              Digite seu email de acesso para solicitar a recuperação
+              Digite seu e-mail de acesso e enviaremos o link para cadastrar uma nova senha
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -127,7 +137,7 @@ export default function FuncionarioRecuperarSenha() {
 
             <div className="mt-6 pt-4 border-t border-slate-100">
               <p className="text-xs text-center text-slate-500">
-                O administrador receberá uma notificação e enviará o link de recuperação para você.
+                Serve para gestor e funcionário — é o mesmo e-mail com que você entra no sistema.
               </p>
             </div>
           </CardContent>
