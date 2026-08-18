@@ -251,7 +251,6 @@ export default function FuncionarioRedefinirSenha() {
                     // dígitos, e o teclado de letras faz a pessoa errar.
                     inputMode="numeric"
                     autoComplete="new-password"
-                    placeholder="••••••"
                     value={novaSenha}
                     onChange={(e) => setNovaSenha(e.target.value)}
                     className="pl-10"
@@ -271,7 +270,6 @@ export default function FuncionarioRedefinirSenha() {
                     type="password"
                     inputMode="numeric"
                     autoComplete="new-password"
-                    placeholder="••••••"
                     value={confirmarSenha}
                     onChange={(e) => setConfirmarSenha(e.target.value)}
                     className="pl-10"

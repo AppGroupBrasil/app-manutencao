@@ -66,6 +66,29 @@ const SESSION_TOKEN_KEY = "app_session_token";
 /** Unidade escolhida, enviada em `x-condominio-id` a cada chamada. */
 const TENANT_ATIVO_KEY = "condominio_ativo";
 
+/**
+ * Faxina única da unidade que ficou presa no navegador.
+ *
+ * Quem escolheu uma unidade na época do seletor antigo continuou vendo o
+ * calendário e os números dela: o valor sobrevive à recarga, ao Ctrl+Shift+R e
+ * — até esta versão — ao logout. Apagar uma vez, na primeira abertura depois da
+ * publicação, é o que tira da tela o nome que a pessoa não escolheu.
+ *
+ * A marca impede que a limpeza se repita: daqui para frente a escolha feita no
+ * painel precisa durar entre as visitas.
+ */
+const FAXINA_UNIDADE_KEY = "condominio_ativo_limpo";
+if (typeof window !== "undefined") {
+  try {
+    if (!localStorage.getItem(FAXINA_UNIDADE_KEY)) {
+      localStorage.removeItem(TENANT_ATIVO_KEY);
+      localStorage.setItem(FAXINA_UNIDADE_KEY, "1");
+    }
+  } catch {
+    /* navegador sem storage disponível: não há nada guardado para limpar */
+  }
+}
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;

@@ -83,7 +83,6 @@ export default function SindicoLogin() {
                     type={showSenha ? "text" : "password"}
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
-                    placeholder="••••••"
                     autoComplete="current-password"
                     className="pl-9 pr-9"
                   />

@@ -112,7 +112,6 @@ export default function MembroLoginPage() {
                   <Input
                     id="senha"
                     type="password"
-                    placeholder="••••••••"
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
                     className="pl-10 h-12 rounded-xl border-gray-200 focus:border-orange-500 focus:ring-orange-500"

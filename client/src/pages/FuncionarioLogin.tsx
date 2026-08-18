@@ -92,10 +92,11 @@ export default function FuncionarioLogin() {
                 <Label htmlFor="senha" className="text-slate-700">Senha</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  {/* Sem bolinhas de enfeite no campo vazio: as bolinhas passam
+                      a significar "tem senha digitada". */}
                   <Input
                     id="senha"
                     type={showSenha ? "text" : "password"}
-                    placeholder="••••••"
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
                     className="pl-10 pr-10"
