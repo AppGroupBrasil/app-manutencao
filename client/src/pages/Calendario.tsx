@@ -17,6 +17,9 @@ const TENANT_ATIVO_KEY = "condominio_ativo";
  * não precisa aprender de novo aqui.
  */
 const FONTES = [
+  // A O.S. faltava aqui: marcar qualquer outra função a escondia da agenda, e
+  // não havia como pedir só ela — que é o que o gerente olha todo dia.
+  { chave: "os", rotulo: "Ordens de Serviço" },
   { chave: "vencimento", rotulo: "Vencimentos" },
   { chave: "manutencao", rotulo: "Manutenções" },
   { chave: "checklist", rotulo: "Checklists" },
@@ -58,6 +61,7 @@ export default function Calendario() {
     // O cliente pode renomear a função; o filtro segue o nome dele.
     if (chave === "vencimento") return padrao;
     const mapa: Record<string, string> = {
+      os: v.ordensServico,
       manutencao: v.manutencoes,
       checklist: v.checklists,
       vistoria: v.vistorias,

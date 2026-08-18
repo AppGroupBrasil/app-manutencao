@@ -37,6 +37,9 @@ type ItemCalendario = {
   /** Prazo combinado e se o dia do serviço já foi marcado. */
   prazoLimite?: string | null;
   programada?: boolean;
+  /** Preenchidos só quando a agenda soma mais de uma unidade. */
+  unidadeId?: number | null;
+  unidade?: string | null;
 };
 
 type Situacao = "vencido" | "proximo" | "em_dia" | "concluido";
@@ -136,9 +139,12 @@ export function CalendarioGeral({
 
   // A equipe da unidade só é carregada quando o gerente abre o reprogramar:
   // é o passo em que ele distribui a agenda e escolhe quem faz.
+  // A unidade é a da ordem, não a da tela: com o calendário somando a rede, a
+  // lista da unidade ativa ofereceria gente que não trabalha lá.
+  const unidadeDoReprogramando = reprogramando?.unidadeId ?? condominioId;
   const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery(
-    { condominioId },
-    { enabled: reprogramando !== null && !!podeGerenciar },
+    { condominioId: unidadeDoReprogramando },
+    { enabled: reprogramando !== null && !!podeGerenciar && unidadeDoReprogramando > 0 },
   );
   const [mesVisivel, setMesVisivel] = useState(() => {
     const agora = new Date();
@@ -162,8 +168,15 @@ export function CalendarioGeral({
   const de = chaveDoDia(celulas[0]);
   const ate = chaveDoDia(celulas[41]);
 
+  /**
+   * As O.S. vêm de todas as unidades que a pessoa alcança.
+   *
+   * Quem responde por uma unidade só continua vendo a dela — o alcance é
+   * decidido no servidor. É o que põe na agenda do gerente a ordem aberta pelo
+   * gestor de outra unidade, que antes ele só via trocando a unidade da tela.
+   */
   const { data: itens, isLoading } = trpc.calendario.listar.useQuery(
-    { condominioId, de, ate },
+    { condominioId, de, ate, todasUnidades: true },
     { enabled: condominioId > 0 },
   );
 
@@ -172,6 +185,10 @@ export function CalendarioGeral({
     if (!fontesVisiveis) return lista;
     return lista.filter((i) => fontesVisiveis.includes(i.fonte));
   }, [itens, fontesVisiveis]);
+
+  // O servidor só nomeia a unidade quando a agenda soma mais de uma; é o sinal
+  // de que esta tela está mostrando a rede, e não a unidade ativa.
+  const somaRede = useMemo(() => (itens ?? []).some((i) => !!i.unidade), [itens]);
 
   const porDia = useMemo(() => {
     const mapa = new Map<string, ItemCalendario[]>();
@@ -226,6 +243,7 @@ export function CalendarioGeral({
               <p className="font-semibold text-slate-800 leading-tight">Calendário</p>
               <p className="text-xs text-slate-500 truncate">
                 todos os vencimentos, de todas as funções
+                {somaRede ? " · O.S. de todas as unidades" : ""}
               </p>
             </div>
           </div>
@@ -369,6 +387,11 @@ export function CalendarioGeral({
                       <span className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
                         <span className="font-medium text-slate-600">{item.rotuloFonte}</span>
                         {item.protocolo ? <span className="font-mono">{item.protocolo}</span> : null}
+                        {/* Só vem preenchido quando a agenda soma mais de uma
+                            unidade: é onde é o serviço. */}
+                        {item.unidade ? (
+                          <span className="font-medium text-slate-600 truncate">{item.unidade}</span>
+                        ) : null}
 
                         {item.detalhe ? <span className="truncate">· {item.detalhe}</span> : null}
                         <Seta className="w-3.5 h-3.5 ml-auto shrink-0 text-slate-400" />
@@ -415,6 +438,7 @@ export function CalendarioGeral({
               </DialogTitle>
               <DialogDescription>
                 {reprogramando?.titulo}
+                {reprogramando?.unidade ? ` · ${reprogramando.unidade}` : ""}
                 {reprogramando?.prazoLimite
                   ? ` · prazo máximo ${formatarDia(reprogramando.prazoLimite)}`
                   : ""}

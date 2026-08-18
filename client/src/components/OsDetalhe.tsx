@@ -291,7 +291,18 @@ export function OsDetalhe({
     error: erroOs,
   } = trpc.ordensServico.getById.useQuery({ id: ordemServicoId }, { retry: false });
   const { data: anexos } = trpc.ordensServico.listarAnexos.useQuery({ ordemServicoId });
-  const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery({ condominioId });
+  /**
+   * Unidade da própria ordem, com a da tela só como ponto de partida.
+   *
+   * Quem chega por link direto — QR Code, item do calendário da rede — pode
+   * abrir uma ordem de outra unidade; oferecer os funcionários e as equipes da
+   * unidade ativa designaria gente que não trabalha lá.
+   */
+  const unidadeDaOs = os?.condominioId ?? condominioId;
+  const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery(
+    { condominioId: unidadeDaOs },
+    { enabled: unidadeDaOs > 0 },
+  );
 
   const [comentario, setComentario] = useState("");
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
@@ -331,8 +342,8 @@ export function OsDetalhe({
     onError: (e) => toast.error(e.message || "Não foi possível salvar"),
   });
   const { data: equipesDaUnidade } = trpc.equipes.list.useQuery(
-    { condominioId },
-    { enabled: condominioId > 0 && !modulosIndefinidos && temModulo("equipes") },
+    { condominioId: unidadeDaOs },
+    { enabled: unidadeDaOs > 0 && !modulosIndefinidos && temModulo("equipes") },
   );
 
   const gerarPdf = trpc.ordensServico.generatePDF.useMutation({

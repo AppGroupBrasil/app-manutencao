@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { and, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { moduloUserProcedure, router } from "../../_core/trpc";
 import { isModuloHabilitado } from "../../_core/modules";
+import { unidadesNaoBloqueadas } from "../../_core/bloqueio";
 import { getDb } from "../../db";
 import {
   checklists,
+  condominios,
   manutencoes,
   ordensServico,
   quadroAtividades,
@@ -63,6 +65,15 @@ export interface ItemCalendario {
   prazoLimite?: string | null;
   /** Falso quando o dia mostrado é o prazo, porque ninguém programou ainda. */
   programada?: boolean;
+  /**
+   * Unidade do registro, preenchida só quando o calendário soma a rede.
+   *
+   * O gerente precisa saber onde é o serviço antes de reprogramar — e a tela
+   * usa este id para oferecer a equipe da unidade certa, não a da unidade
+   * ativa dela.
+   */
+  unidadeId?: number | null;
+  unidade?: string | null;
 }
 
 /** `AAAA-MM-DD` no fuso local do servidor, sem passar por UTC. */
@@ -124,6 +135,15 @@ export const calendarioRouter = router({
         /** `AAAA-MM-DD`. */
         de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        /**
+         * Traz as O.S. de todas as unidades que quem consulta alcança.
+         *
+         * Vale só para a O.S.: é a função que o gerente da rede acompanha dia a
+         * dia, e a ordem aberta numa unidade tem de entrar na agenda dele sem
+         * trocar a unidade da tela. As demais fontes seguem da unidade ativa.
+         * Quais unidades entram sai da identidade autenticada, nunca do input.
+         */
+        todasUnidades: z.boolean().optional(),
       }),
     )
     .query(async ({ ctx, input }): Promise<ItemCalendario[]> => {
@@ -147,6 +167,17 @@ export const calendarioRouter = router({
       const ligado = async (fonte: FonteCalendario) =>
         ctx.tenant.isMaster() || (await isModuloHabilitado(tenant, FONTES[fonte].modulo));
 
+      /** Das unidades informadas, as que têm a função de O.S. ligada. */
+      const unidadesComOs = async (ids: number[]) => {
+        const ligadas: number[] = [];
+        for (const id of ids) {
+          if (await isModuloHabilitado(id, FONTES.os.modulo)) ligadas.push(id);
+        }
+        // Nenhuma passou (banco fora, por exemplo): fica na unidade da tela,
+        // que é a que o portão do módulo já liberou nesta requisição.
+        return ligadas.length > 0 ? ligadas : [tenant];
+      };
+
       const itens: ItemCalendario[] = [];
 
       const registrar = (
@@ -161,6 +192,8 @@ export const calendarioRouter = router({
           sufixoChave?: string;
           prazoLimite?: string | null;
           programada?: boolean;
+          unidadeId?: number | null;
+          unidade?: string | null;
         },
       ) => {
         itens.push({
@@ -176,6 +209,8 @@ export const calendarioRouter = router({
           rota: rotaDoItem(fonte, dados.id, dados.protocolo),
           prazoLimite: dados.prazoLimite ?? null,
           programada: dados.programada,
+          unidadeId: dados.unidadeId ?? null,
+          unidade: dados.unidade ?? null,
         });
       };
 
@@ -183,9 +218,30 @@ export const calendarioRouter = router({
       // Mostra o dia programado; enquanto ninguém programou, mostra o prazo
       // máximo — é assim que a O.S. sem data marcada ainda cobra alguém.
       if (await ligado("os")) {
+        // Rede: as unidades que a pessoa alcança, menos as suspensas e as que
+        // não têm a função ligada — o calendário nunca mostra o que a unidade
+        // não contratou, e isso não muda por a soma ser de várias.
+        const unidadesDaOs =
+          input.todasUnidades && !ctx.tenant.isMaster()
+            ? await unidadesComOs(await unidadesNaoBloqueadas(await ctx.tenant.ids()))
+            : [tenant];
+
+        // Nome da unidade só quando há mais de uma: é o que identifica onde é o
+        // serviço na agenda do gerente.
+        const nomes = new Map<number, string>();
+        if (unidadesDaOs.length > 1) {
+          const unidades = await db
+            .select({ id: condominios.id, nome: condominios.nome })
+            .from(condominios)
+            .where(inArray(condominios.id, unidadesDaOs))
+            .orderBy(asc(condominios.nome));
+          for (const u of unidades) nomes.set(u.id, u.nome);
+        }
+
         const linhas = await db
           .select({
             id: ordensServico.id,
+            condominioId: ordensServico.condominioId,
             protocolo: ordensServico.protocolo,
             titulo: ordensServico.titulo,
             programada: ordensServico.dataProgramada,
@@ -197,7 +253,7 @@ export const calendarioRouter = router({
           .from(ordensServico)
           .where(
             and(
-              eq(ordensServico.condominioId, tenant),
+              inArray(ordensServico.condominioId, unidadesDaOs),
               // O mesmo critério da exibição, mas no banco: dia programado
               // dentro da janela, ou — sem programação — a data máxima. Sem
               // isto, a unidade com milhares de ordens vinha inteira para a
@@ -230,6 +286,8 @@ export const calendarioRouter = router({
             detalhe: linha.responsavel || linha.endereco,
             prazoLimite: linha.prazo,
             programada: !!linha.programada,
+            unidadeId: linha.condominioId,
+            unidade: nomes.get(linha.condominioId) ?? null,
           });
         }
       }

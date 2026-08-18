@@ -20,12 +20,35 @@ vi.mock("./_core/modules", () => ({
 
 /** Linhas devolvidas por tabela; o fake olha qual tabela foi consultada. */
 const linhas = new Map<unknown, unknown[]>();
+/** Tabelas consultadas e os números que a condição levou (os ids de unidade). */
+let consultas: { tabela: unknown; ids: number[] }[];
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function parametrosDe(condicao: any): number[] {
+  const achados: number[] = [];
+  const visitar = (no: any) => {
+    if (!no || typeof no !== "object") return;
+    if (Array.isArray(no)) return no.forEach(visitar);
+    if (typeof no.value === "number") achados.push(no.value);
+    if (no.queryChunks) visitar(no.queryChunks);
+  };
+  visitar(condicao);
+  return achados;
+}
 
 vi.mock("./db", () => ({
   getDb: async () => ({
     select: () => ({
       from: (tabela: unknown) => ({
-        where: async () => linhas.get(tabela) ?? [],
+        where: (condicao: unknown) => {
+          consultas.push({ tabela, ids: parametrosDe(condicao) });
+          const dados = linhas.get(tabela) ?? [];
+          const p: any = Promise.resolve(dados);
+          p.orderBy = () => Promise.resolve(dados);
+          // `limit` é do caminho do bloqueio da unidade, que roda antes da rota.
+          p.limit = () => Promise.resolve(dados);
+          return p;
+        },
       }),
     }),
   }),
@@ -36,6 +59,7 @@ const { createCallerFactory } = await import("./_core/trpc");
 const { createTenantAccess } = await import("./_core/tenant");
 const {
   checklists,
+  condominios,
   ordensServico,
   quadroAtividades,
   tarefasAgendadas,
@@ -64,7 +88,12 @@ beforeEach(() => {
   // liga só as fontes que quer ver.
   modulosLigados.add("calendario");
   linhas.clear();
+  consultas = [];
 });
+
+/** Unidades pedidas na consulta de uma fonte. */
+const unidadesConsultadas = (tabela: unknown) =>
+  consultas.find((c) => c.tabela === tabela)?.ids ?? [];
 
 describe("calendario.listar", () => {
   it("traz o vencimento com o atalho que filtra a função pelo protocolo", async () => {
@@ -290,6 +319,91 @@ describe("calendario.listar", () => {
     const [item] = await chamador().listar({ condominioId: 1, ...JANELA });
 
     expect(item).toMatchObject({ data: "2026-08-25", programada: false });
+  });
+
+  it("soma as O.S. de todas as unidades do gerente e diz de qual é cada uma", async () => {
+    // A agenda dele é a da rede: ordem aberta pelo gestor de outra unidade tem
+    // de cair no calendário sem ele trocar a unidade da tela.
+    modulosLigados.add("ordens-servico");
+    linhas.set(condominios, [
+      { id: 1, nome: "São José" },
+      { id: 2, nome: "Centro" },
+    ]);
+    linhas.set(ordensServico, [
+      {
+        id: 60,
+        condominioId: 2,
+        protocolo: "OS-260812-0003",
+        titulo: "Trocar fechadura",
+        programada: "2026-08-12",
+        prazo: "2026-08-15",
+        dataFim: null,
+        responsavel: null,
+        endereco: null,
+      },
+    ]);
+
+    const [item] = await chamador([1, 2]).listar({
+      condominioId: 1,
+      ...JANELA,
+      todasUnidades: true,
+    });
+
+    expect(unidadesConsultadas(ordensServico)).toEqual([1, 2]);
+    expect(item).toMatchObject({ unidadeId: 2, unidade: "Centro" });
+  });
+
+  it("gestor de uma unidade só vê a dela, mesmo pedindo a rede", async () => {
+    // O alcance sai da identidade autenticada; o input só diz "quero a rede".
+    modulosLigados.add("ordens-servico");
+    linhas.set(condominios, [{ id: 1, nome: "São José" }]);
+    linhas.set(ordensServico, []);
+
+    await chamador([1]).listar({ condominioId: 1, ...JANELA, todasUnidades: true });
+
+    expect(unidadesConsultadas(ordensServico)).toEqual([1]);
+  });
+
+  it("unidade suspensa fica de fora da agenda da rede", async () => {
+    // A unidade 2 não volta da consulta de unidades liberadas: está bloqueada.
+    modulosLigados.add("ordens-servico");
+    linhas.set(condominios, [{ id: 1, nome: "São José" }]);
+    linhas.set(ordensServico, []);
+
+    await chamador([1, 2]).listar({ condominioId: 1, ...JANELA, todasUnidades: true });
+
+    expect(unidadesConsultadas(ordensServico)).toEqual([1]);
+  });
+
+  it("as outras funções continuam na unidade da tela", async () => {
+    // Só a O.S. soma a rede: vencimento, checklist e afins são da unidade que
+    // a pessoa está olhando, e misturá-los mudaria o significado do número.
+    modulosLigados.add("ordens-servico");
+    modulosLigados.add("agenda-vencimentos");
+    linhas.set(condominios, [
+      { id: 1, nome: "São José" },
+      { id: 2, nome: "Centro" },
+    ]);
+    linhas.set(ordensServico, []);
+    linhas.set(vencimentos, []);
+
+    await chamador([1, 2]).listar({ condominioId: 1, ...JANELA, todasUnidades: true });
+
+    expect(unidadesConsultadas(ordensServico)).toEqual([1, 2]);
+    expect(unidadesConsultadas(vencimentos)).toEqual([1]);
+  });
+
+  it("sem todasUnidades, a O.S. fica na unidade da tela", async () => {
+    modulosLigados.add("ordens-servico");
+    linhas.set(condominios, [
+      { id: 1, nome: "São José" },
+      { id: 2, nome: "Centro" },
+    ]);
+    linhas.set(ordensServico, []);
+
+    await chamador([1, 2]).listar({ condominioId: 1, ...JANELA });
+
+    expect(unidadesConsultadas(ordensServico)).toEqual([1]);
   });
 
   it("recusa a organização que não é do solicitante", async () => {

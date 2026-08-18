@@ -25,12 +25,16 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
   const ativa = (modulo: string) =>
     habilitado && !modulosIndefinidos && temModulo(modulo);
 
+  /**
+   * O.S. de todas as unidades que a pessoa alcança.
+   *
+   * Quem responde pela rede cobrava a O.S. aberta em outra unidade e via aqui
+   * um número só da unidade da tela — parecia que não havia nada esperando.
+   * Para o gestor de uma unidade só, o alcance é a dele e nada muda. O servidor
+   * decide quais unidades entram; a conta da plataforma segue por organização.
+   */
   const { data: ordens, isLoading: carregandoOS } = trpc.ordensServico.list.useQuery(
-    { condominioId, limit: 500 },
-    { enabled: ativa("ordens-servico") },
-  );
-  const { data: statusOS } = trpc.ordensServico.getStatus.useQuery(
-    { condominioId },
+    { condominioId, limit: 500, todasUnidades: true },
     { enabled: ativa("ordens-servico") },
   );
   const { data: vencimentos, isLoading: carregandoVenc } = trpc.vencimentos.stats.useQuery(
@@ -63,11 +67,15 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
   );
   const linhas = useMemo(() => {
     // Status marcado como `isFinal` encerra a O.S.; o resto continua na mesa
-    // do gestor.
-    const idsFinais = new Set((statusOS ?? []).filter((s) => s.isFinal).map((s) => s.id));
+    // do gestor. Os status vêm da consulta, e não da unidade da tela: cada
+    // unidade tem os seus, e o "concluída" de uma não fecha a ordem da outra.
+    const idsFinais = new Set(
+      (ordens?.statusPorUnidade ?? []).filter((s) => s.isFinal).map((s) => s.id),
+    );
     const osAbertas = (ordens?.items ?? []).filter(
       (os) => !os.statusId || !idsFinais.has(os.statusId),
     ).length;
+    const osEmRede = (ordens?.unidades?.length ?? 0) > 1;
 
     const vencidos = vencimentos?.vencidos ?? 0;
     const proximos = vencimentos?.proximos ?? 0;
@@ -78,7 +86,11 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
         modulo: "ordens-servico",
         rotulo: "Ordens de Serviço",
         total: osAbertas,
-        detalhe: "em aberto, aguardando andamento",
+        // As demais linhas contam só a unidade da tela: dizer que esta soma a
+        // rede evita ler o número como se fosse da unidade.
+        detalhe: osEmRede
+          ? "em aberto em todas as unidades"
+          : "em aberto, aguardando andamento",
         destino: "/manutencoes/ordens-servico",
       },
       {
@@ -136,7 +148,6 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
   }, [
     temModulo,
     ordens,
-    statusOS,
     vencimentos,
     manutencoes,
     reportesChecklist,

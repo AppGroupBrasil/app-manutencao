@@ -30,6 +30,7 @@ import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import { prepareImageForUpload } from "@/lib/imageCompressor";
 import {
   ArrowLeft,
+  Building2,
   Calendar,
   Camera,
   Settings,
@@ -349,10 +350,19 @@ export function ConteudoOrdensServico({
   const podeEscolherUnidade = (unidades?.length ?? 0) > 1;
   const [unidadeNova, setUnidadeNova] = useState(condominioId);
   useEffect(() => setUnidadeNova(condominioId), [condominioId]);
-  // O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
-  // isso preserva o comportamento das abas e do gráfico, que somam tudo.
+  /**
+   * Quem responde por mais de uma unidade pede a rede inteira.
+   *
+   * A O.S. aberta pelo gestor de uma unidade tem de chegar ao gerente geral sem
+   * ele adivinhar em qual unidade procurar — antes a lista trazia só a unidade
+   * ativa na tela, e a ordem das outras 14 simplesmente não existia para ele.
+   * Quem entra na soma é decidido no servidor, pelo alcance de quem consulta.
+   *
+   * O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
+   * isso preserva o comportamento das abas e do gráfico, que somam tudo.
+   */
   const { data: lista, isLoading: carregandoLista } = trpc.ordensServico.list.useQuery(
-    { condominioId, limit: 500 },
+    { condominioId, limit: 500, todasUnidades: podeEscolherUnidade },
     { enabled: habilitado },
   );
   // Filtro da lista: sempre a unidade da tela.
@@ -389,7 +399,15 @@ export function ConteudoOrdensServico({
   );
 
   const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState<number | "todos">("todos");
+  /**
+   * Filtro de status pelo nome, não pelo id.
+   *
+   * Cada unidade tem a própria linha de status: "Em andamento" é um id em São
+   * José e outro na unidade vizinha. Na lista da rede, filtrar por id deixaria
+   * de fora as ordens das demais unidades com o mesmo status.
+   */
+  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [filtroUnidade, setFiltroUnidade] = useState<number | "todas">("todas");
   const [pagina, setPagina] = useState(1);
   const [modalNova, setModalNova] = useState(false);
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
@@ -524,6 +542,38 @@ export function ConteudoOrdensServico({
 
   const ordens = lista?.items ?? [];
 
+  /**
+   * Unidades que a lista realmente trouxe — e não as que a pessoa alcança.
+   *
+   * A conta da plataforma alcança a base inteira e continua vendo uma
+   * organização por vez: usar o alcance aqui encheria o filtro com os clientes
+   * todos e anunciaria "todas as unidades" numa lista de uma só.
+   */
+  const unidadesDaLista = lista?.unidades ?? [];
+  const verRede = unidadesDaLista.length > 1;
+  // Trocar a unidade ativa pode tirar do ar a unidade filtrada; sem isto o
+  // filtro apontaria para uma unidade fora da lista e ela viria vazia.
+  const unidadeFiltrada =
+    filtroUnidade !== "todas" && unidadesDaLista.some((u) => u.id === filtroUnidade)
+      ? filtroUnidade
+      : "todas";
+
+  /**
+   * Status oferecidos para a ordem: os da unidade DELA.
+   *
+   * Na lista da rede convivem ordens de várias unidades, e cada uma tem a
+   * própria linha de status — oferecer os da unidade ativa gravaria na ordem um
+   * status que não é do cadastro dela.
+   */
+  const statusDaUnidade = (unidadeId: number) => {
+    const daUnidade = (lista?.statusPorUnidade ?? [])
+      .filter((s) => s.condominioId === unidadeId)
+      .map((s) => ({ id: s.id, nome: s.nome }));
+    return daUnidade.length > 0
+      ? daUnidade
+      : (statusList ?? []).map((s) => ({ id: s.id, nome: s.nome }));
+  };
+
   /** Texto do compartilhamento, o mesmo para WhatsApp e para copiar. */
   const mensagemDe = (os: (typeof ordens)[number]) => {
     const mensagem = [
@@ -541,9 +591,25 @@ export function ConteudoOrdensServico({
     return mensagem;
   };
 
+  /**
+   * Status oferecidos nos filtros: os da unidade ativa mais os que aparecem nas
+   * ordens das outras unidades, para a rede não perder nenhuma etiqueta.
+   */
+  const opcoesStatus = useMemo(() => {
+    const porNome = new Map<string, { nome: string; cor: string | null }>();
+    (statusList ?? []).forEach((s) => porNome.set(s.nome, { nome: s.nome, cor: s.cor ?? null }));
+    ordens.forEach((os) => {
+      if (os.status?.nome && !porNome.has(os.status.nome)) {
+        porNome.set(os.status.nome, { nome: os.status.nome, cor: os.status.cor ?? null });
+      }
+    });
+    return [...porNome.values()];
+  }, [statusList, ordens]);
+
   const filtradas = useMemo(() => {
     return ordens.filter((os) => {
-      if (filtroStatus !== "todos" && os.statusId !== filtroStatus) return false;
+      if (filtroStatus !== "todos" && os.status?.nome !== filtroStatus) return false;
+      if (unidadeFiltrada !== "todas" && os.condominioId !== unidadeFiltrada) return false;
       const termo = busca.trim().toLowerCase();
       if (!termo) return true;
       const texto = [
@@ -554,13 +620,14 @@ export function ConteudoOrdensServico({
         os.categoria?.nome,
         os.prioridade?.nome,
         os.status?.nome,
+        os.unidade?.nome,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return termo.split(/\s+/).every((t) => texto.includes(t));
     });
-  }, [ordens, filtroStatus, busca]);
+  }, [ordens, filtroStatus, unidadeFiltrada, busca]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -568,7 +635,7 @@ export function ConteudoOrdensServico({
 
   useEffect(() => {
     setPagina(1);
-  }, [busca, filtroStatus]);
+  }, [busca, filtroStatus, filtroUnidade]);
 
   const osDetalhe = ordens.find((os) => os.id === detalheId);
   const tituloDetalhe = osDetalhe
@@ -577,11 +644,11 @@ export function ConteudoOrdensServico({
 
   const dadosGrafico = useMemo(
     () =>
-      (statusList ?? []).map((s) => ({
+      opcoesStatus.map((s) => ({
         status: s.nome,
-        total: ordens.filter((os) => os.statusId === s.id).length,
+        total: ordens.filter((os) => os.status?.nome === s.nome).length,
       })),
-    [statusList, ordens],
+    [opcoesStatus, ordens],
   );
 
   return (
@@ -597,7 +664,13 @@ export function ConteudoOrdensServico({
             <h1 className="text-lg font-bold">{v.ordensServico}</h1>
             <p className="text-xs text-slate-500">
               {lista?.total ?? 0} ordens registradas
-              {organizacao ? ` · ${organizacao.nome}` : ""}
+              {verRede
+                ? unidadeFiltrada === "todas"
+                  ? " · todas as unidades"
+                  : ` · ${unidadesDaLista.find((u) => u.id === unidadeFiltrada)?.nome ?? ""}`
+                : organizacao
+                  ? ` · ${organizacao.nome}`
+                  : ""}
             </p>
           </div>
           {podeCriar && (
@@ -648,24 +721,49 @@ export function ConteudoOrdensServico({
           >
             Todas
           </button>
-          {(statusList ?? []).map((s) => {
-            const ativo = filtroStatus === s.id;
+          {opcoesStatus.map((s) => {
+            const ativo = filtroStatus === s.nome;
             return (
               <button
-                key={s.id}
+                key={s.nome}
                 className="text-xs whitespace-nowrap px-3 py-1.5 rounded-full border transition-colors"
                 style={
                   ativo
                     ? { background: s.cor ?? "#334155", color: "#fff", borderColor: s.cor ?? "#334155" }
                     : { color: s.cor ?? "#475569", borderColor: `${s.cor ?? "#94a3b8"}55` }
                 }
-                onClick={() => setFiltroStatus(s.id)}
+                onClick={() => setFiltroStatus(s.nome)}
               >
                 {s.nome}
               </button>
             );
           })}
         </div>
+
+        {/* Rede: a lista já vem com tudo; aqui é só estreitar para uma unidade. */}
+        {verRede && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 whitespace-nowrap">{v.unidade}:</span>
+            <Select
+              value={unidadeFiltrada === "todas" ? "todas" : String(unidadeFiltrada)}
+              onValueChange={(valor) =>
+                setFiltroUnidade(valor === "todas" ? "todas" : Number(valor))
+              }
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as unidades</SelectItem>
+                {unidadesDaLista.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>
+                    {u.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {carregandoLista ? (
           <div className="flex justify-center py-12">
@@ -711,6 +809,13 @@ export function ConteudoOrdensServico({
                   )}
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mt-2">
+                    {/* Na rede, saber de qual unidade é a ordem vem antes do
+                        endereço: é o que separa duas ordens parecidas. */}
+                    {verRede && os.unidade?.nome && (
+                      <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                        <Building2 className="w-3.5 h-3.5" /> {os.unidade.nome}
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5" /> {os.endereco || "—"}
                     </span>
@@ -765,7 +870,7 @@ export function ConteudoOrdensServico({
                           <SelectValue placeholder="Definir" />
                         </SelectTrigger>
                         <SelectContent>
-                          {(statusList ?? []).map((s) => (
+                          {statusDaUnidade(os.condominioId).map((s) => (
                             <SelectItem key={s.id} value={String(s.id)}>
                               {s.nome}
                             </SelectItem>
@@ -777,7 +882,7 @@ export function ConteudoOrdensServico({
                       Abrir O.S.
                     </Button>
                     <BotaoCompartilhar
-                      condominioId={condominioId}
+                      condominioId={os.condominioId}
                       mensagem={mensagemDe(os)}
                       rotulo="Compartilhar"
                     />
@@ -800,6 +905,17 @@ export function ConteudoOrdensServico({
                 </CardContent>
               </Card>
             ))}
+
+            {/* A tela carrega um lote e filtra aqui dentro — busca e filtros
+                alcançam só o que foi carregado. Somando a rede inteira o lote
+                enche mais rápido, e quem procura uma ordem antiga precisa saber
+                que ela ficou de fora, não concluir que ela não existe. */}
+            {(lista?.total ?? 0) > ordens.length && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                Mostrando as {ordens.length} ordens mais recentes de {lista?.total}; a busca e os
+                filtros desta tela alcançam apenas essas.
+              </p>
+            )}
 
             {totalPaginas > 1 && (
               <div className="flex items-center justify-between pt-2">
@@ -1337,7 +1453,13 @@ export function ConteudoOrdensServico({
             <DialogTitle>{tituloDetalhe}</DialogTitle>
           </DialogHeader>
           {detalheId !== null && (
-            <OsDetalhe ordemServicoId={detalheId} condominioId={condominioId} ehGestor={ehGestor} />
+            <OsDetalhe
+              ordemServicoId={detalheId}
+              /* Cadastros do detalhe (equipe, responsáveis) são da unidade da
+                 ordem, que na rede nem sempre é a unidade ativa da tela. */
+              condominioId={osDetalhe?.condominioId ?? condominioId}
+              ehGestor={ehGestor}
+            />
           )}
         </DialogContent>
       </Dialog>

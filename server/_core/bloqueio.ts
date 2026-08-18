@@ -7,7 +7,7 @@
  *
  * A conta da plataforma nunca é barrada: é ela que suspende e libera.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { condominios } from '../../drizzle/schema';
 import { getDb } from '../db';
 
@@ -51,6 +51,33 @@ export async function bloqueioDaOrganizacao(
     // derrubar todo mundo por causa de um soluço de infraestrutura.
     console.error('[bloqueio] falha ao ler o estado da unidade:', erro);
     return null;
+  }
+}
+
+/**
+ * Das unidades informadas, as que não estão suspensas.
+ *
+ * Serve às telas que somam a rede (lista de O.S., calendário): a checagem da
+ * requisição olha só a unidade ativa, então sem este filtro o registro de uma
+ * unidade suspensa — que ninguém consegue abrir — reapareceria na soma.
+ */
+export async function unidadesNaoBloqueadas(ids: number[]): Promise<number[]> {
+  if (ids.length === 0) return ids;
+
+  const db = await getDb();
+  // Mesmo critério do bloqueio individual: falha de infra não vira corte.
+  if (!db) return ids;
+
+  try {
+    const linhas = await db
+      .select({ id: condominios.id })
+      .from(condominios)
+      .where(and(inArray(condominios.id, ids), isNull(condominios.bloqueadaEm)));
+
+    return linhas.map((l) => l.id);
+  } catch (erro) {
+    console.error('[bloqueio] falha ao filtrar unidades suspensas:', erro);
+    return ids;
   }
 }
 

@@ -29,6 +29,7 @@ import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "dr
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
+import { unidadesNaoBloqueadas } from "../../_core/bloqueio";
 import { assegurarExclusaoFuncionario } from "../../_core/permissaoFuncionario";
 import {
   seedCategoriasOs,
@@ -225,6 +226,36 @@ async function exigirEquipeDaUnidade(
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Esta equipe foi desativada.",
+    });
+  }
+}
+
+/**
+ * O cadastro escolhido é da unidade da própria O.S.?
+ *
+ * Mesma pergunta da equipe, agora para status, categoria, prioridade e setor.
+ * Com a lista da rede, a tela mostra ordens de várias unidades ao mesmo tempo,
+ * e o escopo por registro aceita qualquer id do alcance de quem gerencia — sem
+ * esta conferência, o status de uma unidade entra na ordem de outra e some da
+ * tela, porque a lista de cada unidade só traz os cadastros dela.
+ */
+async function exigirCadastroDaUnidade(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  tabela: typeof osStatus | typeof osCategorias | typeof osPrioridades | typeof osSetores,
+  id: number,
+  condominioId: number,
+  rotulo: string,
+): Promise<void> {
+  const [registro] = await db
+    .select({ condominioId: tabela.condominioId })
+    .from(tabela)
+    .where(eq(tabela.id, id))
+    .limit(1);
+
+  if (!registro || registro.condominioId !== condominioId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `${rotulo} não é da unidade da ordem de serviço.`,
     });
   }
 }
@@ -736,6 +767,15 @@ export const osRouter = router({
     list: osProcedure
       .input(z.object({
         condominioId: z.number(),
+        /**
+         * Junta as O.S. de todas as unidades que quem consulta alcança.
+         *
+         * É o que o gerente da rede precisa: ordem aberta pelo gestor de uma
+         * unidade tem de aparecer para ele sem trocar a unidade da tela. Quais
+         * unidades entram sai da identidade autenticada, nunca do input — o
+         * client só diz "quero a rede".
+         */
+        todasUnidades: z.boolean().optional(),
         statusId: z.number().optional(),
         categoriaId: z.number().optional(),
         prioridadeId: z.number().optional(),
@@ -743,12 +783,20 @@ export const osRouter = router({
         limit: z.number().optional().default(50),
         offset: z.number().optional().default(0),
       }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
-        const conditions = [eq(ordensServico.condominioId, input.condominioId)];
-        
+
+        // A plataforma fica de fora: o alcance dela é a base inteira, e a tela
+        // de um cliente passaria a listar a O.S. de todos os outros.
+        const idsAlcance =
+          input.todasUnidades && !ctx.tenant.isMaster()
+            ? await unidadesNaoBloqueadas(await ctx.tenant.ids())
+            : [];
+        const unidadesDaConsulta = idsAlcance.length > 0 ? idsAlcance : [input.condominioId];
+
+        const conditions = [inArray(ordensServico.condominioId, unidadesDaConsulta)];
+
         if (input.statusId) conditions.push(eq(ordensServico.statusId, input.statusId));
         if (input.categoriaId) conditions.push(eq(ordensServico.categoriaId, input.categoriaId));
         if (input.prioridadeId) conditions.push(eq(ordensServico.prioridadeId, input.prioridadeId));
@@ -774,16 +822,26 @@ export const osRouter = router({
         // Buscar dados relacionados
         const osIds = lista.map(os => os.id);
         
+        // Cadastros de todas as unidades da consulta: categoria, prioridade e
+        // status são por unidade, e sem isto a ordem da unidade vizinha viria
+        // sem etiqueta nenhuma na lista da rede.
         const categorias = await db.select().from(osCategorias)
-          .where(eq(osCategorias.condominioId, input.condominioId));
+          .where(inArray(osCategorias.condominioId, unidadesDaConsulta));
         const prioridades = await db.select().from(osPrioridades)
-          .where(eq(osPrioridades.condominioId, input.condominioId));
+          .where(inArray(osPrioridades.condominioId, unidadesDaConsulta));
         const statusList = await db.select().from(osStatus)
-          .where(eq(osStatus.condominioId, input.condominioId));
+          .where(inArray(osStatus.condominioId, unidadesDaConsulta));
         const equipesDaUnidade = await db
           .select({ id: equipes.id, nome: equipes.nome, cor: equipes.cor })
           .from(equipes)
-          .where(eq(equipes.condominioId, input.condominioId));
+          .where(inArray(equipes.condominioId, unidadesDaConsulta));
+        // Em ordem de nome: é a lista que vira o filtro por unidade na tela, e
+        // a ordem do banco deixaria as 15 unidades embaralhadas.
+        const unidades = await db
+          .select({ id: condominios.id, nome: condominios.nome })
+          .from(condominios)
+          .where(inArray(condominios.id, unidadesDaConsulta))
+          .orderBy(asc(condominios.nome));
 
         return {
           items: lista.map(os => ({
@@ -792,8 +850,26 @@ export const osRouter = router({
             prioridade: prioridades.find(p => p.id === os.prioridadeId),
             status: statusList.find(s => s.id === os.statusId),
             equipe: equipesDaUnidade.find(e => e.id === os.equipeId) ?? null,
+            // Em qual unidade a ordem foi aberta: na lista da rede é isso que
+            // diferencia duas ordens com o mesmo título.
+            unidade: unidades.find(u => u.id === os.condominioId) ?? null,
           })),
           total,
+          unidades,
+          /**
+           * Status de cada unidade da consulta. A tela troca o status direto na
+           * lista, e trocar usando os status da unidade ativa gravaria em uma
+           * ordem de outra unidade o status que não é dela.
+           */
+          statusPorUnidade: statusList.map(s => ({
+            id: s.id,
+            nome: s.nome,
+            cor: s.cor,
+            // `isFinal` diz que a ordem está encerrada: é com ele que o painel
+            // de pendências separa o que ainda espera alguém.
+            isFinal: s.isFinal,
+            condominioId: s.condominioId,
+          })),
         };
       }),
     
@@ -904,6 +980,22 @@ export const osRouter = router({
 
         if (input.equipeId) {
           await exigirEquipeDaUnidade(db, input.equipeId, input.condominioId, ctx);
+        }
+
+        // Mesma trava do `update`: quem abre a O.S. escolhe a unidade no
+        // formulário, e trocar de unidade com um cadastro já escolhido gravaria
+        // a ordem apontando para a categoria/status de outra.
+        if (input.statusId) {
+          await exigirCadastroDaUnidade(db, osStatus, input.statusId, input.condominioId, "Este status");
+        }
+        if (input.categoriaId) {
+          await exigirCadastroDaUnidade(db, osCategorias, input.categoriaId, input.condominioId, "Esta categoria");
+        }
+        if (input.prioridadeId) {
+          await exigirCadastroDaUnidade(db, osPrioridades, input.prioridadeId, input.condominioId, "Esta prioridade");
+        }
+        if (input.setorId) {
+          await exigirCadastroDaUnidade(db, osSetores, input.setorId, input.condominioId, "Este setor");
         }
 
         // O numero vem da sequence do banco: dois pedidos simultaneos nunca
@@ -1049,6 +1141,19 @@ export const osRouter = router({
 
         if (input.equipeId) {
           await exigirEquipeDaUnidade(db, input.equipeId, osAtual.condominioId, ctx);
+        }
+
+        if (input.statusId) {
+          await exigirCadastroDaUnidade(db, osStatus, input.statusId, osAtual.condominioId, "Este status");
+        }
+        if (input.categoriaId) {
+          await exigirCadastroDaUnidade(db, osCategorias, input.categoriaId, osAtual.condominioId, "Esta categoria");
+        }
+        if (input.prioridadeId) {
+          await exigirCadastroDaUnidade(db, osPrioridades, input.prioridadeId, osAtual.condominioId, "Esta prioridade");
+        }
+        if (input.setorId) {
+          await exigirCadastroDaUnidade(db, osSetores, input.setorId, osAtual.condominioId, "Este setor");
         }
 
         // Sem campo nenhum para gravar, o drizzle estoura com "No values to
