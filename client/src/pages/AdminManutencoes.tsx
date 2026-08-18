@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
+import { useNovidades } from "@/hooks/useNovidades";
+import { useTotaisManutencao } from "@/hooks/useTotaisManutencao";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
@@ -46,48 +48,7 @@ export default function AdminManutencoes() {
     organizacoes?.find((c) => c.id === salvo) ?? organizacoes?.[0] ?? null;
   const condominioId = organizacaoAtiva?.id ?? 0;
 
-  // O cartão aparece enquanto o bootstrap não responde (`temModulo` é
-  // permissivo de propósito), mas a consulta espera: disparar antes devolveria
-  // 403 de módulo desligado em toda visita à tela.
-  const ativa = (modulo: string) =>
-    !!organizacaoAtiva && !modulosIndefinidos && temModulo(modulo);
-
-  const { data: ordens } = trpc.ordensServico.list.useQuery(
-    { condominioId, limit: 1 },
-    { enabled: ativa("ordens-servico") },
-  );
-  const { data: statsVencimentos } = trpc.vencimentos.stats.useQuery(
-    { condominioId },
-    { enabled: ativa("agenda-vencimentos") },
-  );
-  const { data: manutencoes } = trpc.manutencao.getStats.useQuery(
-    { condominioId },
-    { enabled: ativa("manutencoes") },
-  );
-  const { data: checklists } = trpc.checklist.list.useQuery(
-    { condominioId },
-    { enabled: ativa("checklists") },
-  );
-  const { data: tarefas } = trpc.tarefasAgendadas.listar.useQuery(
-    { condominioId },
-    { enabled: ativa("tarefas-agendadas") },
-  );
-  const { data: vistorias } = trpc.vistoria.list.useQuery(
-    { condominioId },
-    { enabled: ativa("vistorias") },
-  );
-  const { data: atividades } = trpc.quadroAtividades.listar.useQuery(
-    { condominioId },
-    { enabled: ativa("quadro-atividades") },
-  );
-  const { data: qrcodes } = trpc.qrcode.listar.useQuery(
-    { condominioId },
-    { enabled: ativa("qrcode") },
-  );
-  const { data: ocorrencias } = trpc.ocorrencia.list.useQuery(
-    { condominioId },
-    { enabled: ativa("ocorrencias") },
-  );
+  const { totais, osEmRede, statsVencimentos } = useTotaisManutencao(condominioId);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -95,6 +56,20 @@ export default function AdminManutencoes() {
       setLocation("/login");
     }
   }, [isLoading, user, setLocation]);
+
+  const { temNovidade, marcarVisto, sincronizarQuedas } = useNovidades(condominioId);
+
+  useEffect(() => {
+    sincronizarQuedas(totais);
+  }, [totais, sincronizarQuedas]);
+
+  /** Abrir a função conta como "eu vi": o amarelo apaga a partir daqui. */
+  const abrir = (modulo: keyof typeof totais, rota: string) => {
+    marcarVisto(modulo, totais[modulo]);
+    setLocation(rota);
+  };
+
+  const valorDe = (modulo: keyof typeof totais) => totais[modulo] ?? "—";
 
   if (isLoading || !user) {
     return (
@@ -135,93 +110,108 @@ export default function AdminManutencoes() {
             <CardQuadrado
               icone={<CalendarDays className="w-6 h-6 text-blue-600" />}
               titulo="Calendário"
-              descricao="tudo com data, de todas as funções"
-              onClick={() => setLocation("/manutencoes/calendario")}
+              valor={valorDe("calendario")}
+              descricao="com data neste mês, de todas as funções"
+              novidade={temNovidade("calendario", totais.calendario)}
+              onClick={() => abrir("calendario", "/manutencoes/calendario")}
             />
           )}
           {temModulo("ordens-servico") && (
             <CardQuadrado
               icone={<ClipboardList className="w-6 h-6 text-sky-500" />}
               titulo={v.ordensServico}
-              valor={ordens?.total ?? "—"}
-              descricao="abertura, execução e conclusão"
-              onClick={() => setLocation("/manutencoes/ordens-servico")}
+              valor={valorDe("ordens-servico")}
+              descricao={
+                osEmRede
+                  ? "abertura e execução · todas as unidades"
+                  : "abertura, execução e conclusão"
+              }
+              novidade={temNovidade("ordens-servico", totais["ordens-servico"])}
+              onClick={() => abrir("ordens-servico", "/manutencoes/ordens-servico")}
             />
           )}
           {temModulo("agenda-vencimentos") && (
             <CardQuadrado
               icone={<CalendarClock className="w-6 h-6 text-amber-500" />}
               titulo="Agenda de Vencimentos"
-              valor={statsVencimentos?.total ?? "—"}
+              valor={valorDe("agenda-vencimentos")}
               descricao={
                 statsVencimentos
                   ? `${statsVencimentos.vencidos} vencidos · ${statsVencimentos.proximos} próximos`
                   : "contratos, serviços e manutenções"
               }
-              onClick={() => setLocation("/manutencoes/vencimentos")}
+              novidade={temNovidade("agenda-vencimentos", totais["agenda-vencimentos"])}
+              onClick={() => abrir("agenda-vencimentos", "/manutencoes/vencimentos")}
             />
           )}
           {temModulo("checklists") && (
             <CardQuadrado
               icone={<ClipboardCheck className="w-6 h-6 text-emerald-500" />}
               titulo={v.checklists}
-              valor={checklists?.length ?? "—"}
+              valor={valorDe("checklists")}
               descricao="itens, antes e depois, problemas"
-              onClick={() => setLocation("/manutencoes/checklists")}
+              novidade={temNovidade("checklists", totais.checklists)}
+              onClick={() => abrir("checklists", "/manutencoes/checklists")}
             />
           )}
           {temModulo("tarefas-agendadas") && (
             <CardQuadrado
               icone={<ListChecks className="w-6 h-6 text-violet-500" />}
               titulo={v.tarefas}
-              valor={tarefas?.length ?? "—"}
+              valor={valorDe("tarefas-agendadas")}
               descricao="atribuição, recorrência e execução"
-              onClick={() => setLocation("/manutencoes/tarefas")}
+              novidade={temNovidade("tarefas-agendadas", totais["tarefas-agendadas"])}
+              onClick={() => abrir("tarefas-agendadas", "/manutencoes/tarefas")}
             />
           )}
           {temModulo("vistorias") && (
             <CardQuadrado
               icone={<ClipboardCheck className="w-6 h-6 text-rose-500" />}
               titulo={v.vistorias}
-              valor={vistorias?.length ?? "—"}
+              valor={valorDe("vistorias")}
               descricao="itens, conformidade e problemas"
-              onClick={() => setLocation("/manutencoes/vistorias")}
+              novidade={temNovidade("vistorias", totais.vistorias)}
+              onClick={() => abrir("vistorias", "/manutencoes/vistorias")}
             />
           )}
           {temModulo("quadro-atividades") && (
             <CardQuadrado
               icone={<Columns3 className="w-6 h-6 text-indigo-500" />}
               titulo={v.atividades}
-              valor={atividades?.length ?? "—"}
+              valor={valorDe("quadro-atividades")}
               descricao="a fazer, em andamento, revisão, concluído"
-              onClick={() => setLocation("/manutencoes/quadro")}
+              novidade={temNovidade("quadro-atividades", totais["quadro-atividades"])}
+              onClick={() => abrir("quadro-atividades", "/manutencoes/quadro")}
             />
           )}
           {temModulo("qrcode") && (
             <CardQuadrado
               icone={<QrCode className="w-6 h-6 text-slate-700" />}
               titulo="QR Code"
-              valor={qrcodes?.length ?? "—"}
+              valor={valorDe("qrcode")}
               descricao="pontos com registro por leitura"
-              onClick={() => setLocation("/manutencoes/qrcode")}
+              novidade={temNovidade("qrcode", totais.qrcode)}
+              onClick={() => abrir("qrcode", "/manutencoes/qrcode")}
             />
           )}
           {temModulo("ocorrencias") && (
             <CardQuadrado
               icone={<AlertTriangle className="w-6 h-6 text-red-500" />}
               titulo="Ocorrências"
-              valor={ocorrencias?.length ?? "—"}
+              valor={valorDe("ocorrencias")}
               descricao="incidentes com foto e prioridade"
-              onClick={() => setLocation("/ocorrencias")}
+              novidade={temNovidade("ocorrencias", totais.ocorrencias)}
+              onClick={() => abrir("ocorrencias", "/ocorrencias")}
             />
           )}
           {temModulo("manutencoes") && (
             <CardQuadrado
               icone={<Wrench className="w-6 h-6 text-orange-500" />}
               titulo={`Registro de ${v.manutencoes}`}
-              valor={manutencoes?.total ?? "—"}
+              valor={valorDe("manutencoes")}
               descricao="registros já existentes no sistema"
-              onClick={() => setLocation("/manutencoes")}
+              novidade={temNovidade("manutencoes", totais.manutencoes)}
+              onClick={() => abrir("manutencoes", "/manutencoes")}
             />
           )}
         </div>

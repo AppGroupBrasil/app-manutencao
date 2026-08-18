@@ -2,6 +2,8 @@ import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
+import { useNovidades } from "@/hooks/useNovidades";
+import { useTotaisManutencao } from "@/hooks/useTotaisManutencao";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
@@ -63,10 +65,18 @@ export default function AdminDashboard() {
     condominios?.find((c) => c.id === salvo) ?? condominios?.[0] ?? null;
   const escopo = (condominios?.length ?? 0) > 1 ? "todas" : "unidade";
 
-  // Não existe visão somada das unidades: o número é o da organização ativa.
-  const { data: manutencoes } = trpc.manutencao.getStats.useQuery(
-    { condominioId: organizacaoAtiva?.id ?? 0 },
-    { enabled: !!organizacaoAtiva && !modulosIndefinidos && temModulo("manutencoes") },
+  /**
+   * Números do hub de Manutenções, para o cartão que leva até ele.
+   *
+   * O mesmo hook do hub: o cartão mostrava só o total do registro de
+   * manutenções, como se O.S., vencimentos e checklists não contassem, e o
+   * gerente comparava dois números diferentes para a mesma coisa.
+   */
+  const { totais, somaRegistros } = useTotaisManutencao(organizacaoAtiva?.id ?? 0);
+  const { temNovidade } = useNovidades(organizacaoAtiva?.id ?? 0);
+  /** Alguma função com registro que ninguém abriu ainda: o cartão pisca. */
+  const novidadeNoHub = (Object.keys(totais) as (keyof typeof totais)[]).some((funcao) =>
+    temNovidade(funcao, totais[funcao]),
   );
   const { data: funcionarios } = trpc.funcionario.list.useQuery(
     { condominioId: organizacaoAtiva?.id ?? 0 },
@@ -222,12 +232,11 @@ export default function AdminDashboard() {
             <CardQuadrado
               icone={<Wrench className="w-6 h-6 text-orange-500" />}
               titulo="Manutenções"
-              valor={manutencoes?.total ?? "—"}
-              descricao={
-                manutencoes
-                  ? `${manutencoes.pendentes} pendentes · ${manutencoes.requerAcao} requerem ação`
-                  : "ordens de serviço, vencimentos e mais"
-              }
+              // Soma de todas as funções do hub — é o que o cartão promete ao
+              // dizer "ordens de serviço, vencimentos e mais".
+              valor={somaRegistros}
+              descricao="registros em ordens de serviço, vencimentos e demais funções"
+              novidade={novidadeNoHub}
               onClick={() => setLocation("/admin/manutencoes")}
             />
           )}

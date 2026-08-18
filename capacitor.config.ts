@@ -5,8 +5,16 @@ const config: CapacitorConfig = {
   appName: 'App Manutenção',
   webDir: 'dist/public',
   server: {
-    // URL de produção para o app Android/iOS (Google Cloud Run)
-    url: 'https://appmanutencao-4501-746199185838.us-central1.run.app',
+    /**
+     * O app é uma casca do site: o conteúdo vem daqui, ao vivo.
+     *
+     * Por isso o endereço tem de ser o domínio definitivo, e não o de uma
+     * hospedagem passageira — apontava para uma URL do Cloud Run que saiu do
+     * ar, e cada publicação do site deixava de chegar ao celular. Enquanto
+     * este endereço não mudar, o app acompanha o deploy sem AAB novo; trocá-lo
+     * obriga a gerar e subir outro pacote na Play.
+     */
+    url: 'https://appmanutencao.com.br',
     androidScheme: 'https',
   },
   plugins: {

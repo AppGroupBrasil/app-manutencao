@@ -747,6 +747,34 @@ html {
     animation: pulse-subtle 3s ease-in-out infinite;
   }
 
+  /*
+   * Aviso de novidade: função com registro que ninguém abriu ainda.
+   *
+   * Amarelo piscando no contorno, e não no fundo: o cartão continua legível
+   * enquanto chama atenção, e o número dentro dele não muda de cor.
+   */
+  @keyframes piscar-novidade {
+    0%, 100% {
+      box-shadow: 0 0 0 2px rgb(245 158 11 / 0.95), 0 0 14px 2px rgb(245 158 11 / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 2px rgb(245 158 11 / 0.25), 0 0 0 0 rgb(245 158 11 / 0);
+    }
+  }
+
+  .animate-novidade {
+    animation: piscar-novidade 1.4s ease-in-out infinite;
+    border-color: rgb(245 158 11);
+  }
+
+  /* Quem pediu menos movimento no sistema recebe o aviso parado. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-novidade {
+      animation: none;
+      box-shadow: 0 0 0 2px rgb(245 158 11 / 0.95);
+    }
+  }
+
   .animate-shimmer {
     background: linear-gradient(90deg, 
       transparent 0%, 
