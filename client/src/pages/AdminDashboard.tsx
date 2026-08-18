@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import { useNovidades } from "@/hooks/useNovidades";
@@ -7,6 +7,13 @@ import { useTotaisManutencao } from "@/hooks/useTotaisManutencao";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PainelPendencias } from "@/components/PainelPendencias";
 import { CalendarioGeral } from "@/components/CalendarioGeral";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -60,10 +67,38 @@ export default function AdminDashboard() {
 
   // A hierarquia já vem resolvida do servidor: `condominio.list` devolve as 15
   // unidades para o gestor-chefe e só a dele para o gestor de unidade.
-  const salvo = Number(localStorage.getItem("condominio_ativo"));
+  /**
+   * Unidade ativa: fica no navegador e viaja em `x-condominio-id`.
+   *
+   * Em estado, e não lido direto do `localStorage` a cada render, porque a
+   * troca precisa redesenhar a tela. Ela ficou invisível quando o seletor saiu
+   * do painel: quem tinha escolhido uma unidade continuava vendo o calendário e
+   * os números dela, sem nada dizendo qual era — e recarregar não mudava, já
+   * que atualizar a página não apaga o que está guardado no navegador.
+   */
+  const [unidadeAtiva, setUnidadeAtiva] = useState<number>(
+    () => Number(localStorage.getItem("condominio_ativo")) || 0,
+  );
   const organizacaoAtiva =
-    condominios?.find((c) => c.id === salvo) ?? condominios?.[0] ?? null;
+    condominios?.find((c) => c.id === unidadeAtiva) ?? condominios?.[0] ?? null;
   const escopo = (condominios?.length ?? 0) > 1 ? "todas" : "unidade";
+
+  // Guardado apontando para unidade que não existe mais (ou de outra conta):
+  // acerta para a que a tela está mostrando, senão o cabeçalho das chamadas
+  // continua pedindo a antiga.
+  useEffect(() => {
+    if (organizacaoAtiva && organizacaoAtiva.id !== unidadeAtiva) {
+      localStorage.setItem("condominio_ativo", String(organizacaoAtiva.id));
+      setUnidadeAtiva(organizacaoAtiva.id);
+    }
+  }, [organizacaoAtiva, unidadeAtiva]);
+
+  const trocarUnidade = async (id: number) => {
+    localStorage.setItem("condominio_ativo", String(id));
+    setUnidadeAtiva(id);
+    // Tudo em cache é da unidade anterior — o tenant vai no cabeçalho.
+    await utils.invalidate();
+  };
 
   /**
    * Números do hub de Manutenções, para o cartão que leva até ele.
@@ -94,6 +129,9 @@ export default function AdminDashboard() {
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: async () => {
       localStorage.removeItem("app_session_token");
+      // A unidade escolhida sai com a sessão: sem isto ela continua valendo
+      // para quem entrar depois neste navegador.
+      localStorage.removeItem("condominio_ativo");
       await utils.auth.me.invalidate();
       setLocation("/login");
     },
@@ -140,11 +178,37 @@ export default function AdminDashboard() {
           </h2>
           <p className="text-sm text-slate-500">
             {escopo === "todas"
-              ? `${condominios?.length ?? 0} organizações sob sua gestão`
+              ? `${condominios?.length ?? 0} ${v.unidade.toLowerCase()}s sob sua gestão`
               : organizacaoAtiva
                 ? organizacaoAtiva.nome
                 : "Sem organização vinculada"}
           </p>
+
+          {/* Quem cuida de mais de uma precisa ver qual está aberta e trocar
+              daqui: calendário, pendências e contadores seguem esta escolha, e
+              sem o seletor ela virava um nome inexplicável na tela. */}
+          {escopo === "todas" && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-slate-500 whitespace-nowrap">
+                Vendo {v.unidade.toLowerCase()}:
+              </span>
+              <Select
+                value={organizacaoAtiva ? String(organizacaoAtiva.id) : undefined}
+                onValueChange={(valor) => trocarUnidade(Number(valor))}
+              >
+                <SelectTrigger className="h-8 w-[240px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(condominios ?? []).map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Teste grátis: quem se cadastrou sozinho precisa saber quanto falta

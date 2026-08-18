@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../../db";
 import { condominios, condominioFuncoes, usuarioCondominios } from "../../../drizzle/schema";
-import { eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { invalidarCacheBloqueio } from "../../_core/bloqueio";
 import { prepararUnidade } from "../../_core/seedUnidade";
@@ -23,15 +23,29 @@ const SEGMENTOS = [
 export const condominioRouter = router({
     // Lista todas as organizações que o usuário alcança — as próprias e as que
     // chegam por vínculo (`usuario_condominios`), não só as de que ele é dono.
+    /**
+     * Em ordem de nome, sempre.
+     *
+     * Sem ordenar, "a primeira" é a que o banco devolver — e as telas usam a
+     * primeira quando não há unidade escolhida. Bastava um `update` mudar a
+     * ordem física para o gestor abrir o sistema em outra unidade, sem ter
+     * pedido nada.
+     */
     list: protectedProcedure.query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return [];
       // Master enxerga a base inteira: montar um IN com todos os ids seria só
       // uma forma cara de escrever "sem filtro".
-      if (ctx.tenant.isMaster()) return db.select().from(condominios);
+      if (ctx.tenant.isMaster()) {
+        return db.select().from(condominios).orderBy(asc(condominios.nome));
+      }
       const ids = await ctx.tenant.ids();
       if (ids.length === 0) return [];
-      return db.select().from(condominios).where(inArray(condominios.id, ids));
+      return db
+        .select()
+        .from(condominios)
+        .where(inArray(condominios.id, ids))
+        .orderBy(asc(condominios.nome));
     }),
 
     get: protectedProcedure

@@ -62,6 +62,10 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+const SESSION_TOKEN_KEY = "app_session_token";
+/** Unidade escolhida, enviada em `x-condominio-id` a cada chamada. */
+const TENANT_ATIVO_KEY = "condominio_ativo";
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
@@ -81,7 +85,11 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   // Limpar cache para evitar loops de autenticação com estado obsoleto
   queryClient.clear();
-  localStorage.removeItem("app_session_token");
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+  // A unidade escolhida sai junto: ela vai no cabeçalho de toda chamada, e
+  // quem entrar depois neste navegador — inclusive outra pessoa — herdaria a
+  // unidade do anterior sem nada na tela dizendo isso.
+  localStorage.removeItem(TENANT_ATIVO_KEY);
   window.location.href = getLoginUrl();
 };
 
@@ -103,9 +111,6 @@ queryClient.getMutationCache().subscribe(event => {
 
 // API URL: use environment variable for hybrid deployment (Vercel frontend + Manus backend)
 const apiUrl = import.meta.env.VITE_API_URL || "/api/trpc";
-
-const SESSION_TOKEN_KEY = "app_session_token";
-const TENANT_ATIVO_KEY = "condominio_ativo";
 
 const trpcClient = trpc.createClient({
   links: [
