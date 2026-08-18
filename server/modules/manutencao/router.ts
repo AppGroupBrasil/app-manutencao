@@ -1,6 +1,7 @@
 ﻿import { z } from "zod";
-import { eq, desc, and, like, sql } from "drizzle-orm";
+import { eq, desc, and, inArray, like, sql } from "drizzle-orm";
 import { moduloProcedure, router } from "../../_core/trpc";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
@@ -338,15 +339,15 @@ export const manutencaoRouter = router({
     }),
 
   getStats: manutencaoProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return { total: 0, pendentes: 0, realizadas: 0, finalizadas: 0, requerAcao: 0, reabertas: 0 };
       const stats = await db.select({
         status: manutencoes.status,
         count: sql<number>`count(*)`,
       }).from(manutencoes)
-        .where(eq(manutencoes.condominioId, input.condominioId))
+        .where(inArray(manutencoes.condominioId, await unidadesDaConsulta(ctx, input, "manutencoes")))
         .groupBy(manutencoes.status);
       
       const result = { total: 0, pendentes: 0, realizadas: 0, finalizadas: 0, requerAcao: 0, reabertas: 0 };

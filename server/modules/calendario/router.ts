@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { moduloUserProcedure, router } from "../../_core/trpc";
 import { isModuloHabilitado } from "../../_core/modules";
-import { unidadesNaoBloqueadas } from "../../_core/bloqueio";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { getDb } from "../../db";
 import {
   checklists,
@@ -136,14 +136,19 @@ export const calendarioRouter = router({
         de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         /**
-         * Traz as O.S. de todas as unidades que quem consulta alcança.
+         * Traz a agenda de todas as unidades que quem consulta alcança.
          *
-         * Vale só para a O.S.: é a função que o gerente da rede acompanha dia a
-         * dia, e a ordem aberta numa unidade tem de entrar na agenda dele sem
-         * trocar a unidade da tela. As demais fontes seguem da unidade ativa.
          * Quais unidades entram sai da identidade autenticada, nunca do input.
          */
         todasUnidades: z.boolean().optional(),
+        /**
+         * Só as unidades marcadas no seletor, quando não são todas.
+         *
+         * Cada fonte entra pelas unidades marcadas que têm aquela função
+         * ligada: marcar três unidades não faz o calendário mostrar checklist
+         * de quem não contratou checklist.
+         */
+        unidades: unidadesSelecionadas,
       }),
     )
     .query(async ({ ctx, input }): Promise<ItemCalendario[]> => {
@@ -167,15 +172,37 @@ export const calendarioRouter = router({
       const ligado = async (fonte: FonteCalendario) =>
         ctx.tenant.isMaster() || (await isModuloHabilitado(tenant, FONTES[fonte].modulo));
 
-      /** Das unidades informadas, as que têm a função de O.S. ligada. */
-      const unidadesComOs = async (ids: number[]) => {
-        const ligadas: number[] = [];
-        for (const id of ids) {
-          if (await isModuloHabilitado(id, FONTES.os.modulo)) ligadas.push(id);
+      /**
+       * Unidades que entram em cada fonte.
+       *
+       * Uma função ligada em três unidades e desligada na quarta só traz as
+       * três. Sem seleção nenhuma sobra a unidade da tela — e aí quem decide é
+       * o portão do módulo dela, como sempre foi.
+       */
+      const alvoDaFonte = async (fonte: FonteCalendario): Promise<number[]> => {
+        const marcadas = await unidadesDaConsulta(ctx, input, FONTES[fonte].modulo);
+        if (marcadas.length === 1 && marcadas[0] === tenant) {
+          return (await ligado(fonte)) ? marcadas : [];
         }
-        // Nenhuma passou (banco fora, por exemplo): fica na unidade da tela,
-        // que é a que o portão do módulo já liberou nesta requisição.
-        return ligadas.length > 0 ? ligadas : [tenant];
+        return marcadas;
+      };
+
+      /**
+       * Nome da unidade de cada item, quando a agenda soma mais de uma.
+       *
+       * É o que diz onde é o serviço: com a rede somada, duas ordens iguais em
+       * unidades diferentes ficariam indistinguíveis na mesma linha do dia.
+       */
+      const nomes = new Map<number, string>();
+      const nomearUnidades = async (ids: number[]) => {
+        const faltando = ids.filter((id) => !nomes.has(id));
+        if (faltando.length === 0) return;
+        const linhas = await db
+          .select({ id: condominios.id, nome: condominios.nome })
+          .from(condominios)
+          .where(inArray(condominios.id, faltando))
+          .orderBy(asc(condominios.nome));
+        for (const u of linhas) nomes.set(u.id, u.nome);
       };
 
       const itens: ItemCalendario[] = [];
@@ -217,26 +244,11 @@ export const calendarioRouter = router({
       // ------------------------------------------------ ordens de serviço
       // Mostra o dia programado; enquanto ninguém programou, mostra o prazo
       // máximo — é assim que a O.S. sem data marcada ainda cobra alguém.
-      if (await ligado("os")) {
-        // Rede: as unidades que a pessoa alcança, menos as suspensas e as que
-        // não têm a função ligada — o calendário nunca mostra o que a unidade
-        // não contratou, e isso não muda por a soma ser de várias.
-        const unidadesDaOs =
-          input.todasUnidades && !ctx.tenant.isMaster()
-            ? await unidadesComOs(await unidadesNaoBloqueadas(await ctx.tenant.ids()))
-            : [tenant];
-
+      const unidadesDaOs = await alvoDaFonte("os");
+      if (unidadesDaOs.length > 0) {
         // Nome da unidade só quando há mais de uma: é o que identifica onde é o
         // serviço na agenda do gerente.
-        const nomes = new Map<number, string>();
-        if (unidadesDaOs.length > 1) {
-          const unidades = await db
-            .select({ id: condominios.id, nome: condominios.nome })
-            .from(condominios)
-            .where(inArray(condominios.id, unidadesDaOs))
-            .orderBy(asc(condominios.nome));
-          for (const u of unidades) nomes.set(u.id, u.nome);
-        }
+        if (unidadesDaOs.length > 1) await nomearUnidades(unidadesDaOs);
 
         const linhas = await db
           .select({
@@ -293,10 +305,14 @@ export const calendarioRouter = router({
       }
 
       // ---------------------------------------------------- vencimentos
-      if (await ligado("vencimento")) {
+      const unidadesDosVencimentos = await alvoDaFonte("vencimento");
+      if (unidadesDosVencimentos.length > 0) {
+        if (unidadesDosVencimentos.length > 1) await nomearUnidades(unidadesDosVencimentos);
+
         const linhas = await db
           .select({
             id: vencimentos.id,
+            condominioId: vencimentos.condominioId,
             protocolo: vencimentos.protocolo,
             titulo: vencimentos.titulo,
             data: vencimentos.dataVencimento,
@@ -308,7 +324,7 @@ export const calendarioRouter = router({
           .from(vencimentos)
           .where(
             and(
-              eq(vencimentos.condominioId, tenant),
+              inArray(vencimentos.condominioId, unidadesDosVencimentos),
               gte(vencimentos.dataVencimento, limiteInicio),
               lte(vencimentos.dataVencimento, limiteFim),
             ),
@@ -327,6 +343,8 @@ export const calendarioRouter = router({
               linha.status === "renovado" ||
               linha.status === "cancelado",
             detalhe: linha.fornecedor || linha.tipo,
+            unidadeId: linha.condominioId,
+            unidade: nomes.get(linha.condominioId) ?? null,
           });
         }
       }
@@ -341,11 +359,14 @@ export const calendarioRouter = router({
       ];
 
       for (const { fonte, tabela } of agendadas) {
-        if (!(await ligado(fonte))) continue;
+        const unidadesDaFonte = await alvoDaFonte(fonte);
+        if (unidadesDaFonte.length === 0) continue;
+        if (unidadesDaFonte.length > 1) await nomearUnidades(unidadesDaFonte);
 
         const linhas = await db
           .select({
             id: tabela.id,
+            condominioId: tabela.condominioId,
             protocolo: tabela.protocolo,
             titulo: tabela.titulo,
             data: tabela.dataAgendada,
@@ -357,7 +378,7 @@ export const calendarioRouter = router({
           .from(tabela)
           .where(
             and(
-              eq(tabela.condominioId, tenant),
+              inArray(tabela.condominioId, unidadesDaFonte),
               isNotNull(tabela.dataAgendada),
               gte(tabela.dataAgendada, limiteInicio),
               lte(tabela.dataAgendada, limiteFim),
@@ -376,15 +397,21 @@ export const calendarioRouter = router({
               linha.status === "finalizada" ||
               linha.status === "realizada",
             detalhe: linha.localizacao || linha.responsavel,
+            unidadeId: linha.condominioId,
+            unidade: nomes.get(linha.condominioId) ?? null,
           });
         }
       }
 
       // -------------------------------------------------------- tarefas
-      if (await ligado("tarefa")) {
+      const unidadesDasTarefas = await alvoDaFonte("tarefa");
+      if (unidadesDasTarefas.length > 0) {
+        if (unidadesDasTarefas.length > 1) await nomearUnidades(unidadesDasTarefas);
+
         const linhas = await db
           .select({
             id: tarefasAgendadas.id,
+            condominioId: tarefasAgendadas.condominioId,
             protocolo: tarefasAgendadas.protocolo,
             titulo: tarefasAgendadas.titulo,
             recorrencia: tarefasAgendadas.recorrencia,
@@ -395,7 +422,7 @@ export const calendarioRouter = router({
             local: tarefasAgendadas.local,
           })
           .from(tarefasAgendadas)
-          .where(eq(tarefasAgendadas.condominioId, tenant));
+          .where(inArray(tarefasAgendadas.condominioId, unidadesDasTarefas));
 
         // Uma tarefa diária cai em todos os dias da janela: sem saber o que já
         // foi executado, o calendário mostraria em aberto o que está feito.
@@ -429,6 +456,8 @@ export const calendarioRouter = router({
               detalhe: tarefa.funcionario || tarefa.local,
               // A recorrente repete; a chave precisa do dia para não colidir.
               sufixoChave: dia,
+              unidadeId: tarefa.condominioId,
+              unidade: nomes.get(tarefa.condominioId) ?? null,
             });
           };
 
@@ -451,10 +480,14 @@ export const calendarioRouter = router({
       }
 
       // ------------------------------------------- atividades do quadro
-      if (await ligado("atividade")) {
+      const unidadesDasAtividades = await alvoDaFonte("atividade");
+      if (unidadesDasAtividades.length > 0) {
+        if (unidadesDasAtividades.length > 1) await nomearUnidades(unidadesDasAtividades);
+
         const linhas = await db
           .select({
             id: quadroAtividades.id,
+            condominioId: quadroAtividades.condominioId,
             protocolo: quadroAtividades.protocolo,
             titulo: quadroAtividades.titulo,
             data: quadroAtividades.dataEspecifica,
@@ -464,7 +497,7 @@ export const calendarioRouter = router({
           .from(quadroAtividades)
           .where(
             and(
-              eq(quadroAtividades.condominioId, tenant),
+              inArray(quadroAtividades.condominioId, unidadesDasAtividades),
               isNotNull(quadroAtividades.dataEspecifica),
               gte(quadroAtividades.dataEspecifica, dias[0]),
               lte(quadroAtividades.dataEspecifica, ultimoDia),
@@ -480,6 +513,8 @@ export const calendarioRouter = router({
             data: chaveDoDia(`${linha.data}T12:00:00`),
             concluido: linha.status === "concluido",
             detalhe: linha.responsavel,
+            unidadeId: linha.condominioId,
+            unidade: nomes.get(linha.condominioId) ?? null,
           });
         }
       }

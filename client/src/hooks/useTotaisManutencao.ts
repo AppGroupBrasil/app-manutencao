@@ -25,8 +25,16 @@ export type FuncaoManutencao =
   | "ocorrencias"
   | "manutencoes";
 
-export function useTotaisManutencao(condominioId: number) {
+export function useTotaisManutencao(condominioId: number, unidades?: number[]) {
   const { temModulo, modulosIndefinidos } = useBootstrap();
+
+  /**
+   * Unidades marcadas no seletor: os totais somam exatamente estas.
+   *
+   * Sem lista, cada função conta só a unidade da tela — é o que o portal do
+   * funcionário e as telas sem seletor continuam pedindo.
+   */
+  const escopo = { condominioId, unidades };
 
   // O cartão aparece enquanto o bootstrap não responde (`temModulo` é
   // permissivo de propósito), mas a consulta espera: disparar antes devolveria
@@ -48,45 +56,45 @@ export function useTotaisManutencao(condominioId: number) {
   }, []);
 
   const { data: itensCalendario } = trpc.calendario.listar.useQuery(
-    { condominioId, ...mes, todasUnidades: true },
+    { ...escopo, ...mes, todasUnidades: !unidades },
     { enabled: ativa("calendario") },
   );
-  // `todasUnidades`: quem responde pela rede conta as ordens de todas elas, o
-  // mesmo número que a tela de O.S. mostra. Gestor de unidade conta a dele.
+  // Sem seleção, `todasUnidades`: quem responde pela rede conta as ordens de
+  // todas elas, o mesmo número que a tela de O.S. mostra.
   const { data: ordens } = trpc.ordensServico.list.useQuery(
-    { condominioId, limit: 1, todasUnidades: true },
+    { ...escopo, limit: 1, todasUnidades: !unidades },
     { enabled: ativa("ordens-servico") },
   );
   const { data: statsVencimentos } = trpc.vencimentos.stats.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("agenda-vencimentos") },
   );
   const { data: manutencoes } = trpc.manutencao.getStats.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("manutencoes") },
   );
   const { data: checklists } = trpc.checklist.list.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("checklists") },
   );
   const { data: tarefas } = trpc.tarefasAgendadas.listar.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("tarefas-agendadas") },
   );
   const { data: vistorias } = trpc.vistoria.list.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("vistorias") },
   );
   const { data: atividades } = trpc.quadroAtividades.listar.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("quadro-atividades") },
   );
   const { data: qrcodes } = trpc.qrcode.listar.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("qrcode") },
   );
   const { data: ocorrencias } = trpc.ocorrencia.list.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("ocorrencias") },
   );
 

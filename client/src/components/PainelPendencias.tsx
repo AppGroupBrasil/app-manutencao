@@ -16,7 +16,19 @@ import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
  * Função desligada para a organização não é consultada nem contada: o servidor
  * recusaria a chamada, e cobrar do gestor algo que ele não tem seria pior.
  */
-export function PainelPendencias({ condominioId }: { condominioId: number }) {
+export function PainelPendencias({
+  condominioId,
+  unidades,
+}: {
+  condominioId: number;
+  /**
+   * Unidades marcadas no seletor. Todas as linhas somam exatamente estas.
+   *
+   * Sem a lista, cada linha conta só a unidade da tela — é o caso do portal do
+   * funcionário, que não tem seletor nenhum.
+   */
+  unidades?: number[];
+}) {
   const [, setLocation] = useLocation();
   const { temModulo, modulosIndefinidos } = useBootstrap();
   const habilitado = condominioId > 0;
@@ -26,43 +38,45 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
     habilitado && !modulosIndefinidos && temModulo(modulo);
 
   /**
-   * O.S. de todas as unidades que a pessoa alcança.
+   * Quais unidades cada consulta soma.
    *
-   * Quem responde pela rede cobrava a O.S. aberta em outra unidade e via aqui
-   * um número só da unidade da tela — parecia que não havia nada esperando.
-   * Para o gestor de uma unidade só, o alcance é a dele e nada muda. O servidor
-   * decide quais unidades entram; a conta da plataforma segue por organização.
+   * O gerente da rede cobrava a O.S. aberta em outra unidade e via aqui um
+   * número só da unidade da tela — parecia que não havia nada esperando. Agora
+   * o número é o das unidades que ele marcou. O servidor confere a marcação
+   * contra o alcance dele; a conta da plataforma segue por organização.
    */
+  const escopo = { condominioId, unidades };
+
   const { data: ordens, isLoading: carregandoOS } = trpc.ordensServico.list.useQuery(
-    { condominioId, limit: 500, todasUnidades: true },
+    { ...escopo, limit: 500, todasUnidades: !unidades },
     { enabled: ativa("ordens-servico") },
   );
   const { data: vencimentos, isLoading: carregandoVenc } = trpc.vencimentos.stats.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("agenda-vencimentos") },
   );
   const { data: manutencoes, isLoading: carregandoManut } = trpc.manutencao.getStats.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("manutencoes") },
   );
   const { data: reportesChecklist } = trpc.checklist.listarReportes.useQuery(
-    { condominioId, status: "todos" },
+    { ...escopo, status: "todos" },
     { enabled: ativa("checklists") },
   );
   const { data: reportesVistoria } = trpc.vistoria.listarReportes.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("vistorias") },
   );
   const { data: respostasQr } = trpc.qrcode.listarRespostas.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("qrcode") },
   );
   const { data: tarefas } = trpc.tarefasAgendadas.listar.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("tarefas-agendadas") },
   );
   const { data: execucoes } = trpc.tarefasAgendadas.listarExecucoesDaOrganizacao.useQuery(
-    { condominioId },
+    escopo,
     { enabled: ativa("tarefas-agendadas") },
   );
   const linhas = useMemo(() => {
@@ -75,7 +89,6 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
     const osAbertas = (ordens?.items ?? []).filter(
       (os) => !os.statusId || !idsFinais.has(os.statusId),
     ).length;
-    const osEmRede = (ordens?.unidades?.length ?? 0) > 1;
 
     const vencidos = vencimentos?.vencidos ?? 0;
     const proximos = vencimentos?.proximos ?? 0;
@@ -86,11 +99,7 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
         modulo: "ordens-servico",
         rotulo: "Ordens de Serviço",
         total: osAbertas,
-        // As demais linhas contam só a unidade da tela: dizer que esta soma a
-        // rede evita ler o número como se fosse da unidade.
-        detalhe: osEmRede
-          ? "em aberto em todas as unidades"
-          : "em aberto, aguardando andamento",
+        detalhe: "em aberto, aguardando andamento",
         destino: "/manutencoes/ordens-servico",
       },
       {
@@ -195,7 +204,10 @@ export function PainelPendencias({ condominioId }: { condominioId: number }) {
               Chamados em aberto ({total})
             </p>
             <p className="text-xs text-amber-800">
-              Itens de todas as funções que aguardam resposta ou verificação.
+              Itens de todas as funções que aguardam resposta ou verificação
+              {/* Com mais de uma unidade marcada os números são a soma delas:
+                  sem esta linha, o total parece ser só da unidade da tela. */}
+              {(unidades?.length ?? 0) > 1 ? `, somando ${unidades!.length} unidades` : ""}.
             </p>
 
             <div className="mt-3 space-y-1.5">

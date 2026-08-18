@@ -1,6 +1,7 @@
 ﻿import { z } from "zod";
-import { eq, desc, and, like, sql } from "drizzle-orm";
+import { eq, desc, and, inArray, like, sql } from "drizzle-orm";
 import { moduloProcedure, router } from "../../_core/trpc";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
@@ -36,12 +37,12 @@ const ocorrenciaProcedure = moduloProcedure(
 
 export const ocorrenciaRouter = router({
   list: ocorrenciaProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
       return db.select().from(ocorrencias)
-        .where(eq(ocorrencias.condominioId, input.condominioId))
+        .where(inArray(ocorrencias.condominioId, await unidadesDaConsulta(ctx, input, "ocorrencias")))
         .orderBy(desc(ocorrencias.createdAt));
     }),
 

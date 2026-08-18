@@ -155,6 +155,7 @@ vi.mock("./db", () => ({ getDb: async () => fakeDb() }));
 const { osRouter } = await import("./modules/os/router");
 const { createCallerFactory } = await import("./_core/trpc");
 const { createTenantAccess } = await import("./_core/tenant");
+const { invalidarCacheBloqueio } = await import("./_core/bloqueio");
 
 /** Gerente geral: responde pelas três unidades. */
 function comoGerenteGeral() {
@@ -197,6 +198,9 @@ const unidadesConsultadas = () =>
   filtros.find((f) => f.tabela === ordensServico)?.ids ?? [];
 
 beforeEach(() => {
+  // As unidades liberadas ficam em cache por processo: sem limpar, o teste
+  // seguinte herdaria a resposta do anterior sobre quem está suspensa.
+  invalidarCacheBloqueio();
   filtros = [];
   unidadeDoStatus = 1;
   unidadesNoBanco = [
@@ -215,6 +219,30 @@ describe("lista da rede", () => {
 
   it("sem todasUnidades, fica na unidade da tela", async () => {
     await comoGerenteGeral().list({ condominioId: 1 });
+
+    expect(unidadesConsultadas()).toEqual([1]);
+  });
+
+  it("com unidades marcadas, consulta só elas", async () => {
+    // É o seletor do painel: o gerente compara duas das quinze sem trocar de
+    // tela e sem levar as outras treze no número.
+    await comoGerenteGeral().list({ condominioId: 1, unidades: [1, 3] });
+
+    expect(unidadesConsultadas()).toEqual([1, 3]);
+  });
+
+  it("marcação com unidade fora do alcance cai na unidade da tela", async () => {
+    // A marcação fica no navegador; trocar um id ali não pode abrir a unidade
+    // de outro cliente.
+    await comoGerenteGeral().list({ condominioId: 1, unidades: [99] });
+
+    expect(unidadesConsultadas()).toEqual([1]);
+  });
+
+  it("unidade marcada mas suspensa não entra na soma", async () => {
+    unidadesNoBanco = unidadesNoBanco.filter((u) => u.id !== 3);
+
+    await comoGerenteGeral().list({ condominioId: 1, unidades: [1, 3] });
 
     expect(unidadesConsultadas()).toEqual([1]);
   });
@@ -241,8 +269,13 @@ describe("lista da rede", () => {
 
     await comoGerenteGeral().list({ condominioId: 1, todasUnidades: true });
 
-    const filtroDeUnidades = filtros.find((f) => f.tabela === condominios);
-    expect(filtroDeUnidades?.texto).toMatch(/is null/i);
+    // Entre as consultas a `condominios` (o bloqueio da unidade da tela, a das
+    // unidades liberadas e a dos nomes), uma tem de excluir as suspensas.
+    const filtrosDeUnidades = filtros
+      .filter((f) => f.tabela === condominios)
+      .map((f) => f.texto)
+      .join(" | ");
+    expect(filtrosDeUnidades).toMatch(/is null/i);
     expect(unidadesConsultadas()).toEqual([1, 2]);
   });
 

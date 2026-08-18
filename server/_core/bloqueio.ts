@@ -14,9 +14,21 @@ import { getDb } from '../db';
 const TTL_MS = 60_000;
 const cache = new Map<number, { bloqueio: { em: Date; motivo: string | null } | null; expiraEm: number }>();
 
+/**
+ * Conjuntos já filtrados, por lista de ids.
+ *
+ * As telas que somam a rede perguntam isto várias vezes na mesma abertura — o
+ * calendário uma vez por função, o painel uma vez por consulta. Sem cache, cada
+ * pergunta era uma ida ao banco só para reconfirmar quais unidades continuam
+ * liberadas, e o servidor é compartilhado com outros sistemas.
+ */
+const cacheListas = new Map<string, { ids: number[]; expiraEm: number }>();
+
 export function invalidarCacheBloqueio(condominioId?: number): void {
   if (condominioId == null) cache.clear();
   else cache.delete(condominioId);
+  // A lista guarda combinações; qualquer mudança de bloqueio pode afetar todas.
+  cacheListas.clear();
 }
 
 /** Bloqueio da organização, com o motivo para a mensagem da tela. */
@@ -64,6 +76,11 @@ export async function bloqueioDaOrganizacao(
 export async function unidadesNaoBloqueadas(ids: number[]): Promise<number[]> {
   if (ids.length === 0) return ids;
 
+  const chave = [...ids].sort((a, b) => a - b).join(',');
+  const agora = Date.now();
+  const hit = cacheListas.get(chave);
+  if (hit && hit.expiraEm > agora) return hit.ids;
+
   const db = await getDb();
   // Mesmo critério do bloqueio individual: falha de infra não vira corte.
   if (!db) return ids;
@@ -74,7 +91,16 @@ export async function unidadesNaoBloqueadas(ids: number[]): Promise<number[]> {
       .from(condominios)
       .where(and(inArray(condominios.id, ids), isNull(condominios.bloqueadaEm)));
 
-    return linhas.map((l) => l.id);
+    const liberadas = linhas.map((l) => l.id);
+
+    // Combinações são poucas por cliente, mas o processo é longo: uma limpeza
+    // do que venceu evita o mapa crescer para sempre.
+    if (cacheListas.size > 200) {
+      for (const [k, v] of cacheListas) if (v.expiraEm <= agora) cacheListas.delete(k);
+    }
+    cacheListas.set(chave, { ids: liberadas, expiraEm: agora + TTL_MS });
+
+    return liberadas;
   } catch (erro) {
     console.error('[bloqueio] falha ao filtrar unidades suspensas:', erro);
     return ids;

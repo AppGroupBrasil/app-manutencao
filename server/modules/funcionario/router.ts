@@ -2,6 +2,7 @@ import { publicProcedure, protectedProcedure, protectedOrFuncionarioProcedure, r
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { bloqueioDaOrganizacao, mensagemDeBloqueio } from "../../_core/bloqueio";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { getDb } from "../../db";
 import { ehGestorMaster } from "../../_core/gestorMaster";
 import { CHAVES_FUNCOES_FUNCIONARIO } from "../../../shared/funcoesFuncionario";
@@ -121,7 +122,19 @@ export const funcionarioRouter = router({
      * visíveis para o master — some-los seria perder gente já cadastrada.
      */
     list: protectedOrFuncionarioProcedure
-      .input(z.object({ condominioId: z.number().optional(), revistaId: z.number().optional() }))
+      .input(
+        z.object({
+          condominioId: z.number().optional(),
+          /**
+           * Unidades marcadas na tela. A ficha do funcionário é de UMA unidade,
+           * então a equipe da rede só existia unidade por unidade: quem
+           * cadastrou em Central Pinheiros e estava vendo outra unidade
+           * concluía que o cadastro não salvou.
+           */
+          unidades: unidadesSelecionadas,
+          revistaId: z.number().optional(),
+        }),
+      )
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) return [];
@@ -130,24 +143,49 @@ export const funcionarioRouter = router({
         // nas telas novas; o recorte por criador existe para separar gestores
         // entre si, e não faz sentido aplicá-lo a quem executa.
         const master = ctx.user ? await ehGestorMaster(ctx.user.id) : true;
-        const filtro = (condominioId: number) =>
+        const filtro = (ids: number[]) =>
           master || !ctx.user
-            ? eq(funcionarios.condominioId, condominioId)
+            ? inArray(funcionarios.condominioId, ids)
             : and(
-                eq(funcionarios.condominioId, condominioId),
+                inArray(funcionarios.condominioId, ids),
                 eq(funcionarios.criadoPorId, ctx.user.id),
               );
 
+        /**
+         * Nome da unidade em cada ficha.
+         *
+         * Com a lista somando várias, é o que diz de onde é cada pessoa —
+         * dois "André" em unidades diferentes seriam a mesma linha repetida.
+         */
+        const comUnidade = async (ids: number[]) => {
+          const equipe = await db.select().from(funcionarios).where(filtro(ids));
+          if (equipe.length === 0) return [];
+
+          const nomes = new Map<number, string>();
+          if (ids.length > 1) {
+            const linhas = await db
+              .select({ id: condominios.id, nome: condominios.nome })
+              .from(condominios)
+              .where(inArray(condominios.id, ids));
+            for (const u of linhas) nomes.set(u.id, u.nome);
+          }
+          return equipe.map((f) => ({ ...f, unidadeNome: nomes.get(f.condominioId) ?? null }));
+        };
+
         if (input.condominioId) {
           await assertOrganizacao(ctx, input.condominioId);
-          return db.select().from(funcionarios).where(filtro(input.condominioId));
+          // O alcance é conferido aqui dentro: id marcado que não é desta conta
+          // sai da lista em vez de virar erro na tela.
+          return comUnidade(
+            await unidadesDaConsulta({ tenant: ctx.tenant, condominioId: input.condominioId }, input),
+          );
         }
         if (input.revistaId) {
           // Buscar o condomínio da revista e depois os funcionários
           const revista = await db.select().from(revistas).where(eq(revistas.id, input.revistaId));
           if (revista.length === 0) return [];
           await assertOrganizacao(ctx, revista[0].condominioId);
-          return db.select().from(funcionarios).where(filtro(revista[0].condominioId));
+          return comUnidade([revista[0].condominioId]);
         }
         return [];
       }),

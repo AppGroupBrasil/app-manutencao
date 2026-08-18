@@ -57,6 +57,7 @@ vi.mock("./db", () => ({
 const { calendarioRouter } = await import("./modules/calendario/router");
 const { createCallerFactory } = await import("./_core/trpc");
 const { createTenantAccess } = await import("./_core/tenant");
+const { invalidarCacheBloqueio } = await import("./_core/bloqueio");
 const {
   checklists,
   condominios,
@@ -83,6 +84,9 @@ function chamador(organizacoes = [1]) {
 const JANELA = { de: "2026-08-01", ate: "2026-08-31" };
 
 beforeEach(() => {
+  // As unidades liberadas ficam em cache por processo: sem limpar, o teste
+  // seguinte herdaria a resposta do anterior sobre quem está suspensa.
+  invalidarCacheBloqueio();
   modulosLigados.clear();
   // O próprio calendário é módulo: sem ele a rota nem responde. Cada teste
   // liga só as fontes que quer ver.
@@ -375,9 +379,9 @@ describe("calendario.listar", () => {
     expect(unidadesConsultadas(ordensServico)).toEqual([1]);
   });
 
-  it("as outras funções continuam na unidade da tela", async () => {
-    // Só a O.S. soma a rede: vencimento, checklist e afins são da unidade que
-    // a pessoa está olhando, e misturá-los mudaria o significado do número.
+  it("com a rede pedida, as outras funções também somam as unidades", async () => {
+    // O seletor marca unidades, não funções: quem pediu três unidades espera
+    // ver o vencimento das três, não só a O.S.
     modulosLigados.add("ordens-servico");
     modulosLigados.add("agenda-vencimentos");
     linhas.set(condominios, [
@@ -390,6 +394,32 @@ describe("calendario.listar", () => {
     await chamador([1, 2]).listar({ condominioId: 1, ...JANELA, todasUnidades: true });
 
     expect(unidadesConsultadas(ordensServico)).toEqual([1, 2]);
+    expect(unidadesConsultadas(vencimentos)).toEqual([1, 2]);
+  });
+
+  it("a agenda soma só as unidades marcadas", async () => {
+    modulosLigados.add("ordens-servico");
+    modulosLigados.add("agenda-vencimentos");
+    // O banco devolve a 2 como liberada: é a única marcada.
+    linhas.set(condominios, [{ id: 2, nome: "Centro" }]);
+    linhas.set(ordensServico, []);
+    linhas.set(vencimentos, []);
+
+    await chamador([1, 2]).listar({ condominioId: 1, ...JANELA, unidades: [2] });
+
+    expect(unidadesConsultadas(ordensServico)).toEqual([2]);
+    expect(unidadesConsultadas(vencimentos)).toEqual([2]);
+  });
+
+  it("unidade marcada fora do alcance não entra", async () => {
+    // A marcação vem do navegador: um id trocado ali não pode virar leitura da
+    // unidade de outro cliente. Sobra a unidade da tela.
+    modulosLigados.add("agenda-vencimentos");
+    linhas.set(condominios, [{ id: 1, nome: "São José" }]);
+    linhas.set(vencimentos, []);
+
+    await chamador([1]).listar({ condominioId: 1, ...JANELA, unidades: [99] });
+
     expect(unidadesConsultadas(vencimentos)).toEqual([1]);
   });
 

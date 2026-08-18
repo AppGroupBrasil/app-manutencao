@@ -24,6 +24,7 @@ import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
+import { SeletorUnidades, type SelecaoDeUnidades } from "@/components/SeletorUnidades";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
@@ -407,7 +408,14 @@ export function ConteudoOrdensServico({
    * de fora as ordens das demais unidades com o mesmo status.
    */
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
-  const [filtroUnidade, setFiltroUnidade] = useState<number | "todas">("todas");
+  /**
+   * Unidades marcadas na lista. Vazio é "todas".
+   *
+   * O gerente compara duas ou três unidades sem querer as quinze: o filtro de
+   * uma por vez obrigava a olhar, anotar e trocar. A lista já vem com a rede
+   * inteira, então marcar e desmarcar não custa consulta nova.
+   */
+  const [filtroUnidades, setFiltroUnidades] = useState<number[]>([]);
   const [pagina, setPagina] = useState(1);
   const [modalNova, setModalNova] = useState(false);
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
@@ -551,12 +559,43 @@ export function ConteudoOrdensServico({
    */
   const unidadesDaLista = lista?.unidades ?? [];
   const verRede = unidadesDaLista.length > 1;
-  // Trocar a unidade ativa pode tirar do ar a unidade filtrada; sem isto o
-  // filtro apontaria para uma unidade fora da lista e ela viria vazia.
-  const unidadeFiltrada =
-    filtroUnidade !== "todas" && unidadesDaLista.some((u) => u.id === filtroUnidade)
-      ? filtroUnidade
-      : "todas";
+  /**
+   * Unidades que a lista está mostrando agora.
+   *
+   * Trocar a unidade ativa pode tirar do ar uma que estava marcada; sem esta
+   * limpeza o filtro apontaria para fora da lista e ela viria vazia. Nada
+   * marcado — ou nada válido — são todas.
+   */
+  const unidadesFiltradas = useMemo(() => {
+    const dentro = filtroUnidades.filter((id) => unidadesDaLista.some((u) => u.id === id));
+    return dentro.length > 0 ? dentro : unidadesDaLista.map((u) => u.id);
+  }, [filtroUnidades, unidadesDaLista]);
+
+  /** A marcação do filtro no formato que o seletor desenha. */
+  const selecaoDaLista: SelecaoDeUnidades = {
+    unidades: unidadesDaLista,
+    marcadas: unidadesFiltradas,
+    todasMarcadas: unidadesFiltradas.length === unidadesDaLista.length,
+    temEscolha: verRede,
+    resumo:
+      unidadesFiltradas.length === unidadesDaLista.length
+        ? `Todas as unidades (${unidadesDaLista.length})`
+        : unidadesFiltradas.length === 1
+          ? (unidadesDaLista.find((u) => u.id === unidadesFiltradas[0])?.nome ?? "")
+          : `${unidadesFiltradas.length} unidades`,
+    alternar: (id) => {
+      const marcada = unidadesFiltradas.includes(id);
+      // A última marcada não sai: a lista ficaria sem nenhuma unidade.
+      if (marcada && unidadesFiltradas.length === 1) return;
+      setFiltroUnidades(
+        marcada ? unidadesFiltradas.filter((x) => x !== id) : [...unidadesFiltradas, id],
+      );
+    },
+    alternarTodas: () =>
+      setFiltroUnidades(
+        unidadesFiltradas.length === unidadesDaLista.length ? [condominioId] : [],
+      ),
+  };
 
   /**
    * Status oferecidos para a ordem: os da unidade DELA.
@@ -609,7 +648,7 @@ export function ConteudoOrdensServico({
   const filtradas = useMemo(() => {
     return ordens.filter((os) => {
       if (filtroStatus !== "todos" && os.status?.nome !== filtroStatus) return false;
-      if (unidadeFiltrada !== "todas" && os.condominioId !== unidadeFiltrada) return false;
+      if (verRede && !unidadesFiltradas.includes(os.condominioId)) return false;
       const termo = busca.trim().toLowerCase();
       if (!termo) return true;
       const texto = [
@@ -627,7 +666,7 @@ export function ConteudoOrdensServico({
         .toLowerCase();
       return termo.split(/\s+/).every((t) => texto.includes(t));
     });
-  }, [ordens, filtroStatus, unidadeFiltrada, busca]);
+  }, [ordens, filtroStatus, verRede, unidadesFiltradas, busca]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -635,7 +674,7 @@ export function ConteudoOrdensServico({
 
   useEffect(() => {
     setPagina(1);
-  }, [busca, filtroStatus, filtroUnidade]);
+  }, [busca, filtroStatus, filtroUnidades]);
 
   const osDetalhe = ordens.find((os) => os.id === detalheId);
   const tituloDetalhe = osDetalhe
@@ -665,9 +704,7 @@ export function ConteudoOrdensServico({
             <p className="text-xs text-slate-500">
               {lista?.total ?? 0} ordens registradas
               {verRede
-                ? unidadeFiltrada === "todas"
-                  ? " · todas as unidades"
-                  : ` · ${unidadesDaLista.find((u) => u.id === unidadeFiltrada)?.nome ?? ""}`
+                ? ` · ${selecaoDaLista.resumo.toLowerCase()}`
                 : organizacao
                   ? ` · ${organizacao.nome}`
                   : ""}
@@ -740,28 +777,12 @@ export function ConteudoOrdensServico({
           })}
         </div>
 
-        {/* Rede: a lista já vem com tudo; aqui é só estreitar para uma unidade. */}
+        {/* Rede: a lista já vem com tudo; aqui é só escolher quais unidades
+            ficam à vista — uma, três ou todas. */}
         {verRede && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500 whitespace-nowrap">{v.unidade}:</span>
-            <Select
-              value={unidadeFiltrada === "todas" ? "todas" : String(unidadeFiltrada)}
-              onValueChange={(valor) =>
-                setFiltroUnidade(valor === "todas" ? "todas" : Number(valor))
-              }
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as unidades</SelectItem>
-                {unidadesDaLista.map((u) => (
-                  <SelectItem key={u.id} value={String(u.id)}>
-                    {u.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SeletorUnidades selecao={selecaoDaLista} className="max-w-[260px]" />
           </div>
         )}
 

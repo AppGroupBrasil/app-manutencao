@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { moduloProcedure, router } from "../../_core/trpc";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
@@ -44,15 +45,20 @@ const STATUS_EXECUCAO = ["pendente", "realizada", "nao_executada"] as const;
 
 export const tarefasAgendadasRouter = router({
   listar: tarefaProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
 
       return db
         .select()
         .from(tarefasAgendadas)
-        .where(eq(tarefasAgendadas.condominioId, input.condominioId))
+        .where(
+          inArray(
+            tarefasAgendadas.condominioId,
+            await unidadesDaConsulta(ctx, input, "tarefas-agendadas"),
+          ),
+        )
         .orderBy(desc(tarefasAgendadas.createdAt));
     }),
 
@@ -216,15 +222,20 @@ export const tarefasAgendadasRouter = router({
 
   /** Todas as execuções da organização — alimenta a aba de acompanhamento. */
   listarExecucoesDaOrganizacao: tarefaProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
 
       const tarefas = await db
         .select({ id: tarefasAgendadas.id, titulo: tarefasAgendadas.titulo })
         .from(tarefasAgendadas)
-        .where(eq(tarefasAgendadas.condominioId, input.condominioId));
+        .where(
+          inArray(
+            tarefasAgendadas.condominioId,
+            await unidadesDaConsulta(ctx, input, "tarefas-agendadas"),
+          ),
+        );
 
       if (tarefas.length === 0) return [];
 

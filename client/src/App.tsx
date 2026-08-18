@@ -37,7 +37,6 @@ const OrdemServicoPublica = lazy(() => import("./pages/OrdemServicoPublica"));
 const RegistroPublico = lazy(() => import("./pages/RegistroPublico"));
 const AdminFuncionarios = lazy(() => import("./pages/AdminFuncionarios"));
 const AdminGestores = lazy(() => import("./pages/AdminGestores"));
-const AdminEquipes = lazy(() => import("./pages/AdminEquipes"));
 const FuncionarioDashboard = lazy(() => import("./pages/FuncionarioDashboard"));
 const FuncionarioRecuperarSenha = lazy(() => import("./pages/FuncionarioRecuperarSenha"));
 const FuncionarioRedefinirSenha = lazy(() => import("./pages/FuncionarioRedefinirSenha"));
@@ -118,8 +117,11 @@ function Router() {
       <Route path="/admin/gestores">
         <ExigeSenhaDefinida><AdminGestores /></ExigeSenhaDefinida>
       </Route>
+      {/* Equipes passaram a morar dentro de Funcionários: criar a pessoa, criar
+          o time e juntar os dois é um fluxo só. O endereço antigo continua
+          valendo porque está em favorito e em link de aviso já enviado. */}
       <Route path="/admin/equipes">
-        <ExigeSenhaDefinida><AdminEquipes /></ExigeSenhaDefinida>
+        <Redirect to="/admin/funcionarios" />
       </Route>
       <Route path="/admin/manutencoes">
         <ExigeSenhaDefinida><AdminManutencoes /></ExigeSenhaDefinida>

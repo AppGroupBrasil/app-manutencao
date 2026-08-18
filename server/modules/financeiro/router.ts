@@ -4,7 +4,8 @@ import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { getDb } from "../../db";
 import { proximoProtocolo } from "../../_core/protocolo";
 import { vencimentos, vencimentoAlertas, vencimentoAnexos, vencimentoEmails, vencimentoNotificacoes, vencimentoTipos, condominios } from "../../../drizzle/schema";
-import { eq, and, asc, desc, gte, sql, lte, lt } from "drizzle-orm";
+import { eq, and, asc, desc, gte, inArray, sql, lte, lt } from "drizzle-orm";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { storagePut } from "../../storage";
 
 /**
@@ -415,18 +416,21 @@ export const financeiroRouter = router({
 
     // Obter estatísticas de vencimentos
     stats: vencimentoProcedure
-      .input(z.object({ condominioId: z.number() }))
-      .query(async ({ input }) => {
+      .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+      .query(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) return { total: 0, proximos: 0, vencidos: 0, contratos: 0, servicos: 0, manutencoes: 0 };
-        
+
         const hoje = new Date();
         const em30dias = new Date();
         em30dias.setDate(em30dias.getDate() + 30);
-        
+
         const todos = await db.select().from(vencimentos)
           .where(and(
-            eq(vencimentos.condominioId, input.condominioId),
+            inArray(
+              vencimentos.condominioId,
+              await unidadesDaConsulta(ctx, input, 'agenda-vencimentos'),
+            ),
             eq(vencimentos.status, 'ativo')
           ));
         

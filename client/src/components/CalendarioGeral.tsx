@@ -120,10 +120,18 @@ function textoDoPrazo(item: ItemCalendario, hoje: string): string {
  */
 export function CalendarioGeral({
   condominioId,
+  unidades,
   compacto = false,
   fontesVisiveis,
 }: {
   condominioId: number;
+  /**
+   * Unidades marcadas no seletor. A agenda mostra a soma exata delas.
+   *
+   * Sem a lista, o servidor decide pelo alcance de quem consulta — é o que o
+   * portal do funcionário e as telas sem seletor continuam pedindo.
+   */
+  unidades?: number[];
   compacto?: boolean;
   /** Sem isto, mostra tudo. A página usa para filtrar por função. */
   fontesVisiveis?: string[];
@@ -169,14 +177,15 @@ export function CalendarioGeral({
   const ate = chaveDoDia(celulas[41]);
 
   /**
-   * As O.S. vêm de todas as unidades que a pessoa alcança.
+   * A agenda vem das unidades marcadas — ou de todas as que a pessoa alcança,
+   * quando a tela não tem seletor.
    *
-   * Quem responde por uma unidade só continua vendo a dela — o alcance é
-   * decidido no servidor. É o que põe na agenda do gerente a ordem aberta pelo
-   * gestor de outra unidade, que antes ele só via trocando a unidade da tela.
+   * Quem responde por uma unidade só continua vendo a dela: o alcance é
+   * decidido no servidor. É o que põe na agenda do gerente o que foi aberto em
+   * outra unidade, que antes ele só via trocando a unidade da tela.
    */
   const { data: itens, isLoading } = trpc.calendario.listar.useQuery(
-    { condominioId, de, ate, todasUnidades: true },
+    { condominioId, de, ate, unidades, todasUnidades: !unidades },
     { enabled: condominioId > 0 },
   );
 
@@ -243,7 +252,9 @@ export function CalendarioGeral({
               <p className="font-semibold text-slate-800 leading-tight">Calendário</p>
               <p className="text-xs text-slate-500 truncate">
                 todos os vencimentos, de todas as funções
-                {somaRede ? " · O.S. de todas as unidades" : ""}
+                {somaRede
+                  ? ` · ${(unidades?.length ?? 0) > 1 ? `${unidades!.length} unidades` : "todas as unidades"}`
+                  : ""}
               </p>
             </div>
           </div>

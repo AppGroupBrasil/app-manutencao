@@ -4,10 +4,10 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { CalendarioGeral } from "@/components/CalendarioGeral";
+import { SeletorUnidades } from "@/components/SeletorUnidades";
 import { useVocabulario } from "@/hooks/useVocabulario";
+import { useUnidadesSelecionadas } from "@/hooks/useUnidadesSelecionadas";
 import { ArrowLeft, Loader2 } from "lucide-react";
-
-const TENANT_ATIVO_KEY = "condominio_ativo";
 
 /**
  * Página do Calendário: a mesma leitura do painel, com filtro por função.
@@ -35,9 +35,11 @@ export default function Calendario() {
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: organizacoes } = trpc.condominio.list.useQuery(undefined, { enabled: !!user });
 
-  const salvo = Number(localStorage.getItem(TENANT_ATIVO_KEY));
+  // A mesma marcação do painel: quem abriu a agenda de três unidades lá espera
+  // as três aqui, não a unidade que estava ativa antes de marcar.
+  const selecao = useUnidadesSelecionadas();
   const organizacaoAtiva =
-    organizacoes?.find((c) => c.id === salvo) ?? organizacoes?.[0] ?? null;
+    organizacoes?.find((c) => c.id === selecao.principal) ?? organizacoes?.[0] ?? null;
 
   // Nenhuma marcada = todas visíveis; é o estado em que a tela abre.
   const [fontes, setFontes] = useState<string[]>([]);
@@ -85,9 +87,13 @@ export default function Calendario() {
           </Button>
           <div className="min-w-0">
             <h1 className="text-lg font-bold">Calendário</h1>
-            <p className="text-xs text-slate-500 truncate">
-              {organizacaoAtiva ? organizacaoAtiva.nome : "Sem organização vinculada"}
-            </p>
+            {selecao.temEscolha ? (
+              <SeletorUnidades selecao={selecao} className="mt-0.5 max-w-[240px]" />
+            ) : (
+              <p className="text-xs text-slate-500 truncate">
+                {organizacaoAtiva ? organizacaoAtiva.nome : "Sem organização vinculada"}
+              </p>
+            )}
           </div>
         </div>
       </header>
@@ -124,6 +130,7 @@ export default function Calendario() {
 
         <CalendarioGeral
           condominioId={organizacaoAtiva?.id ?? 0}
+          unidades={selecao.marcadas}
           fontesVisiveis={fontes.length > 0 ? fontes : undefined}
         />
 

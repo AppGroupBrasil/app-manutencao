@@ -39,8 +39,16 @@ function gravar(chave: string, vistos: Vistos): void {
   }
 }
 
-export function useNovidades(condominioId: number) {
-  const chave = `${CHAVE}:${condominioId}`;
+export function useNovidades(condominioId: number, unidades?: number[]) {
+  /**
+   * Histórico por conjunto de unidades, não só pela unidade da tela.
+   *
+   * Os totais são a soma das unidades marcadas: com a marca guardada só no
+   * nome da unidade principal, marcar mais uma faria todos os cartões piscarem
+   * — o total sobe sem que nada tenha entrado.
+   */
+  const conjunto = unidades?.length ? [...unidades].sort((a, b) => a - b).join("-") : condominioId;
+  const chave = `${CHAVE}:${conjunto}`;
   const [vistos, setVistos] = useState<Vistos>(() => ler(chave));
 
   // Trocar de unidade troca o histórico inteiro.

@@ -4,13 +4,13 @@ import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import { useNovidades } from "@/hooks/useNovidades";
 import { useTotaisManutencao } from "@/hooks/useTotaisManutencao";
+import { useUnidadesSelecionadas } from "@/hooks/useUnidadesSelecionadas";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
+import { SeletorUnidades } from "@/components/SeletorUnidades";
 import { toast } from "@/components/ui/sonner";
 import { AlertTriangle, ArrowLeft, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Columns3, ListChecks, Loader2, QrCode, Wrench } from "lucide-react";
-
-const TENANT_ATIVO_KEY = "condominio_ativo";
 
 /** As funções que este hub reúne — a mesma lista do cartão no painel. */
 const MODULOS_DO_HUB = [
@@ -43,12 +43,15 @@ export default function AdminManutencoes() {
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: organizacoes } = trpc.condominio.list.useQuery(undefined, { enabled: !!user });
 
-  const salvo = Number(localStorage.getItem(TENANT_ATIVO_KEY));
+  // As unidades marcadas no painel valem aqui: os quadrados contam o mesmo
+  // conjunto que o painel somou, senão o mesmo número muda de tela para tela.
+  const selecao = useUnidadesSelecionadas();
   const organizacaoAtiva =
-    organizacoes?.find((c) => c.id === salvo) ?? organizacoes?.[0] ?? null;
+    organizacoes?.find((c) => c.id === selecao.principal) ?? organizacoes?.[0] ?? null;
   const condominioId = organizacaoAtiva?.id ?? 0;
 
-  const { totais, osEmRede, statsVencimentos } = useTotaisManutencao(condominioId);
+  const { totais, statsVencimentos } = useTotaisManutencao(condominioId, selecao.marcadas);
+  const somandoUnidades = selecao.marcadas.length > 1;
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -57,7 +60,10 @@ export default function AdminManutencoes() {
     }
   }, [isLoading, user, setLocation]);
 
-  const { temNovidade, marcarVisto, sincronizarQuedas } = useNovidades(condominioId);
+  const { temNovidade, marcarVisto, sincronizarQuedas } = useNovidades(
+    condominioId,
+    selecao.marcadas,
+  );
 
   useEffect(() => {
     sincronizarQuedas(totais);
@@ -86,11 +92,17 @@ export default function AdminManutencoes() {
           <Button variant="ghost" size="sm" onClick={() => setLocation("/admin")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-lg font-bold">Manutenções</h1>
-            <p className="text-xs text-slate-500">
-              {organizacaoAtiva ? organizacaoAtiva.nome : "Sem organização vinculada"}
-            </p>
+            {/* Com mais de uma unidade, o seletor no lugar do nome: é daqui que
+                se muda o que os quadrados estão contando. */}
+            {selecao.temEscolha ? (
+              <SeletorUnidades selecao={selecao} className="mt-0.5 max-w-[240px]" />
+            ) : (
+              <p className="text-xs text-slate-500">
+                {organizacaoAtiva ? organizacaoAtiva.nome : "Sem organização vinculada"}
+              </p>
+            )}
           </div>
         </div>
       </header>
@@ -122,8 +134,8 @@ export default function AdminManutencoes() {
               titulo={v.ordensServico}
               valor={valorDe("ordens-servico")}
               descricao={
-                osEmRede
-                  ? "abertura e execução · todas as unidades"
+                somandoUnidades
+                  ? `abertura e execução · ${selecao.marcadas.length} unidades`
                   : "abertura, execução e conclusão"
               }
               novidade={temNovidade("ordens-servico", totais["ordens-servico"])}

@@ -1,7 +1,8 @@
 ﻿import { z } from "zod";
-import { eq, desc, and, like, or, sql, isNotNull } from "drizzle-orm";
+import { eq, desc, and, inArray, like, or, sql, isNotNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
@@ -90,12 +91,12 @@ async function assegurarTemplateDoCliente(
 
 export const checklistRouter = router({
   list: checklistProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
       return db.select().from(checklists)
-        .where(eq(checklists.condominioId, input.condominioId))
+        .where(inArray(checklists.condominioId, await unidadesDaConsulta(ctx, input, "checklists")))
         .orderBy(desc(checklists.createdAt));
     }),
 
@@ -879,17 +880,18 @@ export const checklistRouter = router({
   listarReportes: checklistProcedure
     .input(z.object({
       condominioId: z.number(),
+      unidades: unidadesSelecionadas,
       checklistId: z.number().optional(),
       status: z.enum(["todos", "aberto", "em_andamento", "resolvido"]).optional().default("todos"),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
 
       // A tabela `reportes` atende checklist e vistoria: sem este filtro a tela
       // de checklist mostraria os problemas abertos na vistoria.
       const condicoes = [
-        eq(reportes.condominioId, input.condominioId),
+        inArray(reportes.condominioId, await unidadesDaConsulta(ctx, input, "checklists")),
         isNotNull(reportes.checklistId),
       ];
       if (input.checklistId) condicoes.push(eq(reportes.checklistId, input.checklistId));

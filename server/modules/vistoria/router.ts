@@ -1,6 +1,7 @@
 ﻿import { z } from "zod";
-import { eq, desc, and, like, sql, isNotNull } from "drizzle-orm";
+import { eq, desc, and, inArray, like, sql, isNotNull } from "drizzle-orm";
 import { moduloProcedure, router } from "../../_core/trpc";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { direto, escopoPorRegistro, via } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
@@ -59,12 +60,12 @@ const vistoriaProcedure = moduloProcedure(
 
 export const vistoriaRouter = router({
   list: vistoriaProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
       return db.select().from(vistorias)
-        .where(eq(vistorias.condominioId, input.condominioId))
+        .where(inArray(vistorias.condominioId, await unidadesDaConsulta(ctx, input, "vistorias")))
         .orderBy(desc(vistorias.createdAt));
     }),
 
@@ -621,14 +622,18 @@ export const vistoriaRouter = router({
     }),
 
   listarReportes: vistoriaProcedure
-    .input(z.object({ condominioId: z.number(), vistoriaId: z.number().optional() }))
-    .query(async ({ input }) => {
+    .input(z.object({
+      condominioId: z.number(),
+      unidades: unidadesSelecionadas,
+      vistoriaId: z.number().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
       // A tabela `reportes` atende checklist e vistoria: sem filtrar pela
       // origem, esta tela mostraria os problemas abertos no checklist.
       const condicoes = [
-        eq(reportes.condominioId, input.condominioId),
+        inArray(reportes.condominioId, await unidadesDaConsulta(ctx, input, "vistorias")),
         isNotNull(reportes.vistoriaId),
       ];
       if (input.vistoriaId) condicoes.push(eq(reportes.vistoriaId, input.vistoriaId));

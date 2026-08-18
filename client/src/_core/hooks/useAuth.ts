@@ -42,8 +42,10 @@ export function useAuth(options?: UseAuthOptions) {
       // Limpar token do localStorage (fallback WebView)
       localStorage.removeItem("app_session_token");
       // A unidade escolhida vai junto: ela viaja em todo pedido e ficaria
-      // valendo para a próxima pessoa que entrar neste navegador.
+      // valendo para a próxima pessoa que entrar neste navegador. As marcadas
+      // no seletor saem pelo mesmo motivo.
       localStorage.removeItem("condominio_ativo");
+      localStorage.removeItem("condominios_marcados");
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
     }

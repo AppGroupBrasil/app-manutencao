@@ -1,23 +1,18 @@
 import { useLocation } from "wouter";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import { useNovidades } from "@/hooks/useNovidades";
 import { useTotaisManutencao } from "@/hooks/useTotaisManutencao";
+import { useUnidadesSelecionadas } from "@/hooks/useUnidadesSelecionadas";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { CardQuadrado } from "@/components/CardQuadrado";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SeletorUnidades } from "@/components/SeletorUnidades";
 import { PainelPendencias } from "@/components/PainelPendencias";
 import { CalendarioGeral } from "@/components/CalendarioGeral";
 import { NotificationBell } from "@/components/NotificationBell";
-import { Loader2, LogOut, Building2, Users, UsersRound, UserCog, Wrench, Briefcase, SlidersHorizontal } from "lucide-react";
+import { Loader2, LogOut, Building2, Users, UserCog, Wrench, Briefcase, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 /** Dias inteiros que faltam para o fim do teste. Zero quando venceu. */
@@ -68,37 +63,18 @@ export default function AdminDashboard() {
   // A hierarquia já vem resolvida do servidor: `condominio.list` devolve as 15
   // unidades para o gestor-chefe e só a dele para o gestor de unidade.
   /**
-   * Unidade ativa: fica no navegador e viaja em `x-condominio-id`.
+   * Unidades que o painel está mostrando: uma, três ou todas.
    *
-   * Em estado, e não lido direto do `localStorage` a cada render, porque a
-   * troca precisa redesenhar a tela. Ela ficou invisível quando o seletor saiu
-   * do painel: quem tinha escolhido uma unidade continuava vendo o calendário e
-   * os números dela, sem nada dizendo qual era — e recarregar não mudava, já
-   * que atualizar a página não apaga o que está guardado no navegador.
+   * A escolha fica no navegador e a principal viaja em `x-condominio-id`. O
+   * painel só sabia trocar de unidade, uma por vez — comparar duas era trocar,
+   * anotar e trocar de novo, e nada na tela dizia qual estava valendo.
    */
-  const [unidadeAtiva, setUnidadeAtiva] = useState<number>(
-    () => Number(localStorage.getItem("condominio_ativo")) || 0,
-  );
+  const selecao = useUnidadesSelecionadas();
   const organizacaoAtiva =
-    condominios?.find((c) => c.id === unidadeAtiva) ?? condominios?.[0] ?? null;
+    condominios?.find((c) => c.id === selecao.principal) ?? condominios?.[0] ?? null;
   const escopo = (condominios?.length ?? 0) > 1 ? "todas" : "unidade";
-
-  // Guardado apontando para unidade que não existe mais (ou de outra conta):
-  // acerta para a que a tela está mostrando, senão o cabeçalho das chamadas
-  // continua pedindo a antiga.
-  useEffect(() => {
-    if (organizacaoAtiva && organizacaoAtiva.id !== unidadeAtiva) {
-      localStorage.setItem("condominio_ativo", String(organizacaoAtiva.id));
-      setUnidadeAtiva(organizacaoAtiva.id);
-    }
-  }, [organizacaoAtiva, unidadeAtiva]);
-
-  const trocarUnidade = async (id: number) => {
-    localStorage.setItem("condominio_ativo", String(id));
-    setUnidadeAtiva(id);
-    // Tudo em cache é da unidade anterior — o tenant vai no cabeçalho.
-    await utils.invalidate();
-  };
+  /** Ids marcados; as consultas somam exatamente estas unidades. */
+  const unidades = selecao.marcadas;
 
   /**
    * Números do hub de Manutenções, para o cartão que leva até ele.
@@ -107,14 +83,14 @@ export default function AdminDashboard() {
    * manutenções, como se O.S., vencimentos e checklists não contassem, e o
    * gerente comparava dois números diferentes para a mesma coisa.
    */
-  const { totais, somaRegistros } = useTotaisManutencao(organizacaoAtiva?.id ?? 0);
-  const { temNovidade } = useNovidades(organizacaoAtiva?.id ?? 0);
+  const { totais, somaRegistros } = useTotaisManutencao(organizacaoAtiva?.id ?? 0, unidades);
+  const { temNovidade } = useNovidades(organizacaoAtiva?.id ?? 0, unidades);
   /** Alguma função com registro que ninguém abriu ainda: o cartão pisca. */
   const novidadeNoHub = (Object.keys(totais) as (keyof typeof totais)[]).some((funcao) =>
     temNovidade(funcao, totais[funcao]),
   );
   const { data: funcionarios } = trpc.funcionario.list.useQuery(
-    { condominioId: organizacaoAtiva?.id ?? 0 },
+    { condominioId: organizacaoAtiva?.id ?? 0, unidades },
     { enabled: !!organizacaoAtiva && !modulosIndefinidos && temModulo("funcionarios") },
   );
   const { data: gestores } = trpc.gestores.listar.useQuery(undefined, { enabled: !!user });
@@ -130,8 +106,9 @@ export default function AdminDashboard() {
     onSuccess: async () => {
       localStorage.removeItem("app_session_token");
       // A unidade escolhida sai com a sessão: sem isto ela continua valendo
-      // para quem entrar depois neste navegador.
+      // para quem entrar depois neste navegador. As marcadas, idem.
       localStorage.removeItem("condominio_ativo");
+      localStorage.removeItem("condominios_marcados");
       await utils.auth.me.invalidate();
       setLocation("/login");
     },
@@ -184,29 +161,15 @@ export default function AdminDashboard() {
                 : "Sem organização vinculada"}
           </p>
 
-          {/* Quem cuida de mais de uma precisa ver qual está aberta e trocar
-              daqui: calendário, pendências e contadores seguem esta escolha, e
-              sem o seletor ela virava um nome inexplicável na tela. */}
+          {/* Quem cuida de mais de uma precisa ver quais estão somadas e mudar
+              daqui: calendário, pendências e contadores seguem esta marcação, e
+              sem o seletor ela virava um número inexplicável na tela. */}
           {escopo === "todas" && (
             <div className="mt-2 flex items-center gap-2">
               <span className="text-xs text-slate-500 whitespace-nowrap">
-                Vendo {v.unidade.toLowerCase()}:
+                Vendo:
               </span>
-              <Select
-                value={organizacaoAtiva ? String(organizacaoAtiva.id) : undefined}
-                onValueChange={(valor) => trocarUnidade(Number(valor))}
-              >
-                <SelectTrigger className="h-8 w-[240px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(condominios ?? []).map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SeletorUnidades selecao={selecao} className="max-w-[260px]" />
             </div>
           )}
         </div>
@@ -234,12 +197,16 @@ export default function AdminDashboard() {
         {/* Em destaque, antes de tudo: o que vence e quando. Cada dia leva à
             função de onde o item veio. */}
         {temModulo("calendario") && (
-          <CalendarioGeral condominioId={organizacaoAtiva?.id ?? 0} compacto />
+          <CalendarioGeral
+            condominioId={organizacaoAtiva?.id ?? 0}
+            unidades={unidades}
+            compacto
+          />
         )}
 
         {/* Atalho único para o que espera resposta, de todas as funções. */}
         {temModulo("painel-pendencias") && (
-          <PainelPendencias condominioId={organizacaoAtiva?.id ?? 0} />
+          <PainelPendencias condominioId={organizacaoAtiva?.id ?? 0} unidades={unidades} />
         )}
 
         {/* Quadrados, dois por linha: o mesmo desenho vale no celular. */}
@@ -275,21 +242,22 @@ export default function AdminDashboard() {
               onClick={() => setLocation("/admin/modulos")}
             />
           )}
+          {/* Um cartão só para gente: a equipe é montada dentro da ficha do
+              funcionário, e o quadrado separado só somava um caminho a mais
+              para a mesma associação. */}
           {temModulo("funcionarios") && (
             <CardQuadrado
               icone={<Users className="w-6 h-6 text-emerald-500" />}
-              titulo="Funcionários"
+              titulo={temModulo("equipes") ? "Funcionários e equipes" : "Funcionários"}
               valor={funcionarios?.length ?? "—"}
-              descricao={organizacaoAtiva ? `em ${organizacaoAtiva.nome}` : "cadastrados"}
+              descricao={
+                unidades.length > 1
+                  ? `em ${unidades.length} ${v.unidade.toLowerCase()}s`
+                  : organizacaoAtiva
+                    ? `em ${organizacaoAtiva.nome}`
+                    : "cadastrados"
+              }
               onClick={() => setLocation("/admin/funcionarios")}
-            />
-          )}
-          {temModulo("equipes") && (
-            <CardQuadrado
-              icone={<UsersRound className="w-6 h-6 text-teal-500" />}
-              titulo="Equipes"
-              descricao="times que recebem a O.S. designada"
-              onClick={() => setLocation("/admin/equipes")}
             />
           )}
           {MODULOS_DO_HUB.some(temModulo) && (

@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { moduloProcedure, router } from "../../_core/trpc";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getDb } from "../../db";
@@ -33,15 +34,20 @@ const ORIGENS = ["os", "vencimento", "checklist", "vistoria", "manutencao", "qrc
 
 export const quadroAtividadesRouter = router({
   listar: quadroProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
 
       return db
         .select()
         .from(quadroAtividades)
-        .where(eq(quadroAtividades.condominioId, input.condominioId))
+        .where(
+          inArray(
+            quadroAtividades.condominioId,
+            await unidadesDaConsulta(ctx, input, "quadro-atividades"),
+          ),
+        )
         .orderBy(asc(quadroAtividades.ordem), asc(quadroAtividades.id));
     }),
 

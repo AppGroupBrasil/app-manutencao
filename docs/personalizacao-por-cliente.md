@@ -118,8 +118,9 @@ dois caberia na coluna.
 caminho de acesso. `server/_core/tenant.ts` soma dono ∪ vínculos ativos, e
 `ownership.ts` aceita as duas origens. Papéis em `shared/const.ts`:
 
-- `chefe` — vinculado a todas as unidades do cliente; alterna entre elas pelo
-  seletor (`x-condominio-id`), uma por vez.
+- `chefe` — vinculado a todas as unidades do cliente; marca no seletor quais
+  quer ver (uma, algumas ou todas), e a primeira marcada é a do
+  `x-condominio-id`.
 - `gestor` — vinculado só à sua unidade.
 
 Abaixo dos dois continuam os `funcionarios`, que já eram por unidade.
@@ -269,6 +270,25 @@ primeira organização.
 
 `admin_master` acessa qualquer organização e não passa pelo portão de módulos —
 é a conta de suporte da plataforma.
+
+## Unidades somadas na tela
+
+Painel, hub, calendário e lista de O.S. têm um seletor com marcação: "Todas" no
+topo e uma caixa por unidade. As marcadas ficam em
+`localStorage.condominios_marcados` e vão no campo `unidades` das consultas; a
+primeira delas continua sendo a ativa do cabeçalho, porque cadastros (status,
+equipes, categorias) são sempre de UMA unidade.
+
+`server/_core/unidadesConsulta.ts` resolve a lista: cruza o que veio do input
+com o alcance da identidade, tira as unidades suspensas e as que não têm aquela
+função ligada. Nada sobrando, fica a unidade da tela. A conta da plataforma não
+soma — o alcance dela é a base inteira, e somar juntaria clientes.
+
+Consultas que aceitam `unidades`: `calendario.listar`, `ordensServico.list`,
+`vencimentos.stats`, `manutencao.getStats`, `checklist.list` e
+`listarReportes`, `vistoria.list` e `listarReportes`, `qrcode.listar` e
+`listarRespostas`, `tarefasAgendadas.listar` e
+`listarExecucoesDaOrganizacao`, `quadroAtividades.listar`, `ocorrencia.list`.
 
 ## Onde fica cada coisa
 

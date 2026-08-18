@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { moduloProcedure, publicProcedure, router } from "../../_core/trpc";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { direto, escopoPorRegistro } from "../../_core/escopoRegistro";
 import { autorDaRequisicao } from "../../_core/autor";
 import { getClientIp, rateLimiter } from "../../_core/rateLimit";
@@ -33,15 +34,15 @@ const TIPOS_IMAGEM = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 export const qrcodeRouter = router({
   listar: qrcodeProcedure
-    .input(z.object({ condominioId: z.number() }))
-    .query(async ({ input }) => {
+    .input(z.object({ condominioId: z.number(), unidades: unidadesSelecionadas }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
 
       return db
         .select()
         .from(qrcodes)
-        .where(eq(qrcodes.condominioId, input.condominioId))
+        .where(inArray(qrcodes.condominioId, await unidadesDaConsulta(ctx, input, "qrcode")))
         .orderBy(desc(qrcodes.createdAt));
     }),
 
@@ -104,12 +105,18 @@ export const qrcodeRouter = router({
     }),
 
   listarRespostas: qrcodeProcedure
-    .input(z.object({ condominioId: z.number(), qrcodeId: z.number().optional() }))
-    .query(async ({ input }) => {
+    .input(z.object({
+      condominioId: z.number(),
+      unidades: unidadesSelecionadas,
+      qrcodeId: z.number().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
 
-      const condicoes = [eq(qrcodeRespostas.condominioId, input.condominioId)];
+      const condicoes = [
+        inArray(qrcodeRespostas.condominioId, await unidadesDaConsulta(ctx, input, "qrcode")),
+      ];
       if (input.qrcodeId) condicoes.push(eq(qrcodeRespostas.qrcodeId, input.qrcodeId));
 
       return db

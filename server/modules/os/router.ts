@@ -29,7 +29,7 @@ import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "dr
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
-import { unidadesNaoBloqueadas } from "../../_core/bloqueio";
+import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { assegurarExclusaoFuncionario } from "../../_core/permissaoFuncionario";
 import {
   seedCategoriasOs,
@@ -776,6 +776,13 @@ export const osRouter = router({
          * client só diz "quero a rede".
          */
         todasUnidades: z.boolean().optional(),
+        /**
+         * Só as unidades marcadas no seletor, quando não são todas.
+         *
+         * Os ids são cruzados com o alcance de quem consulta: o que vier de
+         * fora dele é descartado, não vira erro.
+         */
+        unidades: unidadesSelecionadas,
         statusId: z.number().optional(),
         categoriaId: z.number().optional(),
         prioridadeId: z.number().optional(),
@@ -787,15 +794,12 @@ export const osRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
-        // A plataforma fica de fora: o alcance dela é a base inteira, e a tela
-        // de um cliente passaria a listar a O.S. de todos os outros.
-        const idsAlcance =
-          input.todasUnidades && !ctx.tenant.isMaster()
-            ? await unidadesNaoBloqueadas(await ctx.tenant.ids())
-            : [];
-        const unidadesDaConsulta = idsAlcance.length > 0 ? idsAlcance : [input.condominioId];
+        // Unidades marcadas no seletor, ou a rede inteira quando a tela pede
+        // "todas". A plataforma fica de fora da soma: o alcance dela é a base
+        // inteira, e a tela de um cliente listaria a O.S. de todos os outros.
+        const unidadesDaLista = await unidadesDaConsulta(ctx, input, "ordens-servico");
 
-        const conditions = [inArray(ordensServico.condominioId, unidadesDaConsulta)];
+        const conditions = [inArray(ordensServico.condominioId, unidadesDaLista)];
 
         if (input.statusId) conditions.push(eq(ordensServico.statusId, input.statusId));
         if (input.categoriaId) conditions.push(eq(ordensServico.categoriaId, input.categoriaId));
@@ -826,21 +830,21 @@ export const osRouter = router({
         // status são por unidade, e sem isto a ordem da unidade vizinha viria
         // sem etiqueta nenhuma na lista da rede.
         const categorias = await db.select().from(osCategorias)
-          .where(inArray(osCategorias.condominioId, unidadesDaConsulta));
+          .where(inArray(osCategorias.condominioId, unidadesDaLista));
         const prioridades = await db.select().from(osPrioridades)
-          .where(inArray(osPrioridades.condominioId, unidadesDaConsulta));
+          .where(inArray(osPrioridades.condominioId, unidadesDaLista));
         const statusList = await db.select().from(osStatus)
-          .where(inArray(osStatus.condominioId, unidadesDaConsulta));
+          .where(inArray(osStatus.condominioId, unidadesDaLista));
         const equipesDaUnidade = await db
           .select({ id: equipes.id, nome: equipes.nome, cor: equipes.cor })
           .from(equipes)
-          .where(inArray(equipes.condominioId, unidadesDaConsulta));
+          .where(inArray(equipes.condominioId, unidadesDaLista));
         // Em ordem de nome: é a lista que vira o filtro por unidade na tela, e
         // a ordem do banco deixaria as 15 unidades embaralhadas.
         const unidades = await db
           .select({ id: condominios.id, nome: condominios.nome })
           .from(condominios)
-          .where(inArray(condominios.id, unidadesDaConsulta))
+          .where(inArray(condominios.id, unidadesDaLista))
           .orderBy(asc(condominios.nome));
 
         return {
