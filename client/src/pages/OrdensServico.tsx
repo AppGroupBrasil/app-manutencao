@@ -26,7 +26,14 @@ import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida"
 import { AberturaGuiada } from "@/components/AberturaGuiada";
 
 /** Onde fica gravado o modo de abertura preferido de quem usa este navegador. */
-const MODO_ABERTURA_KEY = "os_modo_abertura";
+/**
+ * Chave nova de propósito.
+ *
+ * A versão anterior perguntava o modo numa tela de escolha, e quem clicou em
+ * "formulário completo" ficou preso nele — inclusive quem só queria ver o que
+ * era. Trocar a chave devolve todo mundo ao padrão, que agora é o passo a passo.
+ */
+const MODO_ABERTURA_KEY = "os_modo_abertura_v2";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { SeletorUnidades, type SelecaoDeUnidades } from "@/components/SeletorUnidades";
@@ -1084,9 +1091,30 @@ export function ConteudoOrdensServico({
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
           </DialogHeader>
 
-          {/* Passo a passo por padrão: é o modo em que a primeira ordem sai
-              sem ninguém explicar a tela. Quem prefere ver tudo de uma vez
-              troca pelo link do rodapé, e a escolha fica gravada. */}
+          {/* O alternador fica no topo, à vista.
+              No rodapé, depois de doze campos, ninguém achava — e quem abriu no
+              modo errado não sabia que havia outro. */}
+          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+            {(
+              [
+                { chave: "guiado" as const, rotulo: "Passo a passo" },
+                { chave: "grid" as const, rotulo: "Formulário completo" },
+              ]
+            ).map((opcao) => (
+              <button
+                key={opcao.chave}
+                onClick={() => escolherModo(opcao.chave)}
+                className={`flex-1 text-sm px-3 py-2 rounded-md transition-colors ${
+                  modo === opcao.chave
+                    ? "bg-white text-slate-800 shadow-sm font-medium"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                {opcao.rotulo}
+              </button>
+            ))}
+          </div>
+
           {modo === "guiado" && (
             <>
               <AberturaGuiada
@@ -1099,12 +1127,6 @@ export function ConteudoOrdensServico({
                 }}
                 onCancelar={() => setModalNova(false)}
               />
-              <button
-                className="text-xs text-slate-500 underline w-full text-center"
-                onClick={() => escolherModo("grid")}
-              >
-                Preferir o formulário completo
-              </button>
             </>
           )}
 
@@ -1561,12 +1583,6 @@ export function ConteudoOrdensServico({
             </Button>
             </div>
 
-            <button
-              className="text-xs text-slate-500 underline w-full text-center"
-              onClick={() => escolherModo("guiado")}
-            >
-              Preferir o passo a passo
-            </button>
           </div>
           )}
         </DialogContent>
