@@ -67,7 +67,14 @@ const PASSOS_FORM = [
  * "formulário completo" ficou preso nele — inclusive quem só queria ver o que
  * era. Trocar a chave devolve todo mundo ao padrão, que agora é o passo a passo.
  */
-const MODO_ABERTURA_KEY = "os_modo_abertura_v2";
+/**
+ * Chave nova outra vez, e pelo mesmo motivo de antes.
+ *
+ * Quem já experimentou o alternador ficou com "formulário completo" gravado, e
+ * o valor guardado vence o padrão — a pessoa continuaria sem ver os passos sem
+ * entender por quê. Trocar a chave devolve todo mundo ao padrão novo.
+ */
+const MODO_ABERTURA_KEY = "os_modo_abertura_v3";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { SeletorUnidades, type SelecaoDeUnidades } from "@/components/SeletorUnidades";
@@ -489,7 +496,9 @@ export function ConteudoOrdensServico({
    * que o formulário que se quis simplificar.
    */
   const [modo, setModo] = useState<"grid" | "guiado">(
-    () => (localStorage.getItem(MODO_ABERTURA_KEY) as "grid" | "guiado" | null) ?? "grid",
+    // Passo a passo por padrão: é o modo em que quem nunca abriu uma ordem
+    // entende o que a tela quer. O formulário inteiro continua a um clique.
+    () => (localStorage.getItem(MODO_ABERTURA_KEY) as "grid" | "guiado" | null) ?? "guiado",
   );
   /**
    * Em qual passo o formulário simples está.
@@ -547,13 +556,8 @@ export function ConteudoOrdensServico({
    * exige três letras, e quem digitou "d" ficava olhando um botão apagado sem
    * entender o que o sistema queria.
    */
-  const tituloCurto = form.titulo.trim().length > 0 && form.titulo.trim().length < 3;
   const faltaNoFormulario = [
-    tituloCurto
-      ? "O título precisa de pelo menos 3 letras."
-      : form.titulo.trim().length === 0
-        ? "Falta o título do serviço."
-        : "",
+    form.titulo.trim().length === 0 ? "Falta o título do serviço." : "",
     !form.prazoLimite ? "Falta a data máxima de finalização." : "",
   ]
     .filter(Boolean)
@@ -1847,13 +1851,11 @@ export function ConteudoOrdensServico({
               {/* O passo obrigatório diz o que falta antes de a pessoa clicar
                   no botão apagado e concluir que a tela travou. */}
               {((PASSOS_FORM[passoForm].chave === "chamado" &&
-                form.titulo.trim().length < 3) ||
+                form.titulo.trim().length === 0) ||
                 (PASSOS_FORM[passoForm].chave === "quando" && !form.prazoLimite)) && (
                 <p className="text-xs text-amber-700 mb-2">
                   {PASSOS_FORM[passoForm].chave === "chamado"
-                    ? tituloCurto
-                      ? "O título precisa de pelo menos 3 letras."
-                      : "Escreva o título do serviço para continuar."
+                    ? "Escreva o título do serviço para continuar."
                     : "Escolha a data máxima de finalização para continuar."}
                 </p>
               )}
@@ -1881,7 +1883,7 @@ export function ConteudoOrdensServico({
                     // Cada passo obrigatório cobra o seu: sem isso, o erro só
                     // apareceria no fim, com tudo já preenchido.
                     (PASSOS_FORM[passoForm].chave === "chamado" &&
-                      form.titulo.trim().length < 3) ||
+                      form.titulo.trim().length === 0) ||
                     (PASSOS_FORM[passoForm].chave === "quando" && !form.prazoLimite)
                   }
                   onClick={() => setPassoForm(passoForm + 1)}
@@ -1896,7 +1898,7 @@ export function ConteudoOrdensServico({
             <>
             {/* Botão bloqueado sem dizer por quê é o que faz a pessoa clicar
                 três vezes e desistir. Aqui ele diz o que falta e onde está. */}
-            {(form.titulo.trim().length < 3 || !form.prazoLimite) && (
+            {(form.titulo.trim().length === 0 || !form.prazoLimite) && (
               <p className="text-xs text-amber-700 mb-2">
                 {faltaNoFormulario}
                 {guiado ? " Volte um passo para preencher." : ""}
@@ -1915,7 +1917,7 @@ export function ConteudoOrdensServico({
                 // Enquanto o lote está sendo repetido, clicar de novo abriria
                 // tudo em dobro.
                 criarCopia.isPending ||
-                form.titulo.trim().length < 3 ||
+                form.titulo.trim().length === 0 ||
                 !habilitado ||
                 !form.prazoLimite
               }
