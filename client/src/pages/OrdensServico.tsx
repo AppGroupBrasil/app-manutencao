@@ -51,13 +51,49 @@ function emDias(dias: number): string {
  * com o celular na mão não deveria precisar responder categoria e setor para
  * registrar um vazamento.
  */
-const PASSOS_FORM = [
-  { chave: "chamado", titulo: "O chamado", obrigatorio: true },
-  { chave: "quando", titulo: "Quando", obrigatorio: true },
-  { chave: "quem", titulo: "Quem executa", obrigatorio: false },
-  { chave: "detalhes", titulo: "Detalhes", obrigatorio: false },
-  { chave: "fotos", titulo: "Fotos e observações", obrigatorio: false },
-] as const;
+type Bloco =
+  | "unidades"
+  | "solicitante"
+  | "servico"
+  | "dataAbertura"
+  | "prazo"
+  | "equipe"
+  | "classificacao"
+  | "local"
+  | "fotos"
+  | "observacoes"
+  | "avisos";
+
+/**
+ * Os dois modos são passo a passo; muda o que cada um pergunta.
+ *
+ * O simples pede o que toda ordem precisa — onde, o quê, quando e quem. O
+ * completo acrescenta os campos de quem organiza depois: quem pediu, quando
+ * chegou, classificação, local, fotos e avisos. Nenhum campo é exclusivo de um
+ * modo por acaso: o completo é o simples com mais perguntas.
+ *
+ * `obrigatorio` marca o passo que não pode ser pulado. Os demais ganham
+ * "Pular", porque quem está no corredor com o celular na mão não deveria
+ * precisar responder categoria e setor para registrar um vazamento.
+ */
+const PASSOS_POR_MODO = {
+  guiado: [
+    { titulo: "Onde vai ser feito", blocos: ["unidades"], obrigatorio: true },
+    { titulo: "O que precisa ser feito", blocos: ["servico"], obrigatorio: true },
+    { titulo: "Para quando", blocos: ["prazo"], obrigatorio: true },
+    { titulo: "Quem executa", blocos: ["equipe"], obrigatorio: false },
+    { titulo: "Fotos", blocos: ["fotos", "observacoes"], obrigatorio: false },
+  ],
+  grid: [
+    { titulo: "Onde vai ser feito", blocos: ["unidades"], obrigatorio: true },
+    { titulo: "O chamado", blocos: ["solicitante", "servico"], obrigatorio: true },
+    { titulo: "Datas", blocos: ["dataAbertura", "prazo"], obrigatorio: true },
+    { titulo: "Quem executa", blocos: ["equipe"], obrigatorio: false },
+    { titulo: "Classificação", blocos: ["classificacao"], obrigatorio: false },
+    { titulo: "Local e observações", blocos: ["local", "observacoes"], obrigatorio: false },
+    { titulo: "Fotos e avisos", blocos: ["fotos", "avisos"], obrigatorio: false },
+  ],
+} satisfies Record<"guiado" | "grid", { titulo: string; blocos: Bloco[]; obrigatorio: boolean }[]>;
 
 /** Onde fica gravado o modo de abertura preferido de quem usa este navegador. */
 /**
@@ -509,11 +545,24 @@ export function ConteudoOrdensServico({
    * quando alguém acrescentar um campo.
    */
   const [passoForm, setPassoForm] = useState(0);
-  /** No modo simples a tela mostra um passo por vez; no completo, tudo junto. */
-  const guiado = modo === "guiado";
-  /** Este passo aparece? No modo completo, todos aparecem ao mesmo tempo. */
-  const mostrar = (chave: (typeof PASSOS_FORM)[number]["chave"]) =>
-    !guiado || PASSOS_FORM[passoForm].chave === chave;
+  /**
+   * O roteiro de passos deste modo: o simples pergunta menos, e só isso.
+   *
+   * Com uma unidade só, o primeiro passo sai do caminho — ele existiria para
+   * mostrar um nome que a pessoa não pode mudar, e um passo que não se
+   * responde é um passo que faz duvidar do resto.
+   */
+  const passos = useMemo(
+    () =>
+      PASSOS_POR_MODO[modo].filter(
+        (p) => !(p.blocos.length === 1 && p.blocos[0] === "unidades" && !podeEscolherUnidade),
+      ),
+    [modo, podeEscolherUnidade],
+  );
+  const passoAtual = passos[Math.min(passoForm, passos.length - 1)];
+  const ultimoPasso = passoForm >= passos.length - 1;
+  /** Este bloco de campos pertence ao passo em que a pessoa está? */
+  const mostrar = (bloco: Bloco) => (passoAtual.blocos as readonly Bloco[]).includes(bloco);
 
   /**
    * Unidades escolhidas no passo 1, quando são mais de uma.
@@ -522,17 +571,13 @@ export function ConteudoOrdensServico({
    * unidade marcada.
    */
   const [unidadesDoLote, setUnidadesDoLote] = useState<number[]>([]);
-  /** Dessas, as que a equipe escolhida atende — as demais nascem sem equipe. */
-  const [unidadesComEquipe, setUnidadesComEquipe] = useState<number[]>([]);
-
   const escolherModo = (escolhido: "grid" | "guiado") => {
     localStorage.setItem(MODO_ABERTURA_KEY, escolhido);
     setModo(escolhido);
-    // Trocar de modo recomeça: no passo a passo, pelas perguntas; no
-    // formulário, sem o lote que os passos tinham montado — senão ele criaria
-    // ordens em unidades que quem trocou de modo nem viu.
+    // Volta ao primeiro passo, porque os dois roteiros têm tamanhos
+    // diferentes. O que já foi preenchido fica: trocar de modo é mudar quantas
+    // perguntas se responde, não recomeçar a ordem.
     setPassoForm(0);
-    setUnidadesDoLote([]);
   };
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
   const [modalEquipes, setModalEquipes] = useState(false);
@@ -562,6 +607,19 @@ export function ConteudoOrdensServico({
   ]
     .filter(Boolean)
     .join(" ");
+
+  /**
+   * O que falta neste passo — vazio quando dá para seguir.
+   *
+   * A conta é por bloco visível, e não por nome de passo: os dois modos
+   * agrupam os campos de jeitos diferentes, e amarrar a regra ao agrupamento
+   * quebraria no dia em que um passo mudar de lugar.
+   */
+  const faltaNoPasso = mostrar("servico") && form.titulo.trim().length === 0
+    ? "Escreva o título do serviço para continuar."
+    : mostrar("prazo") && !form.prazoLimite
+      ? "Escolha a data máxima de finalização para continuar."
+      : "";
   /**
    * Fotos escolhidas na abertura, antes de a O.S. existir.
    *
@@ -1286,25 +1344,24 @@ export function ConteudoOrdensServico({
             ))}
           </div>
 
-          {/* Barra dos passos: só no formulário simples, para quem está
-              respondendo saber quanto falta. */}
-          {guiado && (
-            <div className="space-y-1">
-              <div className="flex gap-1.5">
-                {PASSOS_FORM.map((p, i) => (
-                  <span
-                    key={p.chave}
-                    className={`h-2 flex-1 rounded-full transition-colors ${
-                      i <= passoForm ? "bg-slate-800" : "bg-slate-200"
-                    }`}
-                  />
-                ))}
-              </div>
-              <p className="text-sm text-slate-500">
-                Passo {passoForm + 1} de {PASSOS_FORM.length} · {PASSOS_FORM[passoForm].titulo}
-              </p>
+          {/* A barra vale para os dois modos: os dois são passo a passo, e o
+              que muda é quantas perguntas cada um faz. */}
+          <div className="space-y-1">
+            <div className="flex gap-1.5">
+              {passos.map((p, i) => (
+                <span
+                  key={p.titulo}
+                  className={`h-2 flex-1 rounded-full transition-colors ${
+                    i <= passoForm ? "bg-slate-800" : "bg-slate-200"
+                  }`}
+                />
+              ))}
             </div>
-          )}
+            <p className="text-sm text-slate-500">
+              Passo {Math.min(passoForm, passos.length - 1) + 1} de {passos.length} ·{" "}
+              {passoAtual.titulo}
+            </p>
+          </div>
 
           <div className="space-y-5">
             {/* Veio dos passos com várias unidades marcadas: quem preenche
@@ -1318,13 +1375,13 @@ export function ConteudoOrdensServico({
               </div>
             )}
 
-            {mostrar("chamado") && (
+            {mostrar("unidades") && (
             <Secao titulo="O chamado">
             {/* No formulário simples, a unidade é marcação: marcar mais de uma
                 abre a mesma ordem em cada uma, que é como se pede "trocar as
                 lâmpadas em todas". No completo segue a escolha única de
                 sempre, para não mudar o que já se conhece. */}
-            {podeEscolherUnidade && guiado ? (
+            {podeEscolherUnidade ? (
               <div className="space-y-1.5">
                 <Label>
                   Onde o serviço vai ser feito ({unidadesDoLote.length || 1})
@@ -1379,42 +1436,6 @@ export function ConteudoOrdensServico({
                   })}
                 </div>
               </div>
-            ) : podeEscolherUnidade ? (
-              <div>
-                <Label>{v.unidade} de atendimento</Label>
-                <Select
-                  value={String(unidadeNova)}
-                  onValueChange={(valor) => {
-                    setUnidadeNova(Number(valor));
-                    // Escolher a unidade aqui desfaz o lote dos passos: a
-                    // decisão manual manda, e sair ordem em unidade que ele
-                    // acabou de trocar seria o oposto do que pediu.
-                    setUnidadesDoLote([]);
-                    // Categoria, prioridade, status e equipe são da unidade
-                    // anterior: manter o que estava escolhido gravaria a ordem
-                    // apontando para cadastro de outra unidade.
-                    setForm((atual) => ({
-                      ...atual,
-                      categoriaId: "",
-                      prioridadeId: "",
-                      statusId: "",
-                      equipeId: "",
-                    }));
-                    setResponsaveisNova([]);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unidades!.map((u) => (
-                      <SelectItem key={u.id} value={String(u.id)}>
-                        {u.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             ) : (
               organizacao && (
                 <div className="rounded-lg border bg-slate-50 px-3 py-2">
@@ -1425,9 +1446,14 @@ export function ConteudoOrdensServico({
                 </div>
               )
             )}
+            </Secao>
+            )}
+
             {/* Quem pediu o serviço nem sempre é quem digita: o gerente abre
                 pelo coordenador da unidade, o gestor abre pela cozinheira que
                 avisou. Campo livre, porque não há cadastro para isso. */}
+            {mostrar("solicitante") && (
+            <Secao titulo="Quem pediu">
             <div>
               <Label>Responsável pela abertura</Label>
               <Input
@@ -1436,7 +1462,19 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, solicitanteNome: e.target.value })}
               />
             </div>
+            </Secao>
+            )}
 
+            {mostrar("servico") && (
+            <Secao titulo="O que precisa ser feito">
+            {/* Com uma unidade só o passo de escolha não existe, mas para onde
+                a ordem vai continua sendo informação — aparece aqui. */}
+            {!podeEscolherUnidade && organizacao && (
+              <div className="rounded-lg border bg-slate-50 px-3 py-2">
+                <span className="text-xs text-slate-500">{v.unidade} de atendimento</span>
+                <p className="text-sm font-medium text-slate-800">{organizacao.nome}</p>
+              </div>
+            )}
             <div>
               <Label>Título</Label>
               <Input
@@ -1457,8 +1495,8 @@ export function ConteudoOrdensServico({
             </Secao>
             )}
 
-            {mostrar("quando") && (
-            <Secao titulo="Prazos e execução">
+            {mostrar("dataAbertura") && (
+            <Secao titulo="Quando o pedido chegou">
             <div>
               <Label>Data de abertura do chamado</Label>
               <Input
@@ -1470,8 +1508,12 @@ export function ConteudoOrdensServico({
                 O dia em que o pedido chegou — pode ser anterior ao de hoje.
               </p>
             </div>
+            </Secao>
+            )}
 
             {/* Prazo: é ele que coloca a O.S. no calendário e cobra alguém. */}
+            {mostrar("prazo") && (
+            <Secao titulo="Para quando">
             <div>
               <Label>Data máxima de finalização</Label>
               <Input
@@ -1511,7 +1553,7 @@ export function ConteudoOrdensServico({
             </Secao>
             )}
 
-            {mostrar("quem") && (
+            {mostrar("equipe") && (
             <Secao titulo="Quem executa">
             {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
                 sem precisar reabrir a ordem depois.
@@ -1627,7 +1669,7 @@ export function ConteudoOrdensServico({
             </Secao>
             )}
 
-            {mostrar("detalhes") && (
+            {mostrar("classificacao") && (
             <Secao titulo="Detalhes">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1750,7 +1792,7 @@ export function ConteudoOrdensServico({
 
             {/* Avisos de abertura: configuração da unidade, só o gestor vê.
                 Fica no último passo, junto do botão que cria. */}
-            {mostrar("fotos") && organizacao && (
+            {mostrar("avisos") && organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
@@ -1843,22 +1885,13 @@ export function ConteudoOrdensServico({
             {/* Rodapé colado: o botão sumia no fim de doze campos, e quem abre
                 O.S. pelo celular rolava a tela toda para achar. */}
             <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 pt-3 pb-4 sm:pb-6 bg-white border-t shadow-[0_-10px_16px_-12px_rgba(15,23,42,0.25)]">
-            {/* No formulário simples, o rodapé é a navegação: voltar, pular o
-                que não é obrigatório e seguir. O botão que cria a ordem só
-                aparece no último passo. */}
-            {guiado && passoForm < PASSOS_FORM.length - 1 && (
+            {/* O rodapé é a navegação: voltar, pular o que não é obrigatório e
+                seguir. O botão que cria a ordem só aparece no último passo. */}
+            {!ultimoPasso && (
               <>
               {/* O passo obrigatório diz o que falta antes de a pessoa clicar
                   no botão apagado e concluir que a tela travou. */}
-              {((PASSOS_FORM[passoForm].chave === "chamado" &&
-                form.titulo.trim().length === 0) ||
-                (PASSOS_FORM[passoForm].chave === "quando" && !form.prazoLimite)) && (
-                <p className="text-xs text-amber-700 mb-2">
-                  {PASSOS_FORM[passoForm].chave === "chamado"
-                    ? "Escreva o título do serviço para continuar."
-                    : "Escolha a data máxima de finalização para continuar."}
-                </p>
-              )}
+              {faltaNoPasso && <p className="text-xs text-amber-700 mb-2">{faltaNoPasso}</p>}
 
               <div className="flex gap-2">
                 <Button
@@ -1871,7 +1904,7 @@ export function ConteudoOrdensServico({
                   {passoForm === 0 ? "Cancelar" : "Voltar"}
                 </Button>
 
-                {!PASSOS_FORM[passoForm].obrigatorio && (
+                {!passoAtual.obrigatorio && (
                   <Button variant="ghost" onClick={() => setPassoForm(passoForm + 1)}>
                     Pular
                   </Button>
@@ -1879,13 +1912,7 @@ export function ConteudoOrdensServico({
 
                 <Button
                   className="flex-1"
-                  disabled={
-                    // Cada passo obrigatório cobra o seu: sem isso, o erro só
-                    // apareceria no fim, com tudo já preenchido.
-                    (PASSOS_FORM[passoForm].chave === "chamado" &&
-                      form.titulo.trim().length === 0) ||
-                    (PASSOS_FORM[passoForm].chave === "quando" && !form.prazoLimite)
-                  }
+                  disabled={!!faltaNoPasso}
                   onClick={() => setPassoForm(passoForm + 1)}
                 >
                   Continuar
@@ -1894,18 +1921,17 @@ export function ConteudoOrdensServico({
               </>
             )}
 
-            {(!guiado || passoForm === PASSOS_FORM.length - 1) && (
+            {ultimoPasso && (
             <>
             {/* Botão bloqueado sem dizer por quê é o que faz a pessoa clicar
                 três vezes e desistir. Aqui ele diz o que falta e onde está. */}
             {(form.titulo.trim().length === 0 || !form.prazoLimite) && (
               <p className="text-xs text-amber-700 mb-2">
-                {faltaNoFormulario}
-                {guiado ? " Volte um passo para preencher." : ""}
+                {faltaNoFormulario} Volte um passo para preencher.
               </p>
             )}
-            <div className={guiado ? "flex gap-2" : undefined}>
-            {guiado && (
+            <div className="flex gap-2">
+            {passoForm > 0 && (
               <Button variant="outline" onClick={() => setPassoForm(passoForm - 1)}>
                 <ArrowLeft className="w-4 h-4" /> Voltar
               </Button>
