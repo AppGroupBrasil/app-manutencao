@@ -243,26 +243,30 @@ export function GerenciarEquipes({
       <div className="grid gap-2 sm:grid-cols-2">
         <Button
           variant="outline"
-          className="h-auto py-3 flex-col items-start"
+          // `whitespace-normal`: o botão não quebra linha por padrão, e a
+          // descrição saía por cima da do botão vizinho.
+          className="h-auto py-3 px-3 flex-col items-start gap-1 whitespace-normal text-left"
           onClick={() => setPasso({ tela: "interna" })}
         >
           <span className="flex items-center gap-2 font-medium">
             <Users className="w-4 h-4" /> Nova equipe
           </span>
-          <span className="text-xs text-slate-500 font-normal text-left">
+          <span className="text-xs text-slate-500 font-normal text-left leading-snug w-full">
             Funcionários da casa, nas {v.unidade.toLowerCase()}s que ela atende
           </span>
         </Button>
 
         <Button
           variant="outline"
-          className="h-auto py-3 flex-col items-start"
+          // `whitespace-normal`: o botão não quebra linha por padrão, e a
+          // descrição saía por cima da do botão vizinho.
+          className="h-auto py-3 px-3 flex-col items-start gap-1 whitespace-normal text-left"
           onClick={() => setPasso({ tela: "externa" })}
         >
           <span className="flex items-center gap-2 font-medium">
             <Building2 className="w-4 h-4" /> Nova equipe externa
           </span>
-          <span className="text-xs text-slate-500 font-normal text-left">
+          <span className="text-xs text-slate-500 font-normal text-left leading-snug w-full">
             Empresa contratada, avisada por e-mail
           </span>
         </Button>

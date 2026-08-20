@@ -416,8 +416,6 @@ export function ConteudoOrdensServico({
     { condominioId: unidadeNova },
     { enabled: unidadeNova > 0 && !modulosIndefinidos && temModulo("equipes") },
   );
-  /** A equipe marcada no formulário, para mostrar o time ou o contato dela. */
-  const equipeEscolhida = (equipesDaUnidade ?? []).find((e) => String(e.id) === form.equipeId);
 
   const [busca, setBusca] = useState("");
   /**
@@ -443,6 +441,14 @@ export function ConteudoOrdensServico({
   /** Ficha rápida de funcionário, pela engrenagem dos responsáveis. */
   const [modalFuncionarios, setModalFuncionarios] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
+  /**
+   * A equipe marcada no formulário, para mostrar o time ou o contato dela.
+   *
+   * Vive aqui, depois de `form`: lá em cima, junto da consulta das equipes, o
+   * `.find` rodava no mesmo instante e lia `form` antes da declaração — a tela
+   * inteira quebrava com "Cannot access before initialization".
+   */
+  const equipeEscolhida = (equipesDaUnidade ?? []).find((e) => String(e.id) === form.equipeId);
   const [responsaveisNova, setResponsaveisNova] = useState<number[]>([]);
   /**
    * Fotos escolhidas na abertura, antes de a O.S. existir.
