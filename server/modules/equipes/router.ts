@@ -6,8 +6,9 @@ import {
   equipeFuncionarios,
   equipeUnidades,
   funcionarios,
+  funcionarioCondominios,
 } from "../../../drizzle/schema";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, isNull, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { moduloProcedure, moduloUserProcedure, router } from "../../_core/trpc";
 import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
@@ -71,6 +72,32 @@ async function unidadesDaEquipe(
     ids.add(id);
   }
   return [...ids];
+}
+
+/**
+ * Unidades em que a pessoa trabalha: a da ficha e as que ela atende por
+ * vínculo.
+ *
+ * A ficha guarda uma unidade só; `funcionario_condominios` é que registra as
+ * demais. Perguntar só à ficha recusava o vínculo de quem foi cadastrado numa
+ * unidade e trabalha em outra.
+ */
+async function unidadesDoFuncionario(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  funcionarioId: number,
+  daFicha: number,
+): Promise<number[]> {
+  const vinculos = await db
+    .select({ condominioId: funcionarioCondominios.condominioId })
+    .from(funcionarioCondominios)
+    .where(
+      and(
+        eq(funcionarioCondominios.funcionarioId, funcionarioId),
+        or(eq(funcionarioCondominios.ativo, true), isNull(funcionarioCondominios.ativo)),
+      ),
+    );
+
+  return [...new Set([daFicha, ...vinculos.map((v) => v.condominioId)])];
 }
 
 /** Regrava as unidades atendidas, mexendo só no que mudou. */
@@ -241,6 +268,11 @@ export const equipesRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Funcionário não encontrado." });
       }
 
+      // Onde a pessoa trabalha: a unidade da ficha e as que ela atende por
+      // vínculo. Olhar só a ficha recusava quem foi cadastrado numa unidade e
+      // vinculado a outra — justamente quem a lista agora oferece.
+      const unidadesDaPessoa = await unidadesDoFuncionario(db, input.funcionarioId, funcionario.condominioId);
+
       // A equipe tem de atender a unidade da pessoa: sem esta trava, a ficha
       // viraria um caminho para pendurar alguém no time da unidade vizinha.
       // Atender, e não pertencer: a equipe de rede atende a unidade dela sem
@@ -253,7 +285,7 @@ export const equipesRouter = router({
             .where(
               and(
                 inArray(equipes.id, input.equipeIds),
-                eq(equipeUnidades.condominioId, funcionario.condominioId),
+                inArray(equipeUnidades.condominioId, unidadesDaPessoa),
                 eq(equipes.ativo, true),
                 // Empresa contratada não tem funcionário dentro: marcar alguém
                 // nela pela ficha criaria vínculo que nenhuma tela mostra.
@@ -280,7 +312,7 @@ export const equipesRouter = router({
         .where(
           and(
             eq(equipeFuncionarios.funcionarioId, input.funcionarioId),
-            eq(equipeUnidades.condominioId, funcionario.condominioId),
+            inArray(equipeUnidades.condominioId, unidadesDaPessoa),
           ),
         );
 
@@ -514,7 +546,27 @@ export const equipesRouter = router({
         .where(
           and(
             inArray(funcionarios.id, input.funcionarioIds),
-            inArray(funcionarios.condominioId, alcance),
+            // Ficha na unidade ou vínculo com ela: é o mesmo critério da lista
+            // que ofereceu essas pessoas. Olhar só a ficha recusaria quem a
+            // tela acabou de mostrar.
+            or(
+              inArray(funcionarios.condominioId, alcance),
+              inArray(
+                funcionarios.id,
+                db
+                  .select({ id: funcionarioCondominios.funcionarioId })
+                  .from(funcionarioCondominios)
+                  .where(
+                    and(
+                      inArray(funcionarioCondominios.condominioId, alcance),
+                      or(
+                        eq(funcionarioCondominios.ativo, true),
+                        isNull(funcionarioCondominios.ativo),
+                      ),
+                    ),
+                  ),
+              ),
+            ),
           ),
         );
 

@@ -143,11 +143,40 @@ export const funcionarioRouter = router({
         // nas telas novas; o recorte por criador existe para separar gestores
         // entre si, e não faz sentido aplicá-lo a quem executa.
         const master = ctx.user ? await ehGestorMaster(ctx.user.id) : true;
+        /**
+         * Quem trabalha na unidade: a ficha é dela, ou a pessoa está vinculada
+         * a ela.
+         *
+         * A ficha guarda uma unidade só, mas o funcionário pode atender várias
+         * — é o que `funcionario_condominios` registra, e esta lista ignorava.
+         * Quem foi cadastrado numa unidade e vinculado a outra não aparecia na
+         * segunda nem para entrar na equipe.
+         */
+        const daUnidade = (ids: number[]) =>
+          or(
+            inArray(funcionarios.condominioId, ids),
+            inArray(
+              funcionarios.id,
+              db
+                .select({ id: funcionarioCondominios.funcionarioId })
+                .from(funcionarioCondominios)
+                .where(
+                  and(
+                    inArray(funcionarioCondominios.condominioId, ids),
+                    or(
+                      eq(funcionarioCondominios.ativo, true),
+                      isNull(funcionarioCondominios.ativo),
+                    ),
+                  ),
+                ),
+            ),
+          );
+
         const filtro = (ids: number[]) =>
           master || !ctx.user
-            ? inArray(funcionarios.condominioId, ids)
+            ? daUnidade(ids)
             : and(
-                inArray(funcionarios.condominioId, ids),
+                daUnidade(ids),
                 // Ficha sem dono entra para todos: `criadoPorId` só passou a
                 // ser gravado depois, e as anteriores ficavam invisíveis para
                 // sempre — cadastradas, sem aparecer em lista nenhuma.
@@ -169,10 +198,14 @@ export const funcionarioRouter = router({
 
           const nomes = new Map<number, string>();
           if (ids.length > 1) {
+            // Pelas unidades que apareceram no resultado, e não pelas
+            // consultadas: quem entrou por vínculo tem a ficha em outra
+            // unidade, e a etiqueta dele ficaria em branco.
+            const doResultado = [...new Set(equipe.map((f) => f.condominioId))];
             const linhas = await db
               .select({ id: condominios.id, nome: condominios.nome })
               .from(condominios)
-              .where(inArray(condominios.id, ids));
+              .where(inArray(condominios.id, doResultado));
             for (const u of linhas) nomes.set(u.id, u.nome);
           }
           return equipe.map((f) => ({ ...f, unidadeNome: nomes.get(f.condominioId) ?? null }));

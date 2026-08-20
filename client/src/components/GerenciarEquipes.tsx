@@ -54,24 +54,25 @@ function UnidadesAtendidas({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <Label>
-          {v.unidade}s atendidas ({marcadas.length})
-        </Label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
-          // Desmarcar todas deixa a unidade de onde a tela foi aberta, e não a
-          // primeira da lista: a equipe sumiria da O.S. que está sendo escrita.
-          onClick={() => onMudar(estaoTodas ? [padrao] : todas)}
-        >
-          {estaoTodas ? "Desmarcar todas" : "Marcar todas"}
-        </Button>
-      </div>
+      <Label>
+        {v.unidade}s atendidas ({marcadas.length})
+      </Label>
 
-      <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto">
+      <div className="border rounded-md divide-y max-h-48 overflow-y-auto">
+        {/* "Todas" é a primeira linha da lista, com a mesma caixinha das
+            demais: o botãozinho no canto passava despercebido, e quem quer a
+            rede inteira marcava as quinze uma a uma. Desmarcando, sobra a
+            unidade de onde a tela foi aberta — sem ela a equipe sumiria da
+            O.S. que está sendo escrita. */}
+        <button
+          type="button"
+          onClick={() => onMudar(estaoTodas ? [padrao] : todas)}
+          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50"
+        >
+          <Checkbox checked={estaoTodas} className="pointer-events-none" />
+          <span>Todas as {v.unidade.toLowerCase()}s ({todas.length})</span>
+        </button>
+
         {(organizacoes ?? []).map((o) => {
           const marcada = marcadas.includes(o.id);
           return (
@@ -81,7 +82,7 @@ function UnidadesAtendidas({
               onClick={() =>
                 onMudar(marcada ? marcadas.filter((id) => id !== o.id) : [...marcadas, o.id])
               }
-              className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
             >
               <Checkbox checked={marcada} className="pointer-events-none" />
               <span className="truncate">{o.nome}</span>

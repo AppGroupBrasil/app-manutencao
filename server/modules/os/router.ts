@@ -20,6 +20,7 @@ import {
   notificacoes,
   manutencoes,
   funcionarios,
+  funcionarioCondominios,
   equipes,
   equipeFuncionarios,
   equipeUnidades,
@@ -37,6 +38,38 @@ import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "dr
  * Em branco é ficha ativa; desligada é a que tem `false` gravado.
  */
 const funcionarioEmUso = or(eq(funcionarios.ativo, true), isNull(funcionarios.ativo));
+
+/**
+ * Quem trabalha na unidade: a ficha é dela, ou a pessoa está vinculada a ela.
+ *
+ * A ficha guarda uma unidade só, mas o funcionário pode atender várias — é o
+ * que `funcionario_condominios` registra desde sempre, e nenhuma lista olhava.
+ * Quem foi cadastrado numa unidade e vinculado a outra não aparecia na
+ * segunda: nem para ser responsável pela O.S., nem para entrar na equipe.
+ */
+function funcionarioDaUnidade(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  unidades: number[],
+) {
+  return or(
+    inArray(funcionarios.condominioId, unidades),
+    inArray(
+      funcionarios.id,
+      db
+        .select({ id: funcionarioCondominios.funcionarioId })
+        .from(funcionarioCondominios)
+        .where(
+          and(
+            inArray(funcionarioCondominios.condominioId, unidades),
+            or(
+              eq(funcionarioCondominios.ativo, true),
+              isNull(funcionarioCondominios.ativo),
+            ),
+          ),
+        ),
+    ),
+  );
+}
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
@@ -134,7 +167,7 @@ async function notificarAberturaDeOS(
       notificarEmail: funcionarios.notificarOsEmail,
     })
     .from(funcionarios)
-    .where(and(eq(funcionarios.condominioId, os.condominioId), funcionarioEmUso));
+    .where(and(funcionarioDaUnidade(db, [os.condominioId]), funcionarioEmUso));
 
   if (organizacao?.autoNotificar) {
     // `funcionarios` não tem coluna de usuário e `notificacoes` exige uma:
@@ -2660,7 +2693,7 @@ export const osRouter = router({
             notificarOsEmail: funcionarios.notificarOsEmail,
           })
           .from(funcionarios)
-          .where(and(eq(funcionarios.condominioId, input.condominioId), funcionarioEmUso))
+          .where(and(funcionarioDaUnidade(db, [input.condominioId]), funcionarioEmUso))
           .orderBy(asc(funcionarios.nome));
       }),
 

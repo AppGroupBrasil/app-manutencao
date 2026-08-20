@@ -21,7 +21,12 @@ vi.mock("./_core/modules", () => ({
 
 vi.mock("./_core/teste", () => ({ testeVencido: async () => false }));
 
-const { equipes, equipeFuncionarios, funcionarios } = await import("../drizzle/schema");
+const { equipes, equipeFuncionarios, funcionarioCondominios, funcionarios } = await import(
+  "../drizzle/schema"
+);
+
+/** Unidades que o funcionário 7 atende além da unidade 1, que é a da ficha. */
+let unidadesVinculadas: number[];
 
 /**
  * Unidades que cada equipe do banco falso atende.
@@ -72,12 +77,20 @@ function fakeDb() {
           // A ficha 7 é da unidade 1.
           return encadeavel([{ id: 7, condominioId: 1 }]);
         }
+        if (tabela === funcionarioCondominios) {
+          // As outras unidades em que ele trabalha.
+          return encadeavel(unidadesVinculadas.map((condominioId) => ({ condominioId })));
+        }
         if (tabela === equipes) {
-          // Só as equipes pedidas que atendem mesmo a unidade 1 e têm gente
+          // Só as equipes pedidas que atendem alguma unidade dele e têm gente
           // dentro: a rota recusa empresa contratada.
+          const dele = [1, ...unidadesVinculadas];
           return encadeavel(
             ids
-              .filter((id) => unidadesDaEquipe[id]?.includes(1) && !externas.has(id))
+              .filter(
+                (id) =>
+                  unidadesDaEquipe[id]?.some((u) => dele.includes(u)) && !externas.has(id),
+              )
               .map((id) => ({ id })),
           );
         }
@@ -127,6 +140,7 @@ beforeEach(() => {
   // empresa contratada, que atende a unidade 1 e não tem funcionário dentro.
   unidadesDaEquipe = { 10: [1], 11: [1], 20: [2], 30: [1, 2], 40: [1] };
   externas = new Set([40]);
+  unidadesVinculadas = [];
   vinculos = [];
   inseridos = [];
   apagou = false;
@@ -169,6 +183,21 @@ describe("equipes.definirDoFuncionario", () => {
 
     expect(inseridos).toEqual([]);
     expect(apagou).toBe(false);
+  });
+
+  it("aceita a equipe da unidade em que a pessoa trabalha por vínculo", async () => {
+    // A ficha do André é de uma unidade e ele atende outra: a equipe de lá
+    // aparecia na lista e a gravação recusava, olhando só a ficha.
+    unidadesVinculadas = [2];
+
+    const r = await chamador().definirDoFuncionario({
+      condominioId: 1,
+      funcionarioId: 7,
+      equipeIds: [20],
+    });
+
+    expect(inseridos).toEqual([{ equipeId: 20, funcionarioId: 7 }]);
+    expect(r.entrou).toBe(1);
   });
 
   it("recusa empresa contratada: ela não tem funcionário dentro", async () => {

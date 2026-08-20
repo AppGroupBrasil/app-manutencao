@@ -966,29 +966,33 @@ export default function AdminFuncionarios() {
                   a equipe da casa marca só a dela. */}
               {selecao.temEscolha && (
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label>{v.unidade}s atendidas ({unidadesMarcadas.length})</Label>
-                    <Button
+                  <Label>{v.unidade}s atendidas ({unidadesMarcadas.length})</Label>
+
+                  <div className="border rounded-md divide-y max-h-48 overflow-y-auto">
+                    {/* "Todas" é a primeira linha, com a mesma caixinha das
+                        demais: o botãozinho no canto passava despercebido. */}
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs"
                       onClick={() =>
                         setFichaEquipe({
                           ...fichaEquipe,
                           unidades:
                             unidadesMarcadas.length === (organizacoes?.length ?? 0)
-                              ? unidadesMarcadas.slice(0, 1)
+                              ? [orgId ?? unidadesMarcadas[0]].filter(Boolean)
                               : (organizacoes ?? []).map((o) => o.id),
                         })
                       }
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50"
                     >
-                      {unidadesMarcadas.length === (organizacoes?.length ?? 0)
-                        ? "Desmarcar todas"
-                        : "Marcar todas"}
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto">
+                      <Checkbox
+                        checked={unidadesMarcadas.length === (organizacoes?.length ?? 0)}
+                        className="pointer-events-none"
+                      />
+                      <span>
+                        Todas as {v.unidade.toLowerCase()}s ({organizacoes?.length ?? 0})
+                      </span>
+                    </button>
+
                     {(organizacoes ?? []).map((o) => {
                       const marcada = unidadesMarcadas.includes(o.id);
                       return (
@@ -1003,7 +1007,7 @@ export default function AdminFuncionarios() {
                                 : [...unidadesMarcadas, o.id],
                             })
                           }
-                          className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                         >
                           <Checkbox checked={marcada} className="pointer-events-none" />
                           <span className="truncate">{o.nome}</span>
