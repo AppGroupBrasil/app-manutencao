@@ -1370,9 +1370,13 @@ export function ConteudoOrdensServico({
 
           {/* Logo abaixo das etapas, e não escondido dentro de um passo: é a
               primeira coisa que quem não conhece o sistema precisa achar. */}
-          {/* O tutorial é sobre equipes: sem a função ligada ele ensinaria um
-              caminho que não existe nesta organização. */}
-          {ehGestor && temModulo("equipes") && (
+          {/* Só no passo em que se escolhe equipe e responsáveis: é ali que a
+              dúvida existe. Nos outros, o botão pergunta algo que a pessoa não
+              está fazendo — e ocupa a primeira linha da tela sem motivo.
+
+              Sem a função ligada ele nem aparece: ensinaria um caminho que não
+              existe nesta organização. */}
+          {ehGestor && temModulo("equipes") && mostrar("equipe") && (
             <Button className="w-full" onClick={() => setAjudaEquipes(true)}>
               <HelpCircle className="w-4 h-4" /> Como funciona
             </Button>
