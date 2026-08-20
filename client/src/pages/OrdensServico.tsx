@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +24,40 @@ import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
 import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
-import { AberturaGuiada } from "@/components/AberturaGuiada";
+
+/**
+ * Data de daqui a N dias, no fuso de quem está usando.
+ *
+ * `toISOString` devolve UTC: no Brasil, das 21h em diante ele já está no dia
+ * seguinte, e "amanhã" viraria depois de amanhã sem ninguém entender por quê.
+ */
+function emDias(dias: number): string {
+  const dia = new Date();
+  dia.setDate(dia.getDate() + dias);
+  const mes = String(dia.getMonth() + 1).padStart(2, "0");
+  const diaDoMes = String(dia.getDate()).padStart(2, "0");
+  return `${dia.getFullYear()}-${mes}-${diaDoMes}`;
+}
+
+/**
+ * O formulário completo, fatiado em passos.
+ *
+ * É a mesma tela do modo completo, mostrada uma parte por vez — os campos são
+ * os mesmos, não há duplicação, e acrescentar um campo novo continua sendo
+ * mexer num lugar só.
+ *
+ * `obrigatorio` marca o passo que não pode ser pulado: sem título e sem prazo
+ * a ordem não existe. Os demais ganham "Pular", porque quem está no corredor
+ * com o celular na mão não deveria precisar responder categoria e setor para
+ * registrar um vazamento.
+ */
+const PASSOS_FORM = [
+  { chave: "chamado", titulo: "O chamado", obrigatorio: true },
+  { chave: "quando", titulo: "Quando", obrigatorio: true },
+  { chave: "quem", titulo: "Quem executa", obrigatorio: false },
+  { chave: "detalhes", titulo: "Detalhes", obrigatorio: false },
+  { chave: "fotos", titulo: "Fotos e observações", obrigatorio: false },
+] as const;
 
 /** Onde fica gravado o modo de abertura preferido de quem usa este navegador. */
 /**
@@ -458,13 +492,19 @@ export function ConteudoOrdensServico({
     () => (localStorage.getItem(MODO_ABERTURA_KEY) as "grid" | "guiado" | null) ?? "grid",
   );
   /**
-   * No passo a passo, onde a pessoa está: nas perguntas ou já no formulário.
+   * Em qual passo o formulário simples está.
    *
-   * Os passos não criam nada — eles respondem onde, com quem e por conta de
-   * quem, e entregam o formulário preenchido. Assim nenhum campo é digitado
-   * duas vezes e nada do formulário completo fica de fora.
+   * É o mesmo formulário do modo completo, mostrado uma parte por vez: os
+   * campos são exatamente os mesmos, e nada precisa ser preenchido duas vezes.
+   * Fatiar em vez de duplicar também evita que os dois modos saiam do lugar
+   * quando alguém acrescentar um campo.
    */
-  const [etapaGuiada, setEtapaGuiada] = useState<"passos" | "formulario">("passos");
+  const [passoForm, setPassoForm] = useState(0);
+  /** No modo simples a tela mostra um passo por vez; no completo, tudo junto. */
+  const guiado = modo === "guiado";
+  /** Este passo aparece? No modo completo, todos aparecem ao mesmo tempo. */
+  const mostrar = (chave: (typeof PASSOS_FORM)[number]["chave"]) =>
+    !guiado || PASSOS_FORM[passoForm].chave === chave;
   /**
    * Unidades escolhidas no passo 1, quando são mais de uma.
    *
@@ -481,9 +521,8 @@ export function ConteudoOrdensServico({
     // Trocar de modo recomeça: no passo a passo, pelas perguntas; no
     // formulário, sem o lote que os passos tinham montado — senão ele criaria
     // ordens em unidades que quem trocou de modo nem viu.
-    setEtapaGuiada("passos");
+    setPassoForm(0);
     setUnidadesDoLote([]);
-    setUnidadesComEquipe([]);
   };
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
   const [modalEquipes, setModalEquipes] = useState(false);
@@ -628,7 +667,7 @@ export function ConteudoOrdensServico({
             // Equipe só onde ela atende: nas outras a ordem nasce sem equipe,
             // em vez de o servidor recusar e derrubar a cópia.
             equipeId:
-              form.equipeId && unidadesComEquipe.includes(unidade)
+              form.equipeId && (equipeEscolhida?.unidades ?? []).includes(unidade)
                 ? Number(form.equipeId)
                 : undefined,
           });
@@ -660,8 +699,7 @@ export function ConteudoOrdensServico({
       setForm(FORM_VAZIO);
       setResponsaveisNova([]);
       setUnidadesDoLote([]);
-            setUnidadesComEquipe([]);
-      setEtapaGuiada("passos");
+      setPassoForm(0);
       limparFotosNovas();
       await invalidar();
       // Aberta em outra unidade não aparece nesta lista: dizer para onde foi
@@ -1190,9 +1228,8 @@ export function ConteudoOrdensServico({
             limparFotosNovas();
             // Reabrir começa de novo pelas perguntas, e não no formulário que
             // ficou pela metade da vez passada.
-            setEtapaGuiada("passos");
+            setPassoForm(0);
             setUnidadesDoLote([]);
-            setUnidadesComEquipe([]);
           }
         }}
       >
@@ -1225,28 +1262,26 @@ export function ConteudoOrdensServico({
             ))}
           </div>
 
-          {modo === "guiado" && etapaGuiada === "passos" && (
-            <AberturaGuiada
-              condominioId={unidadeNova}
-              unidades={unidades ?? []}
-              ehGestor={ehGestor}
-              onConcluir={(escolha) => {
-                // O formulário abre com o que os passos já responderam.
-                setUnidadeNova(escolha.unidades[0]);
-                setUnidadesDoLote(escolha.unidades.length > 1 ? escolha.unidades : []);
-                setUnidadesComEquipe(escolha.unidadesComEquipe);
-                setForm((atual) => ({
-                  ...atual,
-                  equipeId: escolha.equipeId ? String(escolha.equipeId) : "",
-                }));
-                setResponsaveisNova(escolha.responsaveis);
-                setEtapaGuiada("formulario");
-              }}
-              onCancelar={() => setModalNova(false)}
-            />
+          {/* Barra dos passos: só no formulário simples, para quem está
+              respondendo saber quanto falta. */}
+          {guiado && (
+            <div className="space-y-1">
+              <div className="flex gap-1.5">
+                {PASSOS_FORM.map((p, i) => (
+                  <span
+                    key={p.chave}
+                    className={`h-2 flex-1 rounded-full transition-colors ${
+                      i <= passoForm ? "bg-slate-800" : "bg-slate-200"
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="text-sm text-slate-500">
+                Passo {passoForm + 1} de {PASSOS_FORM.length} · {PASSOS_FORM[passoForm].titulo}
+              </p>
+            </div>
           )}
 
-          {(modo === "grid" || etapaGuiada === "formulario") && (
           <div className="space-y-5">
             {/* Veio dos passos com várias unidades marcadas: quem preenche
                 daqui em diante precisa saber que sai uma ordem em cada uma. */}
@@ -1259,10 +1294,68 @@ export function ConteudoOrdensServico({
               </div>
             )}
 
+            {mostrar("chamado") && (
             <Secao titulo="O chamado">
-            {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
-                de digitar qualquer coisa, para onde esta ordem vai. */}
-            {podeEscolherUnidade ? (
+            {/* No formulário simples, a unidade é marcação: marcar mais de uma
+                abre a mesma ordem em cada uma, que é como se pede "trocar as
+                lâmpadas em todas". No completo segue a escolha única de
+                sempre, para não mudar o que já se conhece. */}
+            {podeEscolherUnidade && guiado ? (
+              <div className="space-y-1.5">
+                <Label>
+                  Onde o serviço vai ser feito ({unidadesDoLote.length || 1})
+                </Label>
+                <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const todas = (unidades ?? []).map((u) => u.id);
+                      const jaTodas = unidadesDoLote.length === todas.length;
+                      setUnidadesDoLote(jaTodas ? [] : todas);
+                      if (!jaTodas && todas.length > 0) setUnidadeNova(todas[0]);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium hover:bg-slate-50"
+                  >
+                    <Checkbox
+                      checked={unidadesDoLote.length === (unidades?.length ?? 0)}
+                      className="pointer-events-none"
+                    />
+                    <span>
+                      Todas as {v.unidade.toLowerCase()}s ({unidades?.length ?? 0})
+                    </span>
+                  </button>
+
+                  {(unidades ?? []).map((u) => {
+                    const marcada =
+                      unidadesDoLote.length > 0
+                        ? unidadesDoLote.includes(u.id)
+                        : u.id === unidadeNova;
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          const base =
+                            unidadesDoLote.length > 0 ? unidadesDoLote : [unidadeNova];
+                          const novas = marcada
+                            ? base.filter((id) => id !== u.id)
+                            : [...base, u.id];
+
+                          setUnidadesDoLote(novas);
+                          // A primeira marcada é a unidade dos cadastros da
+                          // tela: categoria, status e equipe vêm dela.
+                          if (novas.length > 0) setUnidadeNova(novas[0]);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                      >
+                        <Checkbox checked={marcada} className="pointer-events-none" />
+                        <span className="truncate">{u.nome}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : podeEscolherUnidade ? (
               <div>
                 <Label>{v.unidade} de atendimento</Label>
                 <Select
@@ -1273,7 +1366,6 @@ export function ConteudoOrdensServico({
                     // decisão manual manda, e sair ordem em unidade que ele
                     // acabou de trocar seria o oposto do que pediu.
                     setUnidadesDoLote([]);
-                    setUnidadesComEquipe([]);
                     // Categoria, prioridade, status e equipe são da unidade
                     // anterior: manter o que estava escolhido gravaria a ordem
                     // apontando para cadastro de outra unidade.
@@ -1339,7 +1431,9 @@ export function ConteudoOrdensServico({
               />
             </div>
             </Secao>
+            )}
 
+            {mostrar("quando") && (
             <Secao titulo="Prazos e execução">
             <div>
               <Label>Data de abertura do chamado</Label>
@@ -1361,11 +1455,47 @@ export function ConteudoOrdensServico({
                 value={form.prazoLimite}
                 onChange={(e) => setForm({ ...form, prazoLimite: e.target.value })}
               />
-            </div>
 
+              {/* Atalhos antes do calendário: digitar data no celular é onde
+                  mais gente desiste, e "daqui a uma semana" é o que a pessoa
+                  tem na cabeça — não o dia 27. */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {[
+                  { rotulo: "Amanhã", dias: 1 },
+                  { rotulo: "Em 7 dias", dias: 7 },
+                  { rotulo: "Em 15 dias", dias: 15 },
+                  { rotulo: "Em 30 dias", dias: 30 },
+                ].map((atalho) => {
+                  const valor = emDias(atalho.dias);
+                  return (
+                    <button
+                      key={atalho.dias}
+                      type="button"
+                      onClick={() => setForm({ ...form, prazoLimite: valor })}
+                      className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${
+                        form.prazoLimite === valor
+                          ? "bg-slate-800 text-white border-slate-800"
+                          : "bg-white text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {atalho.rotulo}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            </Secao>
+            )}
+
+            {mostrar("quem") && (
+            <Secao titulo="Quem executa">
             {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
-                sem precisar reabrir a ordem depois. */}
-            {temModulo("equipes") && (
+                sem precisar reabrir a ordem depois.
+
+                Só para quem responde pela unidade: o servidor recusa a
+                designação feita por funcionário, e oferecer o campo a ele era
+                montar a ordem inteira para ela morrer no clique final. */}
+            {temModulo("equipes") && ehGestor && (
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <Label>Equipe designada</Label>
@@ -1471,7 +1601,9 @@ export function ConteudoOrdensServico({
             </div>
 
             </Secao>
+            )}
 
+            {mostrar("detalhes") && (
             <Secao titulo="Detalhes">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1541,7 +1673,11 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, endereco: e.target.value })}
               />
             </div>
+            </Secao>
+            )}
 
+            {mostrar("fotos") && (
+            <Secao titulo="Fotos e observações">
             {/* Antes e depois já na abertura: quem está no local fotografa o
                 problema agora, e o "depois" entra quando o serviço terminar —
                 aqui ou dentro da própria ordem. */}
@@ -1586,9 +1722,11 @@ export function ConteudoOrdensServico({
             </div>
 
             </Secao>
+            )}
 
-            {/* Avisos de abertura: configuração da unidade, só o gestor vê. */}
-            {organizacao && (
+            {/* Avisos de abertura: configuração da unidade, só o gestor vê.
+                Fica no último passo, junto do botão que cria. */}
+            {mostrar("fotos") && organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
@@ -1681,6 +1819,61 @@ export function ConteudoOrdensServico({
             {/* Rodapé colado: o botão sumia no fim de doze campos, e quem abre
                 O.S. pelo celular rolava a tela toda para achar. */}
             <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 pt-3 pb-4 sm:pb-6 bg-white border-t shadow-[0_-10px_16px_-12px_rgba(15,23,42,0.25)]">
+            {/* No formulário simples, o rodapé é a navegação: voltar, pular o
+                que não é obrigatório e seguir. O botão que cria a ordem só
+                aparece no último passo. */}
+            {guiado && passoForm < PASSOS_FORM.length - 1 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    passoForm === 0 ? setModalNova(false) : setPassoForm(passoForm - 1)
+                  }
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  {passoForm === 0 ? "Cancelar" : "Voltar"}
+                </Button>
+
+                {!PASSOS_FORM[passoForm].obrigatorio && (
+                  <Button variant="ghost" onClick={() => setPassoForm(passoForm + 1)}>
+                    Pular
+                  </Button>
+                )}
+
+                <Button
+                  className="flex-1"
+                  disabled={
+                    // Cada passo obrigatório cobra o seu: sem isso, o erro só
+                    // apareceria no fim, com tudo já preenchido.
+                    (PASSOS_FORM[passoForm].chave === "chamado" &&
+                      form.titulo.trim().length < 3) ||
+                    (PASSOS_FORM[passoForm].chave === "quando" && !form.prazoLimite)
+                  }
+                  onClick={() => setPassoForm(passoForm + 1)}
+                >
+                  Continuar
+                </Button>
+              </div>
+            )}
+
+            {(!guiado || passoForm === PASSOS_FORM.length - 1) && (
+            <>
+            {/* Botão bloqueado sem dizer por quê é o que faz a pessoa clicar
+                três vezes e desistir. Aqui ele diz o que falta e onde está. */}
+            {(form.titulo.trim().length < 3 || !form.prazoLimite) && (
+              <p className="text-xs text-amber-700 mb-2">
+                Falta {form.titulo.trim().length < 3 ? "o título do serviço" : ""}
+                {form.titulo.trim().length < 3 && !form.prazoLimite ? " e " : ""}
+                {!form.prazoLimite ? "a data máxima de finalização" : ""}
+                {guiado ? " — volte um passo para preencher." : "."}
+              </p>
+            )}
+            <div className={guiado ? "flex gap-2" : undefined}>
+            {guiado && (
+              <Button variant="outline" onClick={() => setPassoForm(passoForm - 1)}>
+                <ArrowLeft className="w-4 h-4" /> Voltar
+              </Button>
+            )}
             <Button
               className="w-full"
               disabled={
@@ -1733,9 +1926,11 @@ export function ConteudoOrdensServico({
                 : "Criar Ordem de Serviço"}
             </Button>
             </div>
+            </>
+            )}
+            </div>
 
           </div>
-          )}
         </DialogContent>
       </Dialog>
 
