@@ -22,6 +22,7 @@ import {
   funcionarios,
   equipes,
   equipeFuncionarios,
+  equipeUnidades,
   condominios,
   users
 } from "../../../drizzle/schema"; // Adjusted path
@@ -210,15 +211,15 @@ async function exigirEquipeDaUnidade(
   }
 
   const [equipe] = await db
-    .select({ condominioId: equipes.condominioId, ativo: equipes.ativo })
+    .select({ ativo: equipes.ativo })
     .from(equipes)
     .where(eq(equipes.id, equipeId))
     .limit(1);
 
-  if (!equipe || equipe.condominioId !== condominioId) {
+  if (!equipe) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Esta equipe não é da unidade da ordem de serviço.",
+      message: "Esta equipe não atende a unidade da ordem de serviço.",
     });
   }
 
@@ -228,6 +229,77 @@ async function exigirEquipeDaUnidade(
       message: "Esta equipe foi desativada.",
     });
   }
+
+  // Atender, e não pertencer: a equipe de rede cobre várias unidades e a
+  // pergunta certa é se esta unidade está entre elas.
+  const [atende] = await db
+    .select({ id: equipeUnidades.id })
+    .from(equipeUnidades)
+    .where(
+      and(eq(equipeUnidades.equipeId, equipeId), eq(equipeUnidades.condominioId, condominioId)),
+    )
+    .limit(1);
+
+  if (!atende) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Esta equipe não atende a unidade da ordem de serviço.",
+    });
+  }
+}
+
+/**
+ * Os membros da equipe entram como responsáveis da O.S.
+ *
+ * Designar a equipe e escolher os responsáveis eram duas listas que diziam a
+ * mesma coisa, e quem designava a equipe achava que tinha terminado — a ordem
+ * não aparecia para ninguém no portal. Aqui o vínculo é um só: designou a
+ * equipe, o time inteiro é responsável.
+ *
+ * Só acrescenta. Quem já era responsável continua, inclusive quem foi posto à
+ * mão e não é da equipe: tirar alguém é decisão de quem gerencia, não efeito
+ * colateral de trocar a equipe.
+ */
+async function membrosViramResponsaveis(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  ordemServicoId: number,
+  equipeId: number,
+): Promise<number> {
+  const membros = await db
+    .select({
+      id: funcionarios.id,
+      nome: funcionarios.nome,
+      cargo: funcionarios.cargo,
+      telefone: funcionarios.telefone,
+      email: funcionarios.email,
+    })
+    .from(equipeFuncionarios)
+    .innerJoin(funcionarios, eq(equipeFuncionarios.funcionarioId, funcionarios.id))
+    .where(and(eq(equipeFuncionarios.equipeId, equipeId), eq(funcionarios.ativo, true)));
+
+  if (membros.length === 0) return 0;
+
+  const jaEstao = await db
+    .select({ funcionarioId: osResponsaveis.funcionarioId })
+    .from(osResponsaveis)
+    .where(eq(osResponsaveis.ordemServicoId, ordemServicoId));
+
+  const existentes = new Set(jaEstao.map((r) => r.funcionarioId));
+  const novos = membros.filter((m) => !existentes.has(m.id));
+  if (novos.length === 0) return 0;
+
+  await db.insert(osResponsaveis).values(
+    novos.map((m) => ({
+      ordemServicoId,
+      funcionarioId: m.id,
+      nome: m.nome,
+      cargo: m.cargo ?? null,
+      telefone: m.telefone ?? null,
+      email: m.email ?? null,
+    })),
+  );
+
+  return novos.length;
 }
 
 /**
@@ -273,6 +345,7 @@ async function notificarEquipeDesignada(
 
   const membros = await db
     .select({
+      id: funcionarios.id,
       nome: funcionarios.nome,
       email: funcionarios.email,
       loginEmail: funcionarios.loginEmail,
@@ -285,6 +358,24 @@ async function notificarEquipeDesignada(
   const supervisores = membros.filter((m) => m.tipo === "supervisor");
   const alvos = supervisores.length > 0 ? supervisores : membros;
   if (alvos.length === 0) return { equipe: equipe?.nome ?? null, avisados: [] };
+
+  // O aviso no portal de quem vai executar: endereçado ao funcionário, que não
+  // tem conta em `users`. Sem isto o e-mail era o único caminho, e a ordem não
+  // existia no aplicativo dele até alguém telefonar.
+  //
+  // O link é o do portal, e não o do painel: `/manutencoes/...` é tela de
+  // gestor e devolveria "sessão expirada" para quem entra por aqui.
+  await db.insert(notificacoes).values(
+    alvos.map((m) => ({
+      funcionarioId: m.id,
+      condominioId: os.condominioId,
+      tipo: "geral" as const,
+      titulo: `O.S. ${os.protocolo} designada para ${equipe?.nome ?? "sua equipe"}`,
+      mensagem: os.titulo,
+      link: `/dashboard/ordens?os=${os.id}`,
+      referenciaId: os.id,
+    })),
+  );
 
   const enderecos = alvos
     .flatMap((m) => [m.loginEmail, m.email])
@@ -786,6 +877,14 @@ export const osRouter = router({
         statusId: z.number().optional(),
         categoriaId: z.number().optional(),
         prioridadeId: z.number().optional(),
+        /**
+         * Só as ordens designadas às equipes de quem está consultando.
+         *
+         * É a aba do portal: o funcionário abre Ordens de Serviço e vê a
+         * unidade inteira, sem saber qual é a dele. Vale só para funcionário —
+         * gestor não pertence a equipe nenhuma e receberia uma lista vazia.
+         */
+        minhasEquipes: z.boolean().optional(),
         search: z.string().optional(),
         limit: z.number().optional().default(50),
         offset: z.number().optional().default(0),
@@ -804,6 +903,21 @@ export const osRouter = router({
         if (input.statusId) conditions.push(eq(ordensServico.statusId, input.statusId));
         if (input.categoriaId) conditions.push(eq(ordensServico.categoriaId, input.categoriaId));
         if (input.prioridadeId) conditions.push(eq(ordensServico.prioridadeId, input.prioridadeId));
+
+        if (input.minhasEquipes && ctx.funcionario) {
+          const minhas = await db
+            .select({ equipeId: equipeFuncionarios.equipeId })
+            .from(equipeFuncionarios)
+            .where(eq(equipeFuncionarios.funcionarioId, ctx.funcionario.id));
+
+          // Sem equipe, a aba mostra nada — e não a unidade inteira, que é o
+          // oposto do que ela promete.
+          conditions.push(
+            minhas.length > 0
+              ? inArray(ordensServico.equipeId, minhas.map((m) => m.equipeId))
+              : sql`false`,
+          );
+        }
         if (input.search) {
           conditions.push(or(
             like(ordensServico.protocolo, `%${input.search}%`),
@@ -835,10 +949,16 @@ export const osRouter = router({
           .where(inArray(osPrioridades.condominioId, unidadesDaLista));
         const statusList = await db.select().from(osStatus)
           .where(inArray(osStatus.condominioId, unidadesDaLista));
-        const equipesDaUnidade = await db
-          .select({ id: equipes.id, nome: equipes.nome, cor: equipes.cor })
-          .from(equipes)
-          .where(inArray(equipes.condominioId, unidadesDaLista));
+        // Pelos ids que as ordens apontam, e não pela unidade dona: a equipe de
+        // rede pertence a uma unidade e trabalha em várias, e pela coluna dona
+        // a etiqueta sumiria da lista das outras.
+        const idsDeEquipe = [...new Set(lista.map((os) => os.equipeId).filter((id): id is number => !!id))];
+        const equipesDaUnidade = idsDeEquipe.length
+          ? await db
+              .select({ id: equipes.id, nome: equipes.nome, cor: equipes.cor })
+              .from(equipes)
+              .where(inArray(equipes.id, idsDeEquipe))
+          : [];
         // Em ordem de nome: é a lista que vira o filtro por unidade na tela, e
         // a ordem do banco deixaria as 15 unidades embaralhadas.
         const unidades = await db
@@ -966,6 +1086,8 @@ export const osRouter = router({
         prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         /** Equipe que fica com o serviço; o supervisor dela recebe o aviso. */
         equipeId: z.number().optional(),
+        /** Empresa de fora que ficou com o serviço, digitada na hora. */
+        equipeExterna: z.string().max(255).optional(),
         observacoes: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -1049,6 +1171,9 @@ export const osRouter = router({
           dataAbertura: input.dataAbertura,
           prazoLimite: input.prazoLimite,
           equipeId: input.equipeId,
+          // Um responsável só pelo serviço: escolher a equipe de casa apaga o
+          // nome do terceiro, e vice-versa.
+          equipeExterna: input.equipeId ? null : input.equipeExterna?.trim() || null,
           observacoes: input.observacoes,
         }).returning();
         
@@ -1077,6 +1202,16 @@ export const osRouter = router({
         // Designada já na abertura: o supervisor da equipe é avisado e o
         // registro fica na linha do tempo, que é onde se confere quem soube.
         if (input.equipeId) {
+          // O time inteiro entra como responsável: é o que faz a ordem aparecer
+          // no portal de quem vai executar. Vem antes do aviso e em bloco
+          // próprio porque é dado da ordem — e-mail fora do ar não pode deixar
+          // a O.S. sem ninguém respondendo por ela.
+          try {
+            await membrosViramResponsaveis(db, result.id, input.equipeId);
+          } catch (erro) {
+            console.error("[os] falha ao vincular a equipe como responsável:", erro);
+          }
+
           try {
             const aviso = await notificarEquipeDesignada(
               db,
@@ -1128,6 +1263,8 @@ export const osRouter = router({
         prazoLimite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         /** `null` desfaz a designação sem apagar o histórico do aviso. */
         equipeId: z.number().nullable().optional(),
+        /** Empresa de fora, digitada na hora; `null` limpa. */
+        equipeExterna: z.string().max(255).nullable().optional(),
         observacoes: z.string().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -1158,6 +1295,15 @@ export const osRouter = router({
         }
         if (input.setorId) {
           await exigirCadastroDaUnidade(db, osSetores, input.setorId, osAtual.condominioId, "Este setor");
+        }
+
+        // Equipe de casa e empresa de fora são o mesmo campo da tela: escolher
+        // uma limpa a outra, senão a O.S. ficaria dizendo que duas pessoas
+        // diferentes estão com o serviço.
+        if (input.equipeId) updates.equipeExterna = null;
+        if (input.equipeExterna?.trim()) {
+          updates.equipeId = null;
+          updates.equipeExterna = input.equipeExterna.trim();
         }
 
         // Sem campo nenhum para gravar, o drizzle estoura com "No values to
@@ -1202,6 +1348,13 @@ export const osRouter = router({
         // Equipe designada depois da abertura: mesmo aviso da criação. Só
         // dispara quando a equipe muda — salvar a O.S. de novo não reavisa.
         if (input.equipeId && input.equipeId !== osAtual.equipeId) {
+          // Mesma ordem da abertura: primeiro quem responde, depois o aviso.
+          try {
+            await membrosViramResponsaveis(db, id, input.equipeId);
+          } catch (erro) {
+            console.error("[os] falha ao vincular a equipe como responsável:", erro);
+          }
+
           try {
             const aviso = await notificarEquipeDesignada(
               db,
@@ -1214,6 +1367,7 @@ export const osRouter = router({
               },
               input.equipeId,
             );
+            await membrosViramResponsaveis(db, id, input.equipeId);
             await registrarEtapa(
               db,
               id,
@@ -1514,9 +1668,27 @@ export const osRouter = router({
         const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
+
+        // Já responsável não entra de novo. Desde que designar a equipe põe o
+        // time inteiro na ordem, marcar à mão alguém que já veio pela equipe
+        // criaria a mesma pessoa duas vezes na lista.
+        if (input.funcionarioId) {
+          const [jaEsta] = await db
+            .select({ id: osResponsaveis.id })
+            .from(osResponsaveis)
+            .where(
+              and(
+                eq(osResponsaveis.ordemServicoId, input.ordemServicoId),
+                eq(osResponsaveis.funcionarioId, input.funcionarioId),
+              ),
+            )
+            .limit(1);
+
+          if (jaEsta) return { success: true, id: jaEsta.id };
+        }
+
         const [result] = await db.insert(osResponsaveis).values(input).returning();
-        
+
         await db.insert(osTimeline).values({
           ordemServicoId: input.ordemServicoId,
           tipo: "responsavel_adicionado",

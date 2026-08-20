@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useRoute, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
@@ -9,6 +9,7 @@ import { ConteudoListaTarefas } from "@/pages/ListaTarefas";
 import { ConteudoQuadroAtividades } from "@/pages/QuadroAtividades";
 import { ConteudoQrCodes } from "@/pages/QrCodes";
 import { ConteudoOrdensServico } from "@/pages/OrdensServico";
+import { AvisosDoFuncionario } from "@/components/AvisosDoFuncionario";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
@@ -147,6 +148,8 @@ function getIntroText(viewMode: "condominios" | "apps" | "funcoes", activeDescri
 export default function FuncionarioDashboard() {
   const [, setLocation] = useLocation();
   const [isSectionRoute, routeParams] = useRoute<{ section: string }>("/dashboard/:section");
+  /** Query da URL: é por ela que o aviso diz qual O.S. abrir. */
+  const busca = useSearch();
   const [funcoesHabilitadas, setFuncoesHabilitadas] = useState<string[]>([]);
   const [funcoesQueCria, setFuncoesQueCria] = useState<string[]>([]);
   const [funcoesQueExclui, setFuncoesQueExclui] = useState<string[]>([]);
@@ -306,6 +309,17 @@ export default function FuncionarioDashboard() {
   // Obter nome da organização selecionado
   const condominioSelecionado = funcionario.condominiosVinculados?.find(c => c.id === selectedCondominio);
   const activeSection = isSectionRoute ? routeParams.section : null;
+  /**
+   * O.S. apontada pelo aviso (`/dashboard/ordens?os=123`).
+   *
+   * O link do aviso não pode ser o do painel: `/manutencoes/...` é tela de
+   * gestor e devolve "sessão expirada" para quem entra pelo portal.
+   */
+  const osDoAviso = (() => {
+    const bruto = new URLSearchParams(busca).get("os");
+    const id = Number(bruto);
+    return Number.isInteger(id) && id > 0 ? id : undefined;
+  })();
   const activeSectionConfig = activeSection ? FUNCOES_CONFIG[activeSection] : null;
   const activeCondominioId = selectedCondominio || funcionario.condominioId || funcionario.condominiosVinculados?.[0]?.id || null;
   const tipoLabel = getTipoLabel(funcionario);
@@ -336,6 +350,10 @@ export default function FuncionarioDashboard() {
         activeSection === "ordens" ? (
           <ConteudoOrdensServico
             condominioId={activeCondominioId}
+            // Vindo do aviso de equipe designada, a O.S. já abre no detalhe:
+            // sem isto o funcionário caía na lista e tinha de procurar qual das
+            // ordens era a dele.
+            osInicial={osDoAviso}
             podeCriar={funcoesQueCria.includes(activeSection)}
             podeExcluir={funcoesQueExclui.includes(activeSection)}
             ehGestor={false}
@@ -424,6 +442,9 @@ export default function FuncionarioDashboard() {
             </div>
 
             <div className="flex items-center gap-4">
+              {/* Onde a O.S. designada para a equipe dele chega. */}
+              <AvisosDoFuncionario />
+
               {/* Perfil do funcionário */}
               <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
                 {profileAvatar}

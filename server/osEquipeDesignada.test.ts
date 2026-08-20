@@ -49,17 +49,26 @@ const {
   notificacoes,
   equipes,
   equipeFuncionarios,
+  equipeUnidades,
   funcionarios,
   users,
 } = await import("../drizzle/schema");
 
 /** Membros da equipe 3, com o tipo que decide quem é avisado. */
-let membros: { nome: string; email: string | null; loginEmail: string | null; tipo: string }[];
-/** Unidade dona da equipe 3; muda para simular equipe de outra unidade. */
-let unidadeDaEquipe: number;
+let membros: {
+  id: number;
+  nome: string;
+  email: string | null;
+  loginEmail: string | null;
+  tipo: string;
+}[];
+/** Unidades que a equipe 3 atende; muda para simular equipe de outra unidade. */
+let unidadesDaEquipe: number[];
 let osAtual: Record<string, unknown>;
-let avisos: { titulo: string }[];
+let avisos: { titulo: string; userId: unknown; funcionarioId: unknown }[];
 let timeline: string[];
+/** Quem a rota gravou como responsável pela O.S. */
+let responsaveis: { funcionarioId: unknown; nome: unknown }[];
 
 function fakeDb() {
   const porTabela = new Map<unknown, unknown[]>([
@@ -67,9 +76,13 @@ function fakeDb() {
     [osResponsaveis, []],
     [condominios, [{ id: 1, nome: "Creche Central", autoNotificar: false, ligado: false }]],
     [osStatus, [{ id: 10, nome: "Aguardando início", isFinal: false, ordem: 1 }]],
-    // `condominioId`/`ativo` entram porque a rota confere se a equipe é da
-    // unidade da ordem antes de designar.
-    [equipes, [{ id: 3, nome: "Elétrica", cor: "#000", condominioId: unidadeDaEquipe, ativo: true }]],
+    [equipes, [{ id: 3, nome: "Elétrica", cor: "#000", ativo: true }]],
+    // A O.S. do teste é da unidade 1: a equipe só pode ser designada se esta
+    // unidade estiver entre as que ela atende.
+    [
+      equipeUnidades,
+      unidadesDaEquipe.includes(1) ? [{ id: 1, equipeId: 3, condominioId: 1 }] : [],
+    ],
     [funcionarios, []],
     [users, [{ id: 90 }]],
   ]);
@@ -101,7 +114,18 @@ function fakeDb() {
       values: (valores: Record<string, unknown> | Record<string, unknown>[]) => {
         const linhas = Array.isArray(valores) ? valores : [valores];
         if (tabela === notificacoes) {
-          for (const l of linhas) avisos.push({ titulo: String(l.titulo ?? "") });
+          for (const l of linhas) {
+            avisos.push({
+              titulo: String(l.titulo ?? ""),
+              userId: l.userId,
+              funcionarioId: l.funcionarioId,
+            });
+          }
+        }
+        if (tabela === osResponsaveis) {
+          for (const l of linhas) {
+            responsaveis.push({ funcionarioId: l.funcionarioId, nome: l.nome });
+          }
         }
         if (tabela === osTimeline) {
           for (const l of linhas) timeline.push(String(l.descricao ?? ""));
@@ -148,10 +172,11 @@ function comoGerente() {
 beforeEach(() => {
   avisos = [];
   timeline = [];
-  unidadeDaEquipe = 1;
+  responsaveis = [];
+  unidadesDaEquipe = [1];
   membros = [
-    { nome: "Ana", email: "ana@ex.com", loginEmail: null, tipo: "supervisor" },
-    { nome: "Bruno", email: "bruno@ex.com", loginEmail: null, tipo: "auxiliar" },
+    { id: 71, nome: "Ana", email: "ana@ex.com", loginEmail: null, tipo: "supervisor" },
+    { id: 72, nome: "Bruno", email: "bruno@ex.com", loginEmail: null, tipo: "auxiliar" },
   ];
   osAtual = {
     id: 50,
@@ -197,10 +222,10 @@ describe("equipe designada na abertura", () => {
     expect(registro).toContain("Bruno");
   });
 
-  it("recusa equipe de outra unidade", async () => {
+  it("recusa equipe que não atende a unidade da ordem", async () => {
     // Quem cuida de 15 unidades passa no escopo com a equipe de qualquer uma
     // delas: sem esta trava, o aviso sairia para o time errado.
-    unidadeDaEquipe = 2;
+    unidadesDaEquipe = [2];
 
     await expect(
       comoGerente().create({
@@ -209,9 +234,46 @@ describe("equipe designada na abertura", () => {
         prazoLimite: "2026-08-20",
         equipeId: 3,
       }),
-    ).rejects.toThrow(/não é da unidade/i);
+    ).rejects.toThrow(/não atende a unidade/i);
 
     expect(avisos).toEqual([]);
+  });
+
+  it("equipe de rede é aceita na unidade que ela atende", async () => {
+    // A "Facilities" do cliente: uma equipe, quinze unidades.
+    unidadesDaEquipe = [1, 2, 3];
+
+    await comoGerente().create({
+      condominioId: 1,
+      titulo: "Serviço",
+      prazoLimite: "2026-08-20",
+      equipeId: 3,
+    });
+
+    expect(timeline.some((t) => t.startsWith("Equipe designada"))).toBe(true);
+  });
+
+  it("o aviso chega ao funcionário, e não só a conta de gestor", async () => {
+    await comoGerente().create({
+      condominioId: 1,
+      titulo: "Serviço",
+      prazoLimite: "2026-08-20",
+      equipeId: 3,
+    });
+
+    // Ana é supervisora: é ela quem recebe, endereçada pelo id de funcionário.
+    expect(avisos.some((a) => a.funcionarioId === 71)).toBe(true);
+  });
+
+  it("o time inteiro entra como responsável pela O.S.", async () => {
+    await comoGerente().create({
+      condominioId: 1,
+      titulo: "Serviço",
+      prazoLimite: "2026-08-20",
+      equipeId: 3,
+    });
+
+    expect(responsaveis.map((r) => r.funcionarioId).sort()).toEqual([71, 72]);
   });
 
   it("O.S. sem equipe não gera aviso de designação", async () => {

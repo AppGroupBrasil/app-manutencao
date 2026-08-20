@@ -67,6 +67,8 @@ type Equipe = {
   cor?: string | null;
   unidadeNome?: string | null;
   totalMembros: number;
+  /** Em quantas unidades ela atende. Mais de uma é equipe de rede. */
+  totalUnidades?: number;
 };
 
 /**
@@ -79,7 +81,14 @@ type Equipe = {
 type FichaEquipe = {
   id: number | null;
   nome: string;
-  unidadeId: number;
+  /**
+   * Unidades que a equipe atende. `null` é "ainda como está no servidor" —
+   * mesma ideia dos membros.
+   *
+   * Uma equipe pode cobrir a rede inteira: "Facilities" atende as quinze e
+   * precisa aparecer na O.S. de qualquer uma delas.
+   */
+  unidades: number[] | null;
   /**
    * Funcionários marcados. `null` é "ninguém mexeu ainda": vale o que está
    * gravado no servidor.
@@ -191,6 +200,7 @@ export default function AdminFuncionarios() {
       utils.funcionario.list.invalidate(),
       utils.equipes.list.invalidate(),
       utils.equipes.porFuncionario.invalidate(),
+      utils.equipes.unidades.invalidate(),
     ]);
   }
 
@@ -303,33 +313,43 @@ export default function AdminFuncionarios() {
     toast.success(`Equipe "${nome}" criada`);
   }
 
+  /** Unidades já gravadas da equipe aberta, para a ficha abrir marcada. */
+  const { data: unidadesGravadas } = trpc.equipes.unidades.useQuery(
+    { equipeId: fichaEquipe?.id ?? 0 },
+    { enabled: usaEquipes && !!fichaEquipe?.id },
+  );
+
+  /** O que os quadradinhos de unidade mostram: o marcado, ou o gravado. */
+  const unidadesMarcadas = fichaEquipe?.unidades ?? unidadesGravadas ?? [];
+
   /**
    * Quem pode entrar na equipe aberta, e em que times essas pessoas já estão.
    *
-   * Consulta da unidade da equipe, e não a lista da tela: a equipe pode ser de
-   * uma unidade que não está marcada no seletor, e aí o time apareceria vazio.
+   * Consulta pelas unidades que a equipe atende, e não pela lista da tela: a
+   * equipe pode cobrir unidade que não está marcada no seletor, e aí metade do
+   * time não apareceria para ser montado.
    */
-  const unidadeDaEquipe = fichaEquipe?.unidadeId ?? 0;
+  const unidadeDaEquipe = unidadesMarcadas[0] ?? 0;
   const { data: pessoasDaUnidadeDaEquipe } = trpc.funcionario.list.useQuery(
-    { condominioId: unidadeDaEquipe, unidades: [unidadeDaEquipe] },
+    { condominioId: unidadeDaEquipe, unidades: unidadesMarcadas },
     { enabled: usaEquipes && unidadeDaEquipe > 0 },
   );
   const { data: vinculosDaUnidadeDaEquipe } = trpc.equipes.porFuncionario.useQuery(
-    { condominioId: unidadeDaEquipe, unidades: [unidadeDaEquipe] },
+    { condominioId: unidadeDaEquipe, unidades: unidadesMarcadas },
     { enabled: usaEquipes && unidadeDaEquipe > 0 },
   );
 
   function abrirCriacaoEquipe() {
-    setFichaEquipe({ id: null, nome: "", unidadeId: orgId ?? 0, membros: [] });
+    setFichaEquipe({
+      id: null,
+      nome: "",
+      unidades: orgId ? [orgId] : [],
+      membros: [],
+    });
   }
 
   function abrirEdicaoEquipe(equipe: Equipe) {
-    setFichaEquipe({
-      id: equipe.id,
-      nome: equipe.nome,
-      unidadeId: equipe.condominioId,
-      membros: null,
-    });
+    setFichaEquipe({ id: equipe.id, nome: equipe.nome, unidades: null, membros: null });
   }
 
   /** Quem o servidor diz que está na equipe aberta. */
@@ -349,7 +369,9 @@ export default function AdminFuncionarios() {
     if (!fichaEquipe) return;
     const nome = fichaEquipe.nome.trim();
     if (nome.length < 2) return toast.error("Informe o nome da equipe");
-    if (!fichaEquipe.unidadeId) return toast.error(`Escolha a ${v.unidade.toLowerCase()}`);
+    if (unidadesMarcadas.length === 0) {
+      return toast.error(`Marque ao menos uma ${v.unidade.toLowerCase()}`);
+    }
     // `definirDoFuncionario` grava a lista inteira de equipes da pessoa: sem os
     // vínculos carregados, montar este time apagaria os outros dela.
     if (!vinculosDaUnidadeDaEquipe) {
@@ -358,9 +380,15 @@ export default function AdminFuncionarios() {
 
     let equipeId = fichaEquipe.id;
     if (equipeId) {
-      await atualizarEquipe.mutateAsync({ id: equipeId, nome });
+      await atualizarEquipe.mutateAsync({ id: equipeId, nome, unidades: unidadesMarcadas });
     } else {
-      equipeId = (await criarEquipe.mutateAsync({ condominioId: fichaEquipe.unidadeId, nome })).id;
+      equipeId = (
+        await criarEquipe.mutateAsync({
+          condominioId: unidadesMarcadas[0],
+          nome,
+          unidades: unidadesMarcadas,
+        })
+      ).id;
     }
 
     /** As outras equipes de cada pessoa, que precisam sobreviver à gravação. */
@@ -383,8 +411,11 @@ export default function AdminFuncionarios() {
 
     for (const funcionarioId of mudaram) {
       const resto = outras.get(funcionarioId) ?? [];
+      // A unidade é a da pessoa, não a da equipe: numa equipe de rede cada
+      // membro é de uma, e o portão da função olha a unidade dele.
+      const dele = (pessoasDaUnidadeDaEquipe ?? []).find((f) => f.id === funcionarioId);
       await definirEquipes.mutateAsync({
-        condominioId: fichaEquipe.unidadeId,
+        condominioId: dele?.condominioId ?? unidadesMarcadas[0],
         funcionarioId,
         equipeIds: marcados.has(funcionarioId) ? [...resto, equipeId] : resto,
       });
@@ -849,29 +880,6 @@ export default function AdminFuncionarios() {
 
           {fichaEquipe && (
             <div className="space-y-3">
-              {/* Unidade só na criação: mudar a de uma equipe existente deixaria
-                  os membros pendurados na unidade antiga. */}
-              {!fichaEquipe.id && selecao.temEscolha && (
-                <div className="space-y-1.5">
-                  <Label>{v.unidade}</Label>
-                  <Select
-                    value={fichaEquipe.unidadeId ? String(fichaEquipe.unidadeId) : undefined}
-                    onValueChange={(valor) =>
-                      setFichaEquipe({ ...fichaEquipe, unidadeId: Number(valor), membros: [] })
-                    }
-                  >
-                    <SelectTrigger><SelectValue placeholder={`Escolha a ${v.unidade.toLowerCase()}`} /></SelectTrigger>
-                    <SelectContent>
-                      {(organizacoes ?? []).map((o) => (
-                        <SelectItem key={o.id} value={String(o.id)}>
-                          {o.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
               <div className="space-y-1.5">
                 <Label htmlFor="e-nome">Nome da equipe</Label>
                 <Input
@@ -881,6 +889,59 @@ export default function AdminFuncionarios() {
                   placeholder="Ex: Elétrica"
                 />
               </div>
+
+              {/* Unidades atendidas: é o que faz a mesma equipe aparecer na O.S.
+                  de cada unidade que ela cobre. Uma equipe de rede marca todas;
+                  a equipe da casa marca só a dela. */}
+              {selecao.temEscolha && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label>{v.unidade}s atendidas ({unidadesMarcadas.length})</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() =>
+                        setFichaEquipe({
+                          ...fichaEquipe,
+                          unidades:
+                            unidadesMarcadas.length === (organizacoes?.length ?? 0)
+                              ? unidadesMarcadas.slice(0, 1)
+                              : (organizacoes ?? []).map((o) => o.id),
+                        })
+                      }
+                    >
+                      {unidadesMarcadas.length === (organizacoes?.length ?? 0)
+                        ? "Desmarcar todas"
+                        : "Marcar todas"}
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto">
+                    {(organizacoes ?? []).map((o) => {
+                      const marcada = unidadesMarcadas.includes(o.id);
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          onClick={() =>
+                            setFichaEquipe({
+                              ...fichaEquipe,
+                              unidades: marcada
+                                ? unidadesMarcadas.filter((id) => id !== o.id)
+                                : [...unidadesMarcadas, o.id],
+                            })
+                          }
+                          className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+                        >
+                          <Checkbox checked={marcada} className="pointer-events-none" />
+                          <span className="truncate">{o.nome}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="border-t pt-3 space-y-2">
                 <p className="text-sm font-medium text-slate-700">
@@ -931,10 +992,15 @@ export default function AdminFuncionarios() {
             <Button variant="outline" onClick={() => setFichaEquipe(null)}>Cancelar</Button>
             <Button
               onClick={() => void salvarEquipe().catch(() => undefined)}
-              // Sem unidade escolhida a consulta nem roda: travar por ela
-              // deixaria o botão morto sem dizer o que falta. Quem avisa é o
-              // próprio salvar.
-              disabled={salvandoEquipe || (unidadeDaEquipe > 0 && !vinculosDaUnidadeDaEquipe)}
+              // Enquanto as unidades gravadas não chegam, salvar mandaria uma
+              // lista vazia e devolveria "marque ao menos uma unidade" numa
+              // equipe que tem unidades. Sem unidade nenhuma escolhida a
+              // consulta nem roda, e aí quem avisa é o próprio salvar.
+              disabled={
+                salvandoEquipe ||
+                (!!fichaEquipe?.id && !unidadesGravadas) ||
+                (unidadeDaEquipe > 0 && !vinculosDaUnidadeDaEquipe)
+              }
             >
               {salvandoEquipe ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</>
@@ -1009,7 +1075,13 @@ function ListaDeEquipes({
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-slate-800 truncate">{equipe.nome}</p>
                   <p className="text-xs text-slate-500">
-                    {equipe.unidadeNome ? `${equipe.unidadeNome} · ` : ""}
+                    {/* Equipe de rede não tem uma unidade para nomear: o que
+                        descreve ela é em quantas atende. */}
+                    {Number(equipe.totalUnidades ?? 1) > 1
+                      ? `${Number(equipe.totalUnidades)} unidades · `
+                      : equipe.unidadeNome
+                        ? `${equipe.unidadeNome} · `
+                        : ""}
                     {Number(equipe.totalMembros)} membro(s)
                   </p>
                 </div>

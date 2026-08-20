@@ -22,6 +22,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
+import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { SeletorUnidades, type SelecaoDeUnidades } from "@/components/SeletorUnidades";
@@ -254,10 +255,18 @@ const FORM_VAZIO = {
   dataAbertura: "",
   /** Data máxima de finalização; obrigatória nas unidades com o fluxo. */
   prazoLimite: "",
-  /** Equipe que fica com o serviço; o supervisor dela recebe o aviso. */
+  /**
+   * Equipe que fica com o serviço; o supervisor dela recebe o aviso.
+   * `EQUIPE_EXTERNA` é a empresa de fora, com o nome digitado ao lado.
+   */
   equipeId: "",
+  /** Nome da empresa terceirizada, quando o serviço não é de casa. */
+  equipeExterna: "",
   observacoes: "",
 };
+
+/** Valor do seletor que abre o campo de nome da empresa de fora. */
+const EQUIPE_EXTERNA = "externa";
 
 /** Página do gestor: resolve a unidade pela sessão e entrega o conteúdo. */
 export default function OrdensServico({ osInicial }: { osInicial?: number }) {
@@ -362,8 +371,22 @@ export function ConteudoOrdensServico({
    * O Manutenção X carrega a lista inteira e filtra/pagina no cliente. Manter
    * isso preserva o comportamento das abas e do gráfico, que somam tudo.
    */
+  /**
+   * No portal, "só o que é da minha equipe".
+   *
+   * O funcionário abria Ordens de Serviço e via a unidade inteira, sem saber
+   * qual ordem o procurava. Vale só para ele: gestor não pertence a equipe
+   * nenhuma e a lista voltaria vazia.
+   */
+  const [soDaMinhaEquipe, setSoDaMinhaEquipe] = useState(false);
+
   const { data: lista, isLoading: carregandoLista } = trpc.ordensServico.list.useQuery(
-    { condominioId, limit: 500, todasUnidades: podeEscolherUnidade },
+    {
+      condominioId,
+      limit: 500,
+      todasUnidades: podeEscolherUnidade,
+      minhasEquipes: !ehGestor && soDaMinhaEquipe,
+    },
     { enabled: habilitado },
   );
   // Filtro da lista: sempre a unidade da tela.
@@ -438,6 +461,18 @@ export function ConteudoOrdensServico({
   const [detalheId, setDetalheId] = useState<number | null>(
     Number.isFinite(osInicial) && osInicial ? osInicial : null,
   );
+
+  /**
+   * Chegou outra O.S. pelo link depois da tela montada — é o caso do aviso de
+   * equipe designada, clicado por quem já estava na lista. O valor inicial do
+   * `useState` só vale no primeiro render e deixaria o clique sem efeito.
+   *
+   * Fechar o detalhe não reabre: a dependência só muda quando o link aponta
+   * para outra ordem.
+   */
+  useEffect(() => {
+    if (Number.isFinite(osInicial) && osInicial) setDetalheId(osInicial);
+  }, [osInicial]);
 
   const invalidar = async () => {
     await Promise.all([
@@ -674,7 +709,7 @@ export function ConteudoOrdensServico({
 
   useEffect(() => {
     setPagina(1);
-  }, [busca, filtroStatus, filtroUnidades]);
+  }, [busca, filtroStatus, filtroUnidades, soDaMinhaEquipe]);
 
   const osDetalhe = ordens.find((os) => os.id === detalheId);
   const tituloDetalhe = osDetalhe
@@ -746,6 +781,29 @@ export function ConteudoOrdensServico({
             </button>
           )}
         </div>
+
+        {/* Portal: o funcionário abria a tela e via a unidade inteira, sem
+            saber qual ordem estava esperando por ele. */}
+        {!ehGestor && temModulo("equipes") && (
+          <div className="flex gap-2">
+            {[
+              { chave: false, rotulo: `Todas as O.S.` },
+              { chave: true, rotulo: "Da minha equipe" },
+            ].map((aba) => (
+              <button
+                key={String(aba.chave)}
+                onClick={() => setSoDaMinhaEquipe(aba.chave)}
+                className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${
+                  soDaMinhaEquipe === aba.chave
+                    ? "bg-slate-800 text-white border-slate-800"
+                    : "bg-white text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {aba.rotulo}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button
@@ -853,14 +911,21 @@ export function ConteudoOrdensServico({
                         <UserCircle className="w-3.5 h-3.5" /> {os.solicitanteNome}
                       </span>
                     )}
-                    {os.equipe?.nome && (
+                    {os.equipe?.nome ? (
                       <span
                         className="inline-flex items-center gap-1"
                         style={{ color: os.equipe.cor ?? undefined }}
                       >
                         <Users className="w-3.5 h-3.5" /> {os.equipe.nome}
                       </span>
-                    )}
+                    ) : os.equipeExterna ? (
+                      // Empresa de fora na mesma linha da equipe de casa: quem
+                      // olha a lista quer saber quem está com o serviço, não de
+                      // que cadastro o nome veio.
+                      <span className="inline-flex items-center gap-1 text-slate-600">
+                        <Users className="w-3.5 h-3.5" /> {os.equipeExterna} (externa)
+                      </span>
+                    ) : null}
                     {os.prazoLimite && (
                       <span className={textoDoPrazo(os.prazoLimite, !!os.dataFim).classe}>
                         {textoDoPrazo(os.prazoLimite, !!os.dataFim).texto}
@@ -1016,6 +1081,7 @@ export function ConteudoOrdensServico({
                       prioridadeId: "",
                       statusId: "",
                       equipeId: "",
+                      equipeExterna: "",
                     }));
                     setResponsaveisNova([]);
                   }}
@@ -1122,7 +1188,15 @@ export function ConteudoOrdensServico({
                 </div>
                 <Select
                   value={form.equipeId}
-                  onValueChange={(valor) => setForm({ ...form, equipeId: valor })}
+                  onValueChange={(valor) =>
+                    setForm({
+                      ...form,
+                      equipeId: valor,
+                      // Trocar para uma equipe de casa apaga o nome digitado:
+                      // a O.S. tem um responsável só pelo serviço.
+                      equipeExterna: valor === EQUIPE_EXTERNA ? form.equipeExterna : "",
+                    })
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Designar depois" />
@@ -1133,17 +1207,31 @@ export function ConteudoOrdensServico({
                         {e.nome}
                       </SelectItem>
                     ))}
+                    {/* Serviço entregue a terceiro: sem esta saída o nome da
+                        empresa acabava na observação, onde nenhuma tela lê. */}
+                    <SelectItem value={EQUIPE_EXTERNA}>Empresa externa…</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {form.equipeId === EQUIPE_EXTERNA && (
+                  <Input
+                    className="mt-2"
+                    value={form.equipeExterna}
+                    onChange={(e) => setForm({ ...form, equipeExterna: e.target.value })}
+                    placeholder="Nome da empresa (ex: Refrigeração Silva)"
+                  />
+                )}
+
                 {(equipesDaUnidade?.length ?? 0) === 0 && (
                   <p className="text-xs text-slate-500 mt-1">
-                    Nenhuma equipe cadastrada nesta {v.unidade.toLowerCase()} ainda.
+                    Nenhuma equipe atende esta {v.unidade.toLowerCase()} ainda
+                    {ehGestor ? " — cadastre pela engrenagem ao lado" : ""}.
                   </p>
                 )}
-                {form.equipeId && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    O supervisor da equipe recebe o aviso com esta O.S.
-                  </p>
+                {/* Quem está na equipe escolhida: some a dúvida de para quem o
+                    serviço foi, sem sair da abertura. */}
+                {form.equipeId && form.equipeId !== EQUIPE_EXTERNA && (
+                  <MembrosDaEquipeEscolhida equipeId={Number(form.equipeId)} />
                 )}
               </div>
             )}
@@ -1410,7 +1498,10 @@ export function ConteudoOrdensServico({
                 criar.isPending ||
                 form.titulo.trim().length < 3 ||
                 !habilitado ||
-                !form.prazoLimite
+                !form.prazoLimite ||
+                // Escolheu "Empresa externa…" e não digitou o nome: salvar
+                // assim criaria a O.S. sem responsável nenhum, calado.
+                (form.equipeId === EQUIPE_EXTERNA && form.equipeExterna.trim().length < 2)
               }
               onClick={() =>
                 criar.mutate({
@@ -1424,7 +1515,14 @@ export function ConteudoOrdensServico({
                   solicitanteNome: form.solicitanteNome.trim() || undefined,
                   dataAbertura: form.dataAbertura || undefined,
                   prazoLimite: form.prazoLimite,
-                  equipeId: form.equipeId ? Number(form.equipeId) : undefined,
+                  equipeId:
+                    form.equipeId && form.equipeId !== EQUIPE_EXTERNA
+                      ? Number(form.equipeId)
+                      : undefined,
+                  equipeExterna:
+                    form.equipeId === EQUIPE_EXTERNA
+                      ? form.equipeExterna.trim() || undefined
+                      : undefined,
                   observacoes: form.observacoes.trim() || undefined,
                 })
               }

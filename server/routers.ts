@@ -55,7 +55,12 @@ import { painelControloRouter } from "./modules/administrativo/router";
 import { equipeRouter } from "./modules/equipe/router";
 import { equipesRouter } from "./modules/equipes/router";
 import { financeiroRouter } from "./modules/financeiro/router";
-import { pushNotificationsRouter, notificacaoRouter, preferenciaNotificacaoRouter } from "./modules/notificacao/router";
+import {
+  pushNotificationsRouter,
+  notificacaoRouter,
+  notificacaoFuncionarioRouter,
+  preferenciaNotificacaoRouter,
+} from "./modules/notificacao/router";
 import { historicoNotificacoesRouter } from "./modules/notificacao/router";
 import { configEmailRouter } from "./modules/administrativo/emailRouter";
 import { configPushRouter } from "./modules/administrativo/pushRouter";
@@ -131,6 +136,8 @@ export const appRouter = router({
 
   // ==================== NOTIFICAÇÕES ====================
   notificacao: notificacaoRouter,
+  /** Mesma caixa, endereçada ao funcionário do portal. */
+  notificacaoFuncionario: notificacaoFuncionarioRouter,
 
   // ==================== PREFERÊNCIAS DE NOTIFICAÇÃO ====================
 

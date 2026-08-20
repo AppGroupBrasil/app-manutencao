@@ -23,8 +23,13 @@ vi.mock("./_core/teste", () => ({ testeVencido: async () => false }));
 
 const { equipes, equipeFuncionarios, funcionarios } = await import("../drizzle/schema");
 
-/** Unidade de cada equipe do banco falso. */
-let unidadeDaEquipe: Record<number, number>;
+/**
+ * Unidades que cada equipe do banco falso atende.
+ *
+ * Lista, e não número: desde que a equipe pode ser de rede, a pergunta deixou
+ * de ser "de que unidade ela é" e passou a ser "quais ela atende".
+ */
+let unidadesDaEquipe: Record<number, number[]>;
 /** Vínculos existentes (equipeId) do funcionário 7. */
 let vinculos: number[];
 /** O que a rota gravou e apagou, para o teste conferir. */
@@ -52,32 +57,35 @@ function fakeDb() {
     return p;
   };
 
-  return {
-    select: (campos?: any) => ({
-      from: (tabela: unknown) => ({
-        where: (condicao: unknown) => {
-          const ids = parametrosDe(condicao);
+  // A rota encadeia dois `innerJoin` (equipes × equipe_unidades) antes do
+  // `where`: o construtor devolve a si mesmo para o encadeamento não importar.
+  const construtor = (tabela: unknown) => {
+    const alvo: any = {
+      innerJoin: () => alvo,
+      limit: () => alvo,
+      where: (condicao: unknown) => {
+        const ids = parametrosDe(condicao);
 
-          if (tabela === funcionarios) {
-            // A ficha 7 é da unidade 1.
-            return encadeavel([{ id: 7, condominioId: 1 }]);
-          }
-          if (tabela === equipes) {
-            // Só as equipes pedidas que são mesmo da unidade 1.
-            return encadeavel(
-              ids
-                .filter((id) => unidadeDaEquipe[id] === 1)
-                .map((id) => ({ id })),
-            );
-          }
-          // Vínculos atuais do funcionário (join com equipes).
-          return encadeavel(vinculos.map((equipeId) => ({ equipeId })));
-        },
-        innerJoin: () => ({
-          where: () => encadeavel(vinculos.map((equipeId) => ({ equipeId }))),
-        }),
-      }),
-    }),
+        if (tabela === funcionarios) {
+          // A ficha 7 é da unidade 1.
+          return encadeavel([{ id: 7, condominioId: 1 }]);
+        }
+        if (tabela === equipes) {
+          // Só as equipes pedidas que atendem mesmo a unidade 1.
+          return encadeavel(
+            ids.filter((id) => unidadesDaEquipe[id]?.includes(1)).map((id) => ({ id })),
+          );
+        }
+        // Vínculos atuais do funcionário (join com equipes).
+        return encadeavel(vinculos.map((equipeId) => ({ equipeId })));
+      },
+    };
+    return alvo;
+  };
+
+  return {
+    select: () => ({ from: construtor }),
+    selectDistinct: () => ({ from: construtor }),
     insert: () => ({
       values: async (linhas: { equipeId: number; funcionarioId: number }[]) => {
         inseridos.push(...linhas);
@@ -110,8 +118,8 @@ function chamador() {
 }
 
 beforeEach(() => {
-  // Equipes 10 e 11 são da unidade 1; a 20 é da unidade 2.
-  unidadeDaEquipe = { 10: 1, 11: 1, 20: 2 };
+  // 10 e 11 atendem a unidade 1; a 20 só a unidade 2; a 30 é de rede.
+  unidadesDaEquipe = { 10: [1], 11: [1], 20: [2], 30: [1, 2] };
   vinculos = [];
   inseridos = [];
   apagou = false;
@@ -147,13 +155,25 @@ describe("equipes.definirDoFuncionario", () => {
     expect(r).toEqual({ entrou: 0, saiu: 1 });
   });
 
-  it("recusa equipe de outra unidade", async () => {
+  it("recusa equipe que não atende a unidade da pessoa", async () => {
     await expect(
       chamador().definirDoFuncionario({ condominioId: 1, funcionarioId: 7, equipeIds: [20] }),
-    ).rejects.toThrow(/mesma unidade/i);
+    ).rejects.toThrow(/atendem a unidade/i);
 
     expect(inseridos).toEqual([]);
     expect(apagou).toBe(false);
+  });
+
+  it("aceita equipe de rede, que atende a unidade da pessoa sem ser dela", async () => {
+    // É o caso da "Facilities": dona de uma unidade, atendendo as quinze.
+    const r = await chamador().definirDoFuncionario({
+      condominioId: 1,
+      funcionarioId: 7,
+      equipeIds: [30],
+    });
+
+    expect(inseridos).toEqual([{ equipeId: 30, funcionarioId: 7 }]);
+    expect(r.entrou).toBe(1);
   });
 
   it("lista vazia tira a pessoa de todas as equipes", async () => {

@@ -1,4 +1,4 @@
-import { protectedProcedure, router } from "../../_core/trpc";
+import { funcionarioProcedure, protectedProcedure, router } from "../../_core/trpc";
 import { z } from "zod";
 import { getDb } from "../../db";
 import { notificacoes, preferenciasNotificacao, moradores, pushSubscriptions, historicoNotificacoes } from "../../../drizzle/schema";
@@ -154,6 +154,99 @@ export const notificacaoRouter = router({
       ));
     return { success: true };
   }),
+});
+
+/**
+ * Caixa de avisos do portal do funcionário.
+ *
+ * Mesma tabela do sino do gestor, com outro destinatário: `funcionarioId` no
+ * lugar de `userId`. Router separado porque a autenticação é outra — o
+ * funcionário não tem conta em `users`, e as rotas acima leem `ctx.user.id`.
+ *
+ * Um filtro por sessão em cada rota: sem ele, trocar o id na chamada leria e
+ * apagaria o aviso de qualquer colega.
+ */
+export const notificacaoFuncionarioRouter = router({
+  list: funcionarioProcedure
+    .input(
+      z
+        .object({
+          limit: z.number().min(1).max(100).optional().default(20),
+          onlyUnread: z.boolean().optional().default(false),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const filtros = [eq(notificacoes.funcionarioId, ctx.funcionario.id)];
+      if (input?.onlyUnread) filtros.push(eq(notificacoes.lida, false));
+
+      return db
+        .select()
+        .from(notificacoes)
+        .where(and(...filtros))
+        .orderBy(desc(notificacoes.createdAt))
+        .limit(input?.limit ?? 20);
+    }),
+
+  countUnread: funcionarioProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return 0;
+
+    const [linha] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(notificacoes)
+      .where(
+        and(eq(notificacoes.funcionarioId, ctx.funcionario.id), eq(notificacoes.lida, false)),
+      );
+
+    return Number(linha?.count ?? 0);
+  }),
+
+  markAsRead: funcionarioProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      await db
+        .update(notificacoes)
+        .set({ lida: true })
+        .where(
+          and(eq(notificacoes.id, input.id), eq(notificacoes.funcionarioId, ctx.funcionario.id)),
+        );
+
+      return { success: true };
+    }),
+
+  markAllAsRead: funcionarioProcedure.mutation(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    await db
+      .update(notificacoes)
+      .set({ lida: true })
+      .where(eq(notificacoes.funcionarioId, ctx.funcionario.id));
+
+    return { success: true };
+  }),
+
+  delete: funcionarioProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      await db
+        .delete(notificacoes)
+        .where(
+          and(eq(notificacoes.id, input.id), eq(notificacoes.funcionarioId, ctx.funcionario.id)),
+        );
+
+      return { success: true };
+    }),
 });
 
 export const preferenciaNotificacaoRouter = router({

@@ -678,7 +678,14 @@ export type InsertMorador = typeof moradores.$inferInsert;
 // ==================== NOTIFICAÇÕES ====================
 export const notificacoes = pgTable("notificacoes", {
   id: serial("id").primaryKey(),
-  userId: integer("userId").references(() => users.id).notNull(),
+  /**
+   * Conta de usuário destinatária. Nulo quando o aviso é de funcionário: o
+   * portal dele não passa por `users`, e era por isso que a O.S. designada
+   * chegava por e-mail e não aparecia no aplicativo de quem ia executar.
+   */
+  userId: integer("userId").references(() => users.id),
+  /** Funcionário destinatário, para os avisos do portal. */
+  funcionarioId: integer("funcionarioId").references(() => funcionarios.id, { onDelete: "cascade" }),
   condominioId: integer("condominioId").references(() => condominios.id),
   tipo: notificacoesTipoEnum("tipo").notNull(),
   titulo: varchar("titulo", { length: 255 }).notNull(),
@@ -1535,6 +1542,24 @@ export const equipes = pgTable("equipes", {
 export type Equipe = typeof equipes.$inferSelect;
 export type InsertEquipe = typeof equipes.$inferInsert;
 
+/**
+ * Unidades que a equipe atende.
+ *
+ * `equipes.condominioId` é a unidade dona — é por ela que o isolamento entre
+ * clientes acontece. Esta tabela responde outra pergunta: em quais unidades a
+ * equipe aparece para ser designada. Uma equipe de rede ("Facilities") atende
+ * as quinze; uma equipe de unidade atende só a dela, que é o estado de toda
+ * equipe criada antes desta tabela existir.
+ */
+export const equipeUnidades = pgTable("equipe_unidades", {
+  id: serial("id").primaryKey(),
+  equipeId: integer("equipeId").references(() => equipes.id, { onDelete: "cascade" }).notNull(),
+  condominioId: integer("condominioId").references(() => condominios.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EquipeUnidade = typeof equipeUnidades.$inferSelect;
+
 // ==================== FUNCIONÁRIOS DAS EQUIPES (Junção) ====================
 export const equipeFuncionarios = pgTable("equipe_funcionarios", {
   id: serial("id").primaryKey(),
@@ -2280,6 +2305,13 @@ export const ordensServico = pgTable("ordens_servico", {
    * está com o serviço".
    */
   equipeId: integer("equipeId"),
+
+  /**
+   * Serviço entregue a quem não é da casa: o nome da empresa terceirizada,
+   * digitado na hora. Preenchido, `equipeId` fica nulo — é o mesmo campo da
+   * tela, e a ordem tem um responsável só pelo serviço.
+   */
+  equipeExterna: varchar("equipeExterna", { length: 255 }),
 
   /** Observações adicionais: o que não cabe na descrição do problema. */
   observacoes: text("observacoes"),
