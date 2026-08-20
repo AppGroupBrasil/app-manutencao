@@ -23,6 +23,10 @@ import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
 import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
+import { AberturaGuiada } from "@/components/AberturaGuiada";
+
+/** Onde fica gravado o modo de abertura preferido de quem usa este navegador. */
+const MODO_ABERTURA_KEY = "os_modo_abertura";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { SeletorUnidades, type SelecaoDeUnidades } from "@/components/SeletorUnidades";
@@ -436,6 +440,21 @@ export function ConteudoOrdensServico({
   const [filtroUnidades, setFiltroUnidades] = useState<number[]>([]);
   const [pagina, setPagina] = useState(1);
   const [modalNova, setModalNova] = useState(false);
+  /**
+   * Como abrir a ordem: formulário inteiro ou uma pergunta por vez.
+   *
+   * `null` é "ainda não escolheu" — a tela pergunta na primeira vez e guarda a
+   * resposta no navegador, porque repetir a pergunta a cada ordem cansa mais do
+   * que o formulário que se quis simplificar.
+   */
+  const [modo, setModo] = useState<"grid" | "guiado">(
+    () => (localStorage.getItem(MODO_ABERTURA_KEY) as "grid" | "guiado" | null) ?? "guiado",
+  );
+
+  const escolherModo = (escolhido: "grid" | "guiado") => {
+    localStorage.setItem(MODO_ABERTURA_KEY, escolhido);
+    setModo(escolhido);
+  };
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
   const [modalEquipes, setModalEquipes] = useState(false);
   /** Ficha rápida de funcionário, pela engrenagem dos responsáveis. */
@@ -1064,6 +1083,32 @@ export function ConteudoOrdensServico({
           <DialogHeader>
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
           </DialogHeader>
+
+          {/* Passo a passo por padrão: é o modo em que a primeira ordem sai
+              sem ninguém explicar a tela. Quem prefere ver tudo de uma vez
+              troca pelo link do rodapé, e a escolha fica gravada. */}
+          {modo === "guiado" && (
+            <>
+              <AberturaGuiada
+                condominioId={unidadeNova}
+                unidades={unidades ?? []}
+                ehGestor={ehGestor}
+                onCriou={async () => {
+                  await invalidar();
+                  setModalNova(false);
+                }}
+                onCancelar={() => setModalNova(false)}
+              />
+              <button
+                className="text-xs text-slate-500 underline w-full text-center"
+                onClick={() => escolherModo("grid")}
+              >
+                Preferir o formulário completo
+              </button>
+            </>
+          )}
+
+          {modo === "grid" && (
           <div className="space-y-5">
             <Secao titulo="O chamado">
             {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
@@ -1515,7 +1560,15 @@ export function ConteudoOrdensServico({
               Criar Ordem de Serviço
             </Button>
             </div>
+
+            <button
+              className="text-xs text-slate-500 underline w-full text-center"
+              onClick={() => escolherModo("guiado")}
+            >
+              Preferir o passo a passo
+            </button>
           </div>
+          )}
         </DialogContent>
       </Dialog>
 

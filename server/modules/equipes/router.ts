@@ -177,12 +177,39 @@ export const equipesRouter = router({
         .where(and(inArray(equipeUnidades.condominioId, alvo), eq(equipes.ativo, true)))
         .orderBy(equipes.nome);
 
+      /**
+       * Quais unidades cada equipe atende.
+       *
+       * A abertura guiada abre uma O.S. por unidade marcada e precisa saber, de
+       * antemão, em quais delas a equipe escolhida pode ser designada — sem
+       * isso a criação em lote falharia no meio, com metade das ordens abertas.
+       */
+      const porEquipe = new Map<number, number[]>();
+      if (lista.length > 0) {
+        const linhas = await db
+          .select({
+            equipeId: equipeUnidades.equipeId,
+            condominioId: equipeUnidades.condominioId,
+          })
+          .from(equipeUnidades)
+          .where(inArray(equipeUnidades.equipeId, lista.map((e) => e.id)));
+
+        for (const linha of linhas) {
+          porEquipe.set(linha.equipeId, [
+            ...(porEquipe.get(linha.equipeId) ?? []),
+            linha.condominioId,
+          ]);
+        }
+      }
+
+      const comUnidades = lista.map((e) => ({ ...e, unidades: porEquipe.get(e.id) ?? [] }));
+
       // Nome da unidade só quando a lista soma várias: é o que separa a
       // "Elétrica" de uma unidade da "Elétrica" da outra. Equipe que atende
       // mais de uma fica sem nome de unidade — quem descreve essa é a
       // contagem, e um nome só mentiria sobre as outras.
-      if (alvo.length < 2 || lista.length === 0) {
-        return lista.map((e) => ({ ...e, unidadeNome: null as string | null }));
+      if (alvo.length < 2 || comUnidades.length === 0) {
+        return comUnidades.map((e) => ({ ...e, unidadeNome: null as string | null }));
       }
 
       const unidades = await db
@@ -191,7 +218,7 @@ export const equipesRouter = router({
         .where(inArray(condominios.id, alvo));
       const nomes = new Map(unidades.map((u) => [u.id, u.nome]));
 
-      return lista.map((e) => ({
+      return comUnidades.map((e) => ({
         ...e,
         unidadeNome: Number(e.totalUnidades) > 1 ? null : nomes.get(e.condominioId) ?? null,
       }));
