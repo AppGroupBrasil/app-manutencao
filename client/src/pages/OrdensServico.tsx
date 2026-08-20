@@ -505,6 +505,7 @@ export function ConteudoOrdensServico({
   /** Este passo aparece? No modo completo, todos aparecem ao mesmo tempo. */
   const mostrar = (chave: (typeof PASSOS_FORM)[number]["chave"]) =>
     !guiado || PASSOS_FORM[passoForm].chave === chave;
+
   /**
    * Unidades escolhidas no passo 1, quando são mais de uma.
    *
@@ -538,6 +539,25 @@ export function ConteudoOrdensServico({
    */
   const equipeEscolhida = (equipesDaUnidade ?? []).find((e) => String(e.id) === form.equipeId);
   const [responsaveisNova, setResponsaveisNova] = useState<number[]>([]);
+
+  /**
+   * O que impede de seguir, dito com todas as letras.
+   *
+   * "Falta o título" com o título preenchido é o pior recado possível: o campo
+   * exige três letras, e quem digitou "d" ficava olhando um botão apagado sem
+   * entender o que o sistema queria.
+   */
+  const tituloCurto = form.titulo.trim().length > 0 && form.titulo.trim().length < 3;
+  const faltaNoFormulario = [
+    tituloCurto
+      ? "O título precisa de pelo menos 3 letras."
+      : form.titulo.trim().length === 0
+        ? "Falta o título do serviço."
+        : "",
+    !form.prazoLimite ? "Falta a data máxima de finalização." : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   /**
    * Fotos escolhidas na abertura, antes de a O.S. existir.
    *
@@ -1823,6 +1843,21 @@ export function ConteudoOrdensServico({
                 que não é obrigatório e seguir. O botão que cria a ordem só
                 aparece no último passo. */}
             {guiado && passoForm < PASSOS_FORM.length - 1 && (
+              <>
+              {/* O passo obrigatório diz o que falta antes de a pessoa clicar
+                  no botão apagado e concluir que a tela travou. */}
+              {((PASSOS_FORM[passoForm].chave === "chamado" &&
+                form.titulo.trim().length < 3) ||
+                (PASSOS_FORM[passoForm].chave === "quando" && !form.prazoLimite)) && (
+                <p className="text-xs text-amber-700 mb-2">
+                  {PASSOS_FORM[passoForm].chave === "chamado"
+                    ? tituloCurto
+                      ? "O título precisa de pelo menos 3 letras."
+                      : "Escreva o título do serviço para continuar."
+                    : "Escolha a data máxima de finalização para continuar."}
+                </p>
+              )}
+
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -1854,6 +1889,7 @@ export function ConteudoOrdensServico({
                   Continuar
                 </Button>
               </div>
+              </>
             )}
 
             {(!guiado || passoForm === PASSOS_FORM.length - 1) && (
@@ -1862,10 +1898,8 @@ export function ConteudoOrdensServico({
                 três vezes e desistir. Aqui ele diz o que falta e onde está. */}
             {(form.titulo.trim().length < 3 || !form.prazoLimite) && (
               <p className="text-xs text-amber-700 mb-2">
-                Falta {form.titulo.trim().length < 3 ? "o título do serviço" : ""}
-                {form.titulo.trim().length < 3 && !form.prazoLimite ? " e " : ""}
-                {!form.prazoLimite ? "a data máxima de finalização" : ""}
-                {guiado ? " — volte um passo para preencher." : "."}
+                {faltaNoFormulario}
+                {guiado ? " Volte um passo para preencher." : ""}
               </p>
             )}
             <div className={guiado ? "flex gap-2" : undefined}>
