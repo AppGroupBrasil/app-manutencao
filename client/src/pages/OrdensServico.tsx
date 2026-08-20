@@ -455,12 +455,35 @@ export function ConteudoOrdensServico({
    * que o formulário que se quis simplificar.
    */
   const [modo, setModo] = useState<"grid" | "guiado">(
-    () => (localStorage.getItem(MODO_ABERTURA_KEY) as "grid" | "guiado" | null) ?? "guiado",
+    () => (localStorage.getItem(MODO_ABERTURA_KEY) as "grid" | "guiado" | null) ?? "grid",
   );
+  /**
+   * No passo a passo, onde a pessoa está: nas perguntas ou já no formulário.
+   *
+   * Os passos não criam nada — eles respondem onde, com quem e por conta de
+   * quem, e entregam o formulário preenchido. Assim nenhum campo é digitado
+   * duas vezes e nada do formulário completo fica de fora.
+   */
+  const [etapaGuiada, setEtapaGuiada] = useState<"passos" | "formulario">("passos");
+  /**
+   * Unidades escolhidas no passo 1, quando são mais de uma.
+   *
+   * O formulário grava uma ordem; com lote, ele repete a mesma ordem em cada
+   * unidade marcada.
+   */
+  const [unidadesDoLote, setUnidadesDoLote] = useState<number[]>([]);
+  /** Dessas, as que a equipe escolhida atende — as demais nascem sem equipe. */
+  const [unidadesComEquipe, setUnidadesComEquipe] = useState<number[]>([]);
 
   const escolherModo = (escolhido: "grid" | "guiado") => {
     localStorage.setItem(MODO_ABERTURA_KEY, escolhido);
     setModo(escolhido);
+    // Trocar de modo recomeça: no passo a passo, pelas perguntas; no
+    // formulário, sem o lote que os passos tinham montado — senão ele criaria
+    // ordens em unidades que quem trocou de modo nem viu.
+    setEtapaGuiada("passos");
+    setUnidadesDoLote([]);
+    setUnidadesComEquipe([]);
   };
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
   const [modalEquipes, setModalEquipes] = useState(false);
@@ -521,6 +544,30 @@ export function ConteudoOrdensServico({
     });
   };
 
+  /**
+   * O que foi enviado na criação, para repetir nas outras unidades do lote.
+   *
+   * Num ref porque o `onSuccess` não recebe o input de volta, e reler o
+   * formulário lá dentro pegaria o estado já limpo.
+   */
+  const ultimoPedido = useRef<{
+    titulo: string;
+    descricao?: string;
+    prazoLimite: string;
+    endereco?: string;
+    solicitanteNome?: string;
+    dataAbertura?: string;
+    observacoes?: string;
+  } | null>(null);
+
+  /**
+   * A criação das cópias do lote, sem os avisos da criação principal.
+   *
+   * Separada de propósito: reaproveitar `criar` faria cada cópia rodar o
+   * `onSuccess` inteiro — inclusive a parte que cria cópias.
+   */
+  const criarCopia = trpc.ordensServico.create.useMutation();
+
   const criar = trpc.ordensServico.create.useMutation({
     onSuccess: async (res) => {
       // Responsáveis são registros filhos: entram depois que a O.S. existe.
@@ -558,18 +605,74 @@ export function ConteudoOrdensServico({
         }
       }
 
+      /**
+       * As demais unidades marcadas no passo 1 recebem a mesma ordem.
+       *
+       * A cópia é feita aqui, e não no servidor, porque é a mesma chamada de
+       * criação — muda só a unidade. Fotos ficam na primeira: repetir o upload
+       * em quinze ordens travaria o celular de quem está no corredor.
+       */
+      const copias: string[] = [];
+      const pedido = ultimoPedido.current;
+
+      for (const unidade of unidadesDoLote.filter((id) => id !== unidadeNova)) {
+        if (!pedido) break;
+
+        try {
+          // `criarCopia`, e não `criar`: chamar a própria mutação aqui dentro
+          // dispararia este mesmo `onSuccess` a cada cópia, que criaria as
+          // cópias de novo — um laço que só para quando o banco enche.
+          const copia = await criarCopia.mutateAsync({
+            ...pedido,
+            condominioId: unidade,
+            // Equipe só onde ela atende: nas outras a ordem nasce sem equipe,
+            // em vez de o servidor recusar e derrubar a cópia.
+            equipeId:
+              form.equipeId && unidadesComEquipe.includes(unidade)
+                ? Number(form.equipeId)
+                : undefined,
+          });
+          copias.push(copia.protocolo);
+
+          // Os mesmos responsáveis: é a mesma ordem, repetida noutra unidade.
+          for (const funcionarioId of responsaveisNova) {
+            const pessoa = candidatosNova?.find((c) => c.id === funcionarioId);
+            if (!pessoa) continue;
+            await addResponsavel
+              .mutateAsync({
+                ordemServicoId: copia.id,
+                nome: pessoa.nome,
+                cargo: pessoa.cargo ?? undefined,
+                email: pessoa.email ?? undefined,
+                telefone: pessoa.telefone ?? undefined,
+                funcionarioId: pessoa.id,
+              })
+              .catch(() => undefined);
+          }
+        } catch (erro) {
+          console.error("[os] falha ao repetir a ordem na unidade", unidade, erro);
+          const nome = unidades?.find((u) => u.id === unidade)?.nome ?? unidade;
+          toast.error(`Não foi possível abrir em ${nome}.`);
+        }
+      }
+
       setModalNova(false);
       setForm(FORM_VAZIO);
       setResponsaveisNova([]);
+      setUnidadesDoLote([]);
+            setUnidadesComEquipe([]);
+      setEtapaGuiada("passos");
       limparFotosNovas();
       await invalidar();
       // Aberta em outra unidade não aparece nesta lista: dizer para onde foi
       // evita a pessoa procurar na tela errada.
       const destino = unidades?.find((u) => u.id === unidadeNova);
       toast.success(
-        unidadeNova === condominioId || !destino
-          ? `O.S. ${res.protocolo} criada`
-          : `O.S. ${res.protocolo} criada em ${destino.nome}`,
+        copias.length > 0
+          ? `${copias.length + 1} ordens criadas: ${[res.protocolo, ...copias].join(", ")}`
+          : unidadeNova === condominioId || !destino
+            ? `O.S. ${res.protocolo} criada`
+            : `O.S. ${res.protocolo} criada em ${destino.nome}`,
       );
     },
     onError: (e) => toast.error(e.message || "Erro ao criar a O.S."),
@@ -1083,7 +1186,14 @@ export function ConteudoOrdensServico({
         open={modalNova}
         onOpenChange={(aberto) => {
           setModalNova(aberto);
-          if (!aberto) limparFotosNovas();
+          if (!aberto) {
+            limparFotosNovas();
+            // Reabrir começa de novo pelas perguntas, e não no formulário que
+            // ficou pela metade da vez passada.
+            setEtapaGuiada("passos");
+            setUnidadesDoLote([]);
+            setUnidadesComEquipe([]);
+          }
         }}
       >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
@@ -1097,7 +1207,7 @@ export function ConteudoOrdensServico({
           <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
             {(
               [
-                { chave: "guiado" as const, rotulo: "Passo a passo" },
+                { chave: "guiado" as const, rotulo: "Formulário simples" },
                 { chave: "grid" as const, rotulo: "Formulário completo" },
               ]
             ).map((opcao) => (
@@ -1115,23 +1225,40 @@ export function ConteudoOrdensServico({
             ))}
           </div>
 
-          {modo === "guiado" && (
-            <>
-              <AberturaGuiada
-                condominioId={unidadeNova}
-                unidades={unidades ?? []}
-                ehGestor={ehGestor}
-                onCriou={async () => {
-                  await invalidar();
-                  setModalNova(false);
-                }}
-                onCancelar={() => setModalNova(false)}
-              />
-            </>
+          {modo === "guiado" && etapaGuiada === "passos" && (
+            <AberturaGuiada
+              condominioId={unidadeNova}
+              unidades={unidades ?? []}
+              ehGestor={ehGestor}
+              onConcluir={(escolha) => {
+                // O formulário abre com o que os passos já responderam.
+                setUnidadeNova(escolha.unidades[0]);
+                setUnidadesDoLote(escolha.unidades.length > 1 ? escolha.unidades : []);
+                setUnidadesComEquipe(escolha.unidadesComEquipe);
+                setForm((atual) => ({
+                  ...atual,
+                  equipeId: escolha.equipeId ? String(escolha.equipeId) : "",
+                }));
+                setResponsaveisNova(escolha.responsaveis);
+                setEtapaGuiada("formulario");
+              }}
+              onCancelar={() => setModalNova(false)}
+            />
           )}
 
-          {modo === "grid" && (
+          {(modo === "grid" || etapaGuiada === "formulario") && (
           <div className="space-y-5">
+            {/* Veio dos passos com várias unidades marcadas: quem preenche
+                daqui em diante precisa saber que sai uma ordem em cada uma. */}
+            {unidadesDoLote.length > 1 && (
+              <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                Este preenchimento vai abrir <strong>{unidadesDoLote.length} ordens</strong>, uma
+                em cada {v.unidade.toLowerCase()} marcada. Categoria, prioridade e status valem
+                só para a primeira — esses cadastros são de cada {v.unidade.toLowerCase()}. Fotos
+                também ficam na primeira.
+              </div>
+            )}
+
             <Secao titulo="O chamado">
             {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
                 de digitar qualquer coisa, para onde esta ordem vai. */}
@@ -1142,6 +1269,11 @@ export function ConteudoOrdensServico({
                   value={String(unidadeNova)}
                   onValueChange={(valor) => {
                     setUnidadeNova(Number(valor));
+                    // Escolher a unidade aqui desfaz o lote dos passos: a
+                    // decisão manual manda, e sair ordem em unidade que ele
+                    // acabou de trocar seria o oposto do que pediu.
+                    setUnidadesDoLote([]);
+                    setUnidadesComEquipe([]);
                     // Categoria, prioridade, status e equipe são da unidade
                     // anterior: manter o que estava escolhido gravaria a ordem
                     // apontando para cadastro de outra unidade.
@@ -1553,11 +1685,26 @@ export function ConteudoOrdensServico({
               className="w-full"
               disabled={
                 criar.isPending ||
+                // Enquanto o lote está sendo repetido, clicar de novo abriria
+                // tudo em dobro.
+                criarCopia.isPending ||
                 form.titulo.trim().length < 3 ||
                 !habilitado ||
                 !form.prazoLimite
               }
-              onClick={() =>
+              onClick={() => {
+                // O que a cópia nas outras unidades vai repetir. Fica antes da
+                // chamada porque o `onSuccess` já encontra o formulário limpo.
+                ultimoPedido.current = {
+                  titulo: form.titulo.trim(),
+                  descricao: form.descricao.trim() || undefined,
+                  prazoLimite: form.prazoLimite,
+                  endereco: form.endereco.trim() || undefined,
+                  solicitanteNome: form.solicitanteNome.trim() || undefined,
+                  dataAbertura: form.dataAbertura || undefined,
+                  observacoes: form.observacoes.trim() || undefined,
+                };
+
                 criar.mutate({
                   condominioId: unidadeNova,
                   titulo: form.titulo.trim(),
@@ -1571,15 +1718,19 @@ export function ConteudoOrdensServico({
                   prazoLimite: form.prazoLimite,
                   equipeId: form.equipeId ? Number(form.equipeId) : undefined,
                   observacoes: form.observacoes.trim() || undefined,
-                })
-              }
+                });
+              }}
             >
-              {criar.isPending ? (
+              {criar.isPending || criarCopia.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <Plus className="w-4 h-4 mr-2" />
               )}
-              Criar Ordem de Serviço
+              {/* Com lote, o botão diz quantas ordens saem daqui: "Criar
+                  Ordem de Serviço" faria três virarem surpresa. */}
+              {unidadesDoLote.length > 1
+                ? `Criar ${unidadesDoLote.length} ordens`
+                : "Criar Ordem de Serviço"}
             </Button>
             </div>
 

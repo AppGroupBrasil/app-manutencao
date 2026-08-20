@@ -53,24 +53,40 @@ function emDias(dias: number): string {
   return `${dia.getFullYear()}-${mes}-${diaDoMes}`;
 }
 
-/** Os quatro passos, na ordem em que a pergunta aparece. */
-const PASSOS = ["unidades", "equipe", "pessoas", "ordem"] as const;
+/** Os passos, na ordem em que a pergunta aparece. */
+const PASSOS = ["unidades", "equipe", "pessoas"] as const;
 type Passo = (typeof PASSOS)[number];
 
 const TITULO: Record<Passo, string> = {
   unidades: "Onde o serviço vai ser feito",
   equipe: "Quem fica com o serviço",
   pessoas: "Quem responde pela ordem",
-  ordem: "O que precisa ser feito",
+};
+
+/** O que os passos decidem e o formulário recebe pronto. */
+export type EscolhaGuiada = {
+  unidades: number[];
+  equipeId: number | null;
+  /**
+   * Onde a equipe escolhida pode mesmo ser designada.
+   *
+   * Vai junto porque só os passos sabem disso: no lote, a ordem das unidades
+   * que ela não atende precisa nascer sem equipe, em vez de ser recusada pelo
+   * servidor no meio da cópia.
+   */
+  unidadesComEquipe: number[];
+  responsaveis: number[];
+  principal: number | null;
 };
 
 /**
- * Abertura de O.S. passo a passo.
+ * As três perguntas que vêm antes do formulário: onde, com quem, por conta de
+ * quem.
  *
  * O formulário completo pergunta tudo de uma vez, e quem abre a primeira ordem
- * não sabe por onde começar — nem que precisa de equipe e responsável antes de
- * chegar ao fim. Aqui cada tela faz uma pergunta só, na ordem em que ela
- * aparece na cabeça de quem está pedindo o serviço: onde, quem, com quem, o quê.
+ * não sabe por onde começar — nem que precisa de equipe e responsável. Aqui
+ * cada tela faz uma pergunta só e, no fim, entrega o formulário já preenchido:
+ * ninguém digita duas vezes, e todos os campos continuam disponíveis.
  *
  * Marcar mais de uma unidade abre uma ordem em cada uma — mesmo serviço, mesma
  * equipe, protocolos separados, que é como o gerente pede "trocar as lâmpadas
@@ -80,7 +96,7 @@ export function AberturaGuiada({
   condominioId,
   unidades,
   ehGestor,
-  onCriou,
+  onConcluir,
   onCancelar,
 }: {
   /** Unidade de onde a tela foi aberta: é a que já vem marcada. */
@@ -88,7 +104,8 @@ export function AberturaGuiada({
   /** Unidades que a pessoa alcança. Uma só: o passo 1 não aparece. */
   unidades: { id: number; nome: string }[];
   ehGestor: boolean;
-  onCriou: () => void | Promise<void>;
+  /** Entrega o que foi escolhido para o formulário completo abrir preenchido. */
+  onConcluir: (escolha: EscolhaGuiada) => void;
   onCancelar: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -112,10 +129,6 @@ export function AberturaGuiada({
 
   /** O que foi escolhido da última vez, se houver. Lido uma vez só. */
   const [ultima] = useState(() => lerUltimaAbertura());
-  const [titulo, setTitulo] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [prazo, setPrazo] = useState("");
-  const [observacoes, setObservacoes] = useState("");
 
   const primeira = marcadas[0] ?? condominioId;
 
@@ -156,8 +169,6 @@ export function AberturaGuiada({
     return [...porId.values()];
   }, [pessoas, membrosDaEquipe]);
 
-  const criar = trpc.ordensServico.create.useMutation();
-  const addResponsavel = trpc.ordensServico.addResponsavel.useMutation();
 
   const equipeEscolhida = (equipes ?? []).find((e) => e.id === equipeId) ?? null;
 
@@ -226,93 +237,31 @@ export function AberturaGuiada({
   /** No primeiro passo, "voltar" é desistir — não há para onde recuar. */
   const voltar = () => (primeiroPasso ? onCancelar() : setPasso(roteiro[indice - 1]));
 
-  const salvando = criar.isPending || addResponsavel.isPending;
-
-  async function finalizar() {
-    if (titulo.trim().length < 3) return toast.error("Descreva o serviço em poucas palavras");
-    if (!prazo) return toast.error("Informe a data máxima de finalização");
-    // Ids inválidos não chegam ao servidor: a unidade zero vem de uma sessão
-    // sem organização e só produziria um erro sem sentido para quem pediu.
+  /**
+   * Entrega o que foi escolhido ao formulário completo.
+   *
+   * A criação não acontece aqui: o formulário é que abre preenchido, com
+   * todos os campos à mão. Guardar a escolha agora é o que faz o "Igual à
+   * última" funcionar na próxima abertura.
+   */
+  function concluir() {
+    // Ids inválidos não seguem adiante: a unidade zero vem de uma sessão sem
+    // organização e só produziria um erro sem sentido para quem pediu.
     const alvos = marcadas.filter((id) => id > 0);
-    if (alvos.length === 0) return toast.error(`Marque ao menos uma ${v.unidade.toLowerCase()}`);
-
-    const protocolos: string[] = [];
-    const falharam: string[] = [];
-
-    for (const unidade of alvos) {
-      const nomeDaUnidade = unidades.find((u) => u.id === unidade)?.nome ?? "";
-
-      try {
-        // A equipe só vai onde ela atende; nas demais a ordem nasce sem equipe,
-        // e o aviso do passo anterior já disse isso.
-        const designar = equipeEscolhida?.unidades?.includes(unidade)
-          ? equipeEscolhida.id
-          : undefined;
-
-        const nova = await criar.mutateAsync({
-          condominioId: unidade,
-          titulo: titulo.trim(),
-          descricao: descricao.trim() || undefined,
-          prazoLimite: prazo,
-          equipeId: designar,
-          observacoes: observacoes.trim() || undefined,
-        });
-
-        protocolos.push(nova.protocolo);
-
-        // Fora do `try` da criação: a ordem já existe, e falhar em vincular
-        // alguém não pode ser contado como "não foi possível abrir".
-        try {
-          // Cada ordem recebe os responsáveis daquela unidade: pôr todos em
-          // todas encheria a ordem de gente que não trabalha lá.
-          for (const id of responsaveis) {
-            const pessoa = candidatos.find((p) => p.id === id);
-            if (!pessoa || (alvos.length > 1 && pessoa.condominioId !== unidade)) continue;
-
-            await addResponsavel.mutateAsync({
-              ordemServicoId: nova.id,
-              nome: pessoa.nome,
-              cargo: pessoa.cargo ?? undefined,
-              email: pessoa.email ?? undefined,
-              telefone: pessoa.telefone ?? undefined,
-              funcionarioId: pessoa.id,
-              principal: id === principal,
-            });
-          }
-        } catch (erro) {
-          console.error("[os] falha ao vincular responsáveis", nova.protocolo, erro);
-          toast.error(
-            `A ordem ${nova.protocolo} foi aberta, mas os responsáveis não entraram. Marque no detalhe dela.`,
-          );
-        }
-      } catch (erro) {
-        // Uma unidade que falha não pode levar o lote junto: o que já foi
-        // aberto existe, e quem pediu precisa saber o que ficou de fora.
-        console.error("[os] falha ao abrir ordem da unidade", unidade, erro);
-        falharam.push(nomeDaUnidade || String(unidade));
-      }
+    if (alvos.length === 0) {
+      return toast.error(`Marque ao menos uma ${v.unidade.toLowerCase()}`);
     }
 
-    if (protocolos.length > 0) {
-      // Guardado só agora, com a ordem já criada: é o que o "Igual à última"
-      // vai repetir da próxima vez.
-      localStorage.setItem(
-        ULTIMA_ABERTURA_KEY,
-        JSON.stringify({ unidades: alvos, equipeId, responsaveis, principal }),
-      );
+    const escolha: EscolhaGuiada = {
+      unidades: alvos,
+      equipeId,
+      unidadesComEquipe: alvos.filter((id) => equipeEscolhida?.unidades?.includes(id)),
+      responsaveis,
+      principal,
+    };
 
-      toast.success(
-        protocolos.length === 1
-          ? `Ordem ${protocolos[0]} criada`
-          : `${protocolos.length} ordens criadas: ${protocolos.join(", ")}`,
-      );
-    }
-
-    if (falharam.length > 0) {
-      toast.error(`Não foi possível abrir em: ${falharam.join(", ")}. Tente de novo por lá.`);
-    }
-
-    if (protocolos.length > 0) await onCriou();
+    localStorage.setItem(ULTIMA_ABERTURA_KEY, JSON.stringify(escolha));
+    onConcluir(escolha);
   }
 
   return (
@@ -345,12 +294,16 @@ export function AberturaGuiada({
             // Só o que ainda existe: unidade fechada ou fora do alcance de hoje
             // faria a criação falhar num passo que a pessoa nem viu.
             const validas = ultima.unidades.filter((id) => unidades.some((u) => u.id === id));
-            setMarcadas(validas.length > 0 ? validas : [condominioId]);
+            const alvos = validas.length > 0 ? validas : [condominioId];
+
+            setMarcadas(alvos);
             setEquipeId(ultima.equipeId);
             setTocouNaEquipe(true);
             setResponsaveis(ultima.responsaveis);
             setPrincipal(ultima.principal);
-            setPasso("ordem");
+            // Direto ao formulário: os três passos já estão respondidos. Onde
+            // a equipe atende é decidido lá, quando a lista dela carregar.
+            onConcluir({ ...ultima, unidades: alvos, unidadesComEquipe: alvos });
           }}
           className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-3 text-left text-sm hover:bg-slate-100"
         >
@@ -548,128 +501,27 @@ export function AberturaGuiada({
         </div>
       )}
 
-      {passo === "ordem" && (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="g-titulo">O que precisa ser feito</Label>
-            <Input
-              id="g-titulo"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Ex: Trocar lâmpadas do pátio"
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="g-desc">Detalhes (opcional)</Label>
-            <Textarea
-              id="g-desc"
-              rows={3}
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder="O que está acontecendo, onde exatamente, o que já foi tentado..."
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="g-prazo">Data máxima para finalizar</Label>
-
-            {/* Atalhos antes do calendário: digitar data em celular é o passo
-                onde mais gente desiste, e "daqui a uma semana" é o que a
-                pessoa tem na cabeça — não o dia 27. */}
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { rotulo: "Amanhã", dias: 1 },
-                { rotulo: "Em 7 dias", dias: 7 },
-                { rotulo: "Em 15 dias", dias: 15 },
-                { rotulo: "Em 30 dias", dias: 30 },
-              ].map((atalho) => {
-                const valor = emDias(atalho.dias);
-                return (
-                  <button
-                    key={atalho.dias}
-                    type="button"
-                    onClick={() => setPrazo(valor)}
-                    className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${
-                      prazo === valor
-                        ? "bg-slate-800 text-white border-slate-800"
-                        : "bg-white text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    {atalho.rotulo}
-                  </button>
-                );
-              })}
-            </div>
-
-            <Input
-              id="g-prazo"
-              type="date"
-              value={prazo}
-              onChange={(e) => setPrazo(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="g-obs">Observações (opcional)</Label>
-            <Input
-              id="g-obs"
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
-              placeholder="Acesso, horário, contato no local..."
-            />
-          </div>
-
-          {/* O que vai ser criado, em uma frase: é a última chance de perceber
-              que a equipe ficou de fora ou que são quinze ordens, não uma. */}
-          <div className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-slate-600 space-y-0.5">
-            <p className="flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5" />
-              {marcadas.length === 1
-                ? `1 ordem em ${unidades.find((u) => u.id === marcadas[0])?.nome ?? "esta unidade"}`
-                : `${marcadas.length} ordens, uma em cada ${v.unidade.toLowerCase()} marcada`}
-            </p>
-            <p className="flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5" />
-              {equipeEscolhida ? equipeEscolhida.nome : "Sem equipe designada"}
-            </p>
-            <p className="flex items-center gap-1.5">
-              <UserPlus className="w-3.5 h-3.5" />
-              {responsaveis.length === 0
-                ? "Sem responsável marcado"
-                : `${responsaveis.length} responsável(is)`}
-            </p>
-          </div>
-        </div>
-      )}
-
       <div className="flex gap-2 pt-1">
-        <Button variant="outline" onClick={voltar} disabled={salvando}>
+        <Button variant="outline" onClick={voltar}>
           <ArrowLeft className="w-4 h-4" />
-          {passo === PASSOS[0] || (passo === "equipe" && !temEscolhaDeUnidade)
-            ? "Cancelar"
-            : "Voltar"}
+          {primeiroPasso ? "Cancelar" : "Voltar"}
         </Button>
 
-        {passo === "ordem" ? (
-          <Button
-            className="flex-1"
-            disabled={salvando || titulo.trim().length < 3 || !prazo}
-            onClick={() => void finalizar().catch((e) => toast.error(e.message || "Não foi possível criar"))}
-          >
-            {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            {marcadas.length > 1 ? `Criar ${marcadas.length} ordens` : "Criar ordem"}
-          </Button>
-        ) : (
-          <Button
-            className="flex-1"
-            disabled={passo === "unidades" && marcadas.length === 0}
-            onClick={avancar}
-          >
-            Continuar
-          </Button>
-        )}
+        {/* No último passo, "continuar" leva ao formulário já preenchido — não
+            cria a ordem. Quem cria é o botão de lá, com todos os campos. */}
+        <Button
+          className="flex-1"
+          disabled={passo === "unidades" && marcadas.length === 0}
+          onClick={indice === roteiro.length - 1 ? concluir : avancar}
+        >
+          {indice === roteiro.length - 1 ? (
+            <>
+              <Check className="w-4 h-4" /> Continuar para o formulário completo
+            </>
+          ) : (
+            "Continuar"
+          )}
+        </Button>
       </div>
 
       {/* Cadastros abertos por cima do passo, sem perder o que já foi marcado. */}
