@@ -412,7 +412,7 @@ export default function AdminFuncionarios() {
     // `definirDoFuncionario` grava a lista inteira de equipes da pessoa: sem os
     // vínculos carregados, montar este time apagaria os outros dela.
     if (!fichaEquipe.externa && !vinculosDaUnidadeDaEquipe) {
-      return toast.error(`Aguarde carregar os funcionários desta ${v.unidade.toLowerCase()}.`);
+      return toast.error("Aguarde carregar os funcionários.");
     }
 
     let equipeId = fichaEquipe.id;
@@ -651,7 +651,7 @@ export default function AdminFuncionarios() {
             <CardContent className="py-14 text-center">
               <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-600 font-medium">
-                {lista?.length ? "Nenhum funcionário com esse filtro." : "Nenhum funcionário nesta organização."}
+                {lista?.length ? "Nenhum funcionário com esse filtro." : "Nenhum funcionário."}
               </p>
               <Button className="mt-4" onClick={abrirCriacao}>
                 <Plus className="w-4 h-4" /> Cadastrar
@@ -829,7 +829,7 @@ export default function AdminFuncionarios() {
                   </p>
                 ) : (equipesDaUnidadeDoForm ?? []).length === 0 ? (
                   <p className="text-xs text-slate-500">
-                    Nenhuma equipe nesta {v.unidade.toLowerCase()} ainda — crie a primeira abaixo.
+                    Nenhuma equipe ainda — crie a primeira abaixo.
                   </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-1.5">
@@ -1052,7 +1052,7 @@ export default function AdminFuncionarios() {
                   </p>
                 ) : pessoasDaUnidadeDaEquipe.length === 0 ? (
                   <p className="text-xs text-slate-500">
-                    Nenhum funcionário nesta {v.unidade.toLowerCase()} ainda — cadastre alguém
+                    Nenhum funcionário ainda — cadastre alguém
                     na aba Funcionários e volte aqui.
                   </p>
                 ) : (

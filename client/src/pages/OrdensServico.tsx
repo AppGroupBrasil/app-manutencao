@@ -1455,7 +1455,7 @@ export function ConteudoOrdensServico({
                             onClick={() => {
                               if (
                                 confirm(
-                                  `Remover ${c.nome} do cadastro desta ${v.unidade.toLowerCase()}?`,
+                                  `Remover ${c.nome} do cadastro?`,
                                 )
                               ) {
                                 excluirFuncionario.mutate({ id: c.id });
@@ -1517,7 +1517,9 @@ export function ConteudoOrdensServico({
       <Dialog open={modalEquipes} onOpenChange={setModalEquipes}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Equipes desta {v.unidade.toLowerCase()}</DialogTitle>
+            {/* Sem "desta unidade" no título: a equipe pode atender várias, e
+                quais são elas é escolha do próprio cadastro. */}
+            <DialogTitle>Equipes</DialogTitle>
           </DialogHeader>
           <GerenciarEquipes
             condominioId={unidadeNova}
@@ -1530,7 +1532,7 @@ export function ConteudoOrdensServico({
       <Dialog open={modalFuncionarios} onOpenChange={setModalFuncionarios}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Funcionários desta {v.unidade.toLowerCase()}</DialogTitle>
+            <DialogTitle>Funcionários</DialogTitle>
           </DialogHeader>
           <CadastroRapidoFuncionario
             condominioId={unidadeNova}

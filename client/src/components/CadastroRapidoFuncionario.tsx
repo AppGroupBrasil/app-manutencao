@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { useVocabulario } from "@/hooks/useVocabulario";
 import { Loader2, Plus, Trash2, UserPlus } from "lucide-react";
 
 const TIPOS = [
@@ -39,7 +38,6 @@ export function CadastroRapidoFuncionario({
   onMudou?: () => void;
 }) {
   const utils = trpc.useUtils();
-  const v = useVocabulario();
 
   const { data: pessoas, isLoading } = trpc.funcionario.list.useQuery(
     { condominioId },
@@ -95,7 +93,7 @@ export function CadastroRapidoFuncionario({
         <div className="text-center py-8">
           <UserPlus className="w-10 h-10 text-slate-300 mx-auto" strokeWidth={1.5} />
           <p className="text-sm text-slate-600 font-medium mt-2">
-            Nenhum funcionário nesta {v.unidade.toLowerCase()}.
+            Nenhum funcionário.
           </p>
         </div>
       ) : (
@@ -111,7 +109,7 @@ export function CadastroRapidoFuncionario({
                 size="sm"
                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
                 onClick={() => {
-                  if (confirm(`Remover ${p.nome} desta ${v.unidade.toLowerCase()}?`)) {
+                  if (confirm(`Remover ${p.nome} do cadastro?`)) {
                     excluir.mutate({ id: p.id });
                   }
                 }}
@@ -192,7 +190,7 @@ export function CadastroRapidoFuncionario({
         </div>
       ) : (
         <Button variant="outline" className="w-full" onClick={() => setCriando(true)}>
-          <Plus className="w-4 h-4 mr-2" /> Novo funcionário desta {v.unidade.toLowerCase()}
+          <Plus className="w-4 h-4" /> Novo funcionário
         </Button>
       )}
     </div>

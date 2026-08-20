@@ -28,6 +28,71 @@ const TIPOS = [
 /** Conferência de formato, para o erro sair em português e no campo certo. */
 const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Unidades que a equipe atende.
+ *
+ * A mesma equipe cobre uma unidade ou a rede inteira — "Facilities" atende as
+ * quinze. Some quando o cliente só tem uma: não há escolha a fazer.
+ */
+function UnidadesAtendidas({
+  marcadas,
+  padrao,
+  onMudar,
+}: {
+  marcadas: number[];
+  /** Unidade de onde a tela foi aberta: é a que sobra ao desmarcar todas. */
+  padrao: number;
+  onMudar: (unidades: number[]) => void;
+}) {
+  const v = useVocabulario();
+  const { data: organizacoes } = trpc.condominio.list.useQuery();
+
+  if ((organizacoes?.length ?? 0) < 2) return null;
+
+  const todas = (organizacoes ?? []).map((o) => o.id);
+  const estaoTodas = marcadas.length === todas.length;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label>
+          {v.unidade}s atendidas ({marcadas.length})
+        </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs"
+          // Desmarcar todas deixa a unidade de onde a tela foi aberta, e não a
+          // primeira da lista: a equipe sumiria da O.S. que está sendo escrita.
+          onClick={() => onMudar(estaoTodas ? [padrao] : todas)}
+        >
+          {estaoTodas ? "Desmarcar todas" : "Marcar todas"}
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto">
+        {(organizacoes ?? []).map((o) => {
+          const marcada = marcadas.includes(o.id);
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() =>
+                onMudar(marcada ? marcadas.filter((id) => id !== o.id) : [...marcadas, o.id])
+              }
+              className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+            >
+              <Checkbox checked={marcada} className="pointer-events-none" />
+              <span className="truncate">{o.nome}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type Passo =
   | { tela: "lista" }
   /** Equipe da casa: nova quando não vem `equipe`, edição quando vem. */
@@ -129,6 +194,11 @@ export function GerenciarEquipes({
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-800 truncate">{equipe.nome}</p>
                 <p className="text-[11px] text-slate-500 truncate">
+                  {/* Em quantas unidades ela atende é o que separa a equipe da
+                      casa da equipe de rede. */}
+                  {Number(equipe.totalUnidades ?? 1) > 1
+                    ? `${Number(equipe.totalUnidades)} ${v.unidade.toLowerCase()}s · `
+                    : ""}
                   {equipe.externa
                     ? `Externa · ${equipe.email ?? "sem e-mail"}`
                     : `${Number(equipe.totalMembros)} funcionário(s)`}
@@ -146,7 +216,7 @@ export function GerenciarEquipes({
                   size="sm"
                   onClick={() => setPasso({ tela: "interna", equipe })}
                 >
-                  <UserPlus className="w-4 h-4" /> Membros
+                  <UserPlus className="w-4 h-4" /> Editar
                 </Button>
               )}
               <Button
@@ -176,10 +246,10 @@ export function GerenciarEquipes({
           onClick={() => setPasso({ tela: "interna" })}
         >
           <span className="flex items-center gap-2 font-medium">
-            <Users className="w-4 h-4" /> Nova equipe desta {v.unidade.toLowerCase()}
+            <Users className="w-4 h-4" /> Nova equipe
           </span>
           <span className="text-xs text-slate-500 font-normal text-left">
-            Funcionários da casa, com supervisor avisado
+            Funcionários da casa, nas {v.unidade.toLowerCase()}s que ela atende
           </span>
         </Button>
 
@@ -224,11 +294,22 @@ function EquipeInterna({
   const [nome, setNome] = useState(equipe?.nome ?? "");
   /** `null` enquanto ninguém mexeu: vale quem já está gravado na equipe. */
   const [marcados, setMarcados] = useState<number[] | null>(equipe ? null : []);
+  /** Mesma ideia para as unidades atendidas. */
+  const [unidades, setUnidades] = useState<number[] | null>(equipe ? null : [condominioId]);
   const [cadastrando, setCadastrando] = useState(false);
 
+  const { data: unidadesGravadas } = trpc.equipes.unidades.useQuery(
+    { equipeId: equipe?.id ?? 0 },
+    { enabled: !!equipe },
+  );
+  const unidadesMarcadas = unidades ?? unidadesGravadas ?? [];
+
+  // Quem pode entrar no time sai de todas as unidades atendidas: a equipe de
+  // rede monta o grupo com gente de várias, e olhar só a unidade da O.S.
+  // esconderia metade das pessoas.
   const { data: pessoas } = trpc.funcionario.list.useQuery(
-    { condominioId },
-    { enabled: condominioId > 0 },
+    { condominioId: unidadesMarcadas[0] ?? condominioId, unidades: unidadesMarcadas },
+    { enabled: (unidadesMarcadas[0] ?? condominioId) > 0 },
   );
   const { data: membrosAtuais } = trpc.equipes.membros.useQuery(
     { equipeId: equipe?.id ?? 0 },
@@ -244,7 +325,7 @@ function EquipeInterna({
    * tiraria o time inteiro para pôr um só — o gestor não veria nada acontecer
    * até a próxima abertura da tela.
    */
-  const carregandoTime = !!equipe && !membrosAtuais;
+  const carregandoTime = !!equipe && (!membrosAtuais || !unidadesGravadas);
 
   const criarEquipe = trpc.equipes.create.useMutation();
   const atualizarEquipe = trpc.equipes.update.useMutation();
@@ -255,13 +336,35 @@ function EquipeInterna({
     const limpo = nome.trim();
     if (limpo.length < 2) return toast.error("Informe o nome da equipe");
 
-    if (equipe) {
-      if (limpo !== equipe.nome) {
-        await atualizarEquipe.mutateAsync({ id: equipe.id, nome: limpo });
-      }
+    if (unidadesMarcadas.length === 0) {
+      return toast.error(`Marque ao menos uma ${v.unidade.toLowerCase()}`);
+    }
+    if (!pessoas) return toast.error("Aguarde carregar os funcionários.");
 
-      const entrar = escolhidos.filter((id) => !gravados.includes(id));
-      const sair = gravados.filter((id) => !escolhidos.includes(id));
+    /**
+     * Só quem é das unidades que a equipe atende — mais quem já está no time.
+     *
+     * O filtro existe porque marcar alguém e depois desmarcar a unidade dele
+     * deixava o id na lista, e o servidor recusava o vínculo com um erro que
+     * não falava de unidade nenhuma.
+     *
+     * Quem já é membro passa mesmo sem aparecer na lista: `funcionario.list`
+     * recorta por quem cadastrou, e sem esta ressalva salvar tiraria da equipe
+     * justamente quem o gestor nunca chegou a ver.
+     */
+    const validos = escolhidos.filter(
+      (id) => gravados.includes(id) || pessoas.some((p) => p.id === id),
+    );
+
+    if (equipe) {
+      await atualizarEquipe.mutateAsync({
+        id: equipe.id,
+        nome: limpo,
+        unidades: unidadesMarcadas,
+      });
+
+      const entrar = validos.filter((id) => !gravados.includes(id));
+      const sair = gravados.filter((id) => !validos.includes(id));
 
       if (entrar.length > 0) {
         await addMembros.mutateAsync({ equipeId: equipe.id, funcionarioIds: entrar });
@@ -276,14 +379,18 @@ function EquipeInterna({
       return;
     }
 
-    const criada = await criarEquipe.mutateAsync({ condominioId, nome: limpo });
-    if (escolhidos.length > 0) {
-      await addMembros.mutateAsync({ equipeId: criada.id, funcionarioIds: escolhidos });
+    const criada = await criarEquipe.mutateAsync({
+      condominioId,
+      nome: limpo,
+      unidades: unidadesMarcadas,
+    });
+    if (validos.length > 0) {
+      await addMembros.mutateAsync({ equipeId: criada.id, funcionarioIds: validos });
     }
 
     toast.success(
-      escolhidos.length > 0
-        ? `Equipe "${limpo}" criada com ${escolhidos.length} funcionário(s)`
+      validos.length > 0
+        ? `Equipe "${limpo}" criada com ${validos.length} funcionário(s)`
         : `Equipe "${limpo}" criada`,
     );
     await onPronto();
@@ -302,7 +409,7 @@ function EquipeInterna({
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <span className="font-medium text-slate-800">
-          {equipe ? equipe.nome : `Nova equipe desta ${v.unidade.toLowerCase()}`}
+          {equipe ? equipe.nome : "Nova equipe"}
         </span>
       </div>
 
@@ -317,6 +424,16 @@ function EquipeInterna({
         />
       </div>
 
+      {/* Enquanto o que está gravado não chega, marcar montaria uma lista sem
+          as unidades atuais — e salvar tiraria a equipe de todas elas. */}
+      {!carregandoTime && (
+        <UnidadesAtendidas
+          marcadas={unidadesMarcadas}
+          padrao={condominioId}
+          onMudar={setUnidades}
+        />
+      )}
+
       <div className="space-y-1.5">
         <Label>Quem participa desta equipe ({escolhidos.length})</Label>
 
@@ -326,7 +443,7 @@ function EquipeInterna({
           </p>
         ) : (pessoas?.length ?? 0) === 0 ? (
           <p className="text-xs text-slate-500">
-            Nenhum funcionário nesta {v.unidade.toLowerCase()} ainda — cadastre o primeiro abaixo.
+            Nenhum funcionário ainda — cadastre o primeiro abaixo.
           </p>
         ) : (
           <div className="grid gap-1.5 max-h-52 overflow-y-auto">
@@ -403,9 +520,12 @@ function NovaEquipeExterna({
   onVoltar: () => void;
   onPronto: () => Promise<void>;
 }) {
+  const v = useVocabulario();
+
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
+  const [unidades, setUnidades] = useState<number[]>([condominioId]);
 
   const criar = trpc.equipes.create.useMutation();
 
@@ -416,6 +536,9 @@ function NovaEquipeExterna({
     // O servidor recusa e-mail torto com a mensagem do validador, em inglês.
     // A conferência aqui é o que devolve isso em português, no campo certo.
     if (!EMAIL_VALIDO.test(email.trim())) return toast.error("E-mail inválido");
+    if (unidades.length === 0) {
+      return toast.error(`Marque ao menos uma ${v.unidade.toLowerCase()}`);
+    }
 
     await criar.mutateAsync({
       condominioId,
@@ -423,6 +546,7 @@ function NovaEquipeExterna({
       externa: true,
       email: email.trim(),
       whatsapp: whatsapp.trim() || undefined,
+      unidades,
     });
 
     toast.success(`Equipe externa "${limpo}" cadastrada`);
@@ -472,6 +596,10 @@ function NovaEquipeExterna({
           placeholder="(11) 99999-9999"
         />
       </div>
+
+      {/* A empresa contratada também atende mais de uma unidade: é comum o
+          mesmo prestador cobrir a rede inteira. */}
+      <UnidadesAtendidas marcadas={unidades} padrao={condominioId} onMudar={setUnidades} />
 
       <div className="flex gap-2 pt-1">
         <Button
