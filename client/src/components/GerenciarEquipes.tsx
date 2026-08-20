@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { useVocabulario } from "@/hooks/useVocabulario";
-import { ArrowLeft, Building2, Loader2, Plus, Trash2, UserPlus, Users } from "lucide-react";
+import { ComoFuncionaEquipes } from "@/components/ComoFuncionaEquipes";
+import { ArrowLeft, Building2, HelpCircle, Loader2, Plus, Trash2, UserPlus, Users } from "lucide-react";
 
 /** Funções da ficha rápida: supervisor é quem recebe o aviso da O.S. */
 const TIPOS = [
@@ -96,6 +97,8 @@ function UnidadesAtendidas({
 
 type Passo =
   | { tela: "lista" }
+  /** O tutorial, mostrado no lugar da lista até a pessoa fechar. */
+  | { tela: "ajuda" }
   /** Equipe da casa: nova quando não vem `equipe`, edição quando vem. */
   | { tela: "interna"; equipe?: { id: number; nome: string } }
   | { tela: "externa" };
@@ -174,8 +177,23 @@ export function GerenciarEquipes({
     );
   }
 
+  if (passo.tela === "ajuda") {
+    return <ComoFuncionaEquipes onFechar={voltar} />;
+  }
+
   return (
     <div className="space-y-3">
+      {/* O caminho todo em miniatura, para quem chegou aqui sem saber o que a
+          tela espera. Fica no topo porque é onde a dúvida aparece. */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => setPasso({ tela: "ajuda" })}
+      >
+        <HelpCircle className="w-4 h-4" /> Como funciona
+      </Button>
+
       {(equipes?.length ?? 0) === 0 ? (
         <div className="text-center py-6">
           <Users className="w-10 h-10 text-slate-300 mx-auto" strokeWidth={1.5} />
@@ -301,6 +319,29 @@ function EquipeInterna({
   const [marcados, setMarcados] = useState<number[] | null>(equipe ? null : []);
   /** Mesma ideia para as unidades atendidas. */
   const [unidades, setUnidades] = useState<number[] | null>(equipe ? null : [condominioId]);
+  /**
+   * Equipe nova nasce atendendo todas.
+   *
+   * Deixar só a unidade da tela marcada era um risco silencioso: a equipe
+   * sumia das ordens das outras, e quem montou o time não descobria — ia
+   * procurar o funcionário na O.S. e ele não estava lá. Desmarcar é decisão
+   * consciente; marcar as quinze, uma a uma, ninguém faz.
+   */
+  const { data: todasAsUnidades } = trpc.condominio.list.useQuery();
+  /**
+   * Semeia uma vez, e não a cada resposta da consulta.
+   *
+   * O React Query refaz a busca ao voltar para a aba: sem esta trava, quem
+   * tivesse desmarcado unidades e trocado de janela voltaria com todas
+   * marcadas de novo, desfazendo a escolha sem avisar.
+   */
+  const jaSemeou = useRef(false);
+  useEffect(() => {
+    if (equipe || jaSemeou.current || !todasAsUnidades || todasAsUnidades.length < 2) return;
+
+    jaSemeou.current = true;
+    setUnidades(todasAsUnidades.map((o) => o.id));
+  }, [equipe, todasAsUnidades]);
   const [cadastrando, setCadastrando] = useState(false);
 
   const { data: unidadesGravadas } = trpc.equipes.unidades.useQuery(
@@ -540,6 +581,15 @@ function NovaEquipeExterna({
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [unidades, setUnidades] = useState<number[]>([condominioId]);
+  /** Empresa contratada também nasce atendendo todas, pelo mesmo motivo. */
+  const { data: todasAsUnidades } = trpc.condominio.list.useQuery();
+  const jaSemeou = useRef(false);
+  useEffect(() => {
+    if (jaSemeou.current || !todasAsUnidades || todasAsUnidades.length < 2) return;
+
+    jaSemeou.current = true;
+    setUnidades(todasAsUnidades.map((o) => o.id));
+  }, [todasAsUnidades]);
 
   const criar = trpc.equipes.create.useMutation();
 

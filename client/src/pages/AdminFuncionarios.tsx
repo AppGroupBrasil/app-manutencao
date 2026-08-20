@@ -165,6 +165,11 @@ export default function AdminFuncionarios() {
   const [unidadeNova, setUnidadeNova] = useState<number>(0);
   /** Unidades em que a pessoa trabalha; a de origem entra sempre. */
   const [unidadesDoForm, setUnidadesDoForm] = useState<number[]>([]);
+  /** Todas as unidades do cliente: é com elas que ficha e equipe nascem. */
+  const todasAsUnidades = useMemo(
+    () => (organizacoes ?? []).map((o) => o.id),
+    [organizacoes],
+  );
   /** Equipes marcadas na ficha aberta — gravadas junto com ela. */
   const [equipesDoForm, setEquipesDoForm] = useState<number[]>([]);
   /** Nome digitado no "criar equipe aqui mesmo", dentro da ficha. */
@@ -264,7 +269,13 @@ export default function AdminFuncionarios() {
     // Abre na unidade que a pessoa estava vendo; com várias marcadas, na
     // primeira delas — e o campo fica à vista para trocar.
     setUnidadeNova(orgId ?? 0);
-    setUnidadesDoForm(orgId ? [orgId] : []);
+    // Todas marcadas: ficha presa a uma unidade some das outras, e quem
+    // cadastrou não descobre — vai procurar a pessoa na O.S. e ela não está
+    // lá. Desmarcar é decisão consciente; marcar quinze, ninguém faz.
+    //
+    // Com a lista ainda carregando sobra a unidade de origem, e o efeito
+    // abaixo completa quando ela chegar.
+    setUnidadesDoForm(todasAsUnidades.length > 0 ? todasAsUnidades : orgId ? [orgId] : []);
     setEquipesDoForm([]);
     setEquipeNova("");
     setCriando(true);
@@ -327,6 +338,25 @@ export default function AdminFuncionarios() {
     fichaSemeada.current = editando.id;
     setUnidadesDoForm(unidadesGravadasDoFuncionario);
   }, [editando, unidadesGravadasDoFuncionario]);
+
+  /**
+   * Ficha nova aberta antes de a lista de unidades chegar: completa quando ela
+   * chega, uma vez só.
+   *
+   * Sem isto, quem abrisse o cadastro no primeiro segundo ficaria com a ficha
+   * presa a uma unidade — justamente o que queríamos evitar.
+   */
+  const criacaoSemeada = useRef(false);
+  useEffect(() => {
+    if (!criando) {
+      criacaoSemeada.current = false;
+      return;
+    }
+    if (criacaoSemeada.current || todasAsUnidades.length === 0) return;
+
+    criacaoSemeada.current = true;
+    setUnidadesDoForm(todasAsUnidades);
+  }, [criando, todasAsUnidades]);
 
   /**
    * Equipes oferecidas na ficha: as da unidade da pessoa, e só.
@@ -395,7 +425,9 @@ export default function AdminFuncionarios() {
     setFichaEquipe({
       id: null,
       nome: "",
-      unidades: orgId ? [orgId] : [],
+      // Todas atendidas: equipe presa a uma unidade some das ordens das
+      // outras, e quem a criou só descobre na hora de designar.
+      unidades: todasAsUnidades.length > 0 ? todasAsUnidades : orgId ? [orgId] : [],
       membros: [],
       externa,
       email: "",
