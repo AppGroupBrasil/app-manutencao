@@ -16,7 +16,7 @@ import {
   apps,
   revistas
 } from "../../../drizzle/schema";
-import { eq, and, desc, gte, inArray, lte, sql } from "drizzle-orm";
+import { eq, and, desc, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { rateLimiter, RATE_LIMIT_CONFIGS, getClientIp } from "../../_core/rateLimit";
 import { verifyCondominioOwnership } from "../../_core/ownership";
 import { ENV } from "../../_core/env";
@@ -148,7 +148,13 @@ export const funcionarioRouter = router({
             ? inArray(funcionarios.condominioId, ids)
             : and(
                 inArray(funcionarios.condominioId, ids),
-                eq(funcionarios.criadoPorId, ctx.user.id),
+                // Ficha sem dono entra para todos: `criadoPorId` só passou a
+                // ser gravado depois, e as anteriores ficavam invisíveis para
+                // sempre — cadastradas, sem aparecer em lista nenhuma.
+                or(
+                  eq(funcionarios.criadoPorId, ctx.user.id),
+                  isNull(funcionarios.criadoPorId),
+                ),
               );
 
         /**

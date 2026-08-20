@@ -27,6 +27,16 @@ import {
   users
 } from "../../../drizzle/schema"; // Adjusted path
 import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "drizzle-orm";
+
+/**
+ * Ficha em uso.
+ *
+ * `ativo` aceita nulo e só ganhou valor padrão depois: quem foi cadastrado
+ * antes disso ficou com o campo em branco e sumia de tudo — não aparecia para
+ * ser responsável, não era avisado da O.S. e não entrava na equipe designada.
+ * Em branco é ficha ativa; desligada é a que tem `false` gravado.
+ */
+const funcionarioEmUso = or(eq(funcionarios.ativo, true), isNull(funcionarios.ativo));
 import { nanoid } from "nanoid";
 import { storagePut } from "../../storage";
 import { autorDaRequisicao } from "../../_core/autor";
@@ -124,7 +134,7 @@ async function notificarAberturaDeOS(
       notificarEmail: funcionarios.notificarOsEmail,
     })
     .from(funcionarios)
-    .where(and(eq(funcionarios.condominioId, os.condominioId), eq(funcionarios.ativo, true)));
+    .where(and(eq(funcionarios.condominioId, os.condominioId), funcionarioEmUso));
 
   if (organizacao?.autoNotificar) {
     // `funcionarios` não tem coluna de usuário e `notificacoes` exige uma:
@@ -286,7 +296,7 @@ async function membrosViramResponsaveis(
     })
     .from(equipeFuncionarios)
     .innerJoin(funcionarios, eq(equipeFuncionarios.funcionarioId, funcionarios.id))
-    .where(and(eq(equipeFuncionarios.equipeId, equipeId), eq(funcionarios.ativo, true)));
+    .where(and(eq(equipeFuncionarios.equipeId, equipeId), funcionarioEmUso));
 
   if (membros.length === 0) return 0;
 
@@ -388,7 +398,7 @@ async function notificarEquipeDesignada(
     })
     .from(equipeFuncionarios)
     .innerJoin(funcionarios, eq(equipeFuncionarios.funcionarioId, funcionarios.id))
-    .where(and(eq(equipeFuncionarios.equipeId, equipeId), eq(funcionarios.ativo, true)));
+    .where(and(eq(equipeFuncionarios.equipeId, equipeId), funcionarioEmUso));
 
   const supervisores = membros.filter((m) => m.tipo === "supervisor");
   const alvos = supervisores.length > 0 ? supervisores : membros;
@@ -2650,7 +2660,7 @@ export const osRouter = router({
             notificarOsEmail: funcionarios.notificarOsEmail,
           })
           .from(funcionarios)
-          .where(and(eq(funcionarios.condominioId, input.condominioId), eq(funcionarios.ativo, true)))
+          .where(and(eq(funcionarios.condominioId, input.condominioId), funcionarioEmUso))
           .orderBy(asc(funcionarios.nome));
       }),
 
