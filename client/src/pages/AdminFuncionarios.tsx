@@ -69,6 +69,21 @@ type Equipe = {
   totalMembros: number;
 };
 
+/**
+ * Ficha da equipe, aberta pela aba Equipes. `id: null` é equipe ainda por criar.
+ *
+ * A aba só listava: o botão do topo abria a ficha de funcionário e criar equipe
+ * existia apenas dentro do cadastro de alguém — quem queria só montar o time
+ * tinha de cadastrar uma pessoa para chegar lá.
+ */
+type FichaEquipe = {
+  id: number | null;
+  nome: string;
+  unidadeId: number;
+  /** Funcionários marcados para o time. */
+  membros: number[];
+};
+
 type Formulario = {
   nome: string;
   cargo: string;
@@ -126,6 +141,8 @@ export default function AdminFuncionarios() {
   /** Nome digitado no "criar equipe aqui mesmo", dentro da ficha. */
   const [equipeNova, setEquipeNova] = useState("");
   const [aba, setAba] = useState<"pessoas" | "equipes">("pessoas");
+  /** Equipe aberta na aba Equipes: nome, unidade e quem está dentro. */
+  const [fichaEquipe, setFichaEquipe] = useState<FichaEquipe | null>(null);
 
   const { data: lista, isLoading } = trpc.funcionario.list.useQuery(
     { condominioId: orgId ?? 0, unidades: selecao.marcadas },
@@ -173,6 +190,9 @@ export default function AdminFuncionarios() {
 
   const criarEquipe = trpc.equipes.create.useMutation({
     onError: (e) => toast.error(e.message || "Não foi possível criar a equipe"),
+  });
+  const atualizarEquipe = trpc.equipes.update.useMutation({
+    onError: (e) => toast.error(e.message || "Não foi possível salvar a equipe"),
   });
   const excluirEquipe = trpc.equipes.delete.useMutation({
     onSuccess: async () => {
@@ -271,6 +291,89 @@ export default function AdminFuncionarios() {
     toast.success(`Equipe "${nome}" criada`);
   }
 
+  /**
+   * Quem pode entrar na equipe aberta, e em que times essas pessoas já estão.
+   *
+   * Consulta da unidade da equipe, e não a lista da tela: a equipe pode ser de
+   * uma unidade que não está marcada no seletor, e aí o time apareceria vazio.
+   */
+  const unidadeDaEquipe = fichaEquipe?.unidadeId ?? 0;
+  const { data: pessoasDaUnidadeDaEquipe } = trpc.funcionario.list.useQuery(
+    { condominioId: unidadeDaEquipe, unidades: [unidadeDaEquipe] },
+    { enabled: usaEquipes && unidadeDaEquipe > 0 },
+  );
+  const { data: vinculosDaUnidadeDaEquipe } = trpc.equipes.porFuncionario.useQuery(
+    { condominioId: unidadeDaEquipe, unidades: [unidadeDaEquipe] },
+    { enabled: usaEquipes && unidadeDaEquipe > 0 },
+  );
+
+  function abrirCriacaoEquipe() {
+    setFichaEquipe({ id: null, nome: "", unidadeId: orgId ?? 0, membros: [] });
+  }
+
+  function abrirEdicaoEquipe(equipe: Equipe) {
+    setFichaEquipe({
+      id: equipe.id,
+      nome: equipe.nome,
+      unidadeId: equipe.condominioId,
+      membros: ((lista ?? []) as Funcionario[])
+        .filter((f) => (equipesPorFuncionario.get(f.id) ?? []).some((e) => e.equipeId === equipe.id))
+        .map((f) => f.id),
+    });
+  }
+
+  /** Grava o nome da equipe e o time inteiro de uma vez. */
+  async function salvarEquipe() {
+    if (!fichaEquipe) return;
+    const nome = fichaEquipe.nome.trim();
+    if (nome.length < 2) return toast.error("Informe o nome da equipe");
+    if (!fichaEquipe.unidadeId) return toast.error(`Escolha a ${v.unidade.toLowerCase()}`);
+    // `definirDoFuncionario` grava a lista inteira de equipes da pessoa: sem os
+    // vínculos carregados, montar este time apagaria os outros dela.
+    if (!vinculosDaUnidadeDaEquipe) {
+      return toast.error(`Aguarde carregar os funcionários desta ${v.unidade.toLowerCase()}.`);
+    }
+
+    let equipeId = fichaEquipe.id;
+    if (equipeId) {
+      await atualizarEquipe.mutateAsync({ id: equipeId, nome });
+    } else {
+      equipeId = (await criarEquipe.mutateAsync({ condominioId: fichaEquipe.unidadeId, nome })).id;
+    }
+
+    /** As outras equipes de cada pessoa, que precisam sobreviver à gravação. */
+    const outras = new Map<number, number[]>();
+    const jaEstavam = new Set<number>();
+    for (const vinculo of vinculosDaUnidadeDaEquipe) {
+      if (vinculo.equipeId === equipeId) {
+        jaEstavam.add(vinculo.funcionarioId);
+        continue;
+      }
+      outras.set(vinculo.funcionarioId, [...(outras.get(vinculo.funcionarioId) ?? []), vinculo.equipeId]);
+    }
+
+    const marcados = new Set(fichaEquipe.membros);
+    const mudaram = [...new Set([...jaEstavam, ...marcados])].filter(
+      (id) => jaEstavam.has(id) !== marcados.has(id),
+    );
+
+    for (const funcionarioId of mudaram) {
+      const resto = outras.get(funcionarioId) ?? [];
+      await definirEquipes.mutateAsync({
+        condominioId: fichaEquipe.unidadeId,
+        funcionarioId,
+        equipeIds: marcados.has(funcionarioId) ? [...resto, equipeId] : resto,
+      });
+    }
+
+    await recarregar();
+    toast.success(fichaEquipe.id ? "Equipe atualizada" : `Equipe "${nome}" criada`);
+    setFichaEquipe(null);
+  }
+
+  const salvandoEquipe =
+    criarEquipe.isPending || atualizarEquipe.isPending || definirEquipes.isPending;
+
   async function salvar() {
     if (!form.nome.trim()) return toast.error("Informe o nome");
     if (!unidadeNova) return toast.error(`Escolha a ${v.unidade.toLowerCase()}`);
@@ -357,9 +460,17 @@ export default function AdminFuncionarios() {
           {/* Todas marcadas ao abrir: a equipe inteira aparece e o gerente
               estreita para a unidade que quiser. */}
           <SeletorUnidades selecao={selecao} className="w-[240px]" />
-          <Button onClick={abrirCriacao}>
-            <Plus className="w-4 h-4 mr-1" /> Novo
-          </Button>
+          {/* O botão é da aba que está aberta: em Equipes ele abria a ficha de
+              funcionário, e não havia como criar uma equipe pela tela. */}
+          {aba === "equipes" ? (
+            <Button onClick={abrirCriacaoEquipe}>
+              <Plus className="w-4 h-4" /> Nova equipe
+            </Button>
+          ) : (
+            <Button onClick={abrirCriacao}>
+              <Plus className="w-4 h-4" /> Novo
+            </Button>
+          )}
         </div>
       </header>
 
@@ -399,7 +510,8 @@ export default function AdminFuncionarios() {
             onExcluir={(id, nome) => {
               if (confirm(`Remover a equipe "${nome}"?`)) excluirEquipe.mutate({ id });
             }}
-            onNova={abrirCriacao}
+            onNova={abrirCriacaoEquipe}
+            onEditar={abrirEdicaoEquipe}
           />
           )
         ) : (
@@ -426,7 +538,7 @@ export default function AdminFuncionarios() {
                 {lista?.length ? "Nenhum funcionário com esse filtro." : "Nenhum funcionário nesta organização."}
               </p>
               <Button className="mt-4" onClick={abrirCriacao}>
-                <Plus className="w-4 h-4 mr-1" /> Cadastrar
+                <Plus className="w-4 h-4" /> Cadastrar
               </Button>
             </CardContent>
           </Card>
@@ -695,7 +807,113 @@ export default function AdminFuncionarios() {
           <DialogFooter>
             <Button variant="outline" onClick={fechar}>Cancelar</Button>
             <Button onClick={salvarSemQuebrar} disabled={salvando}>
-              {salvando ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando…</> : "Salvar"}
+              {salvando ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</> : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ficha da equipe: nome, unidade e o time montado na mesma tela. */}
+      <Dialog open={!!fichaEquipe} onOpenChange={(aberto) => !aberto && setFichaEquipe(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{fichaEquipe?.id ? "Editar equipe" : "Nova equipe"}</DialogTitle>
+            <DialogDescription>
+              A equipe agrupa funcionários por frente de trabalho e recebe a O.S. designada.
+            </DialogDescription>
+          </DialogHeader>
+
+          {fichaEquipe && (
+            <div className="space-y-3">
+              {/* Unidade só na criação: mudar a de uma equipe existente deixaria
+                  os membros pendurados na unidade antiga. */}
+              {!fichaEquipe.id && selecao.temEscolha && (
+                <div className="space-y-1.5">
+                  <Label>{v.unidade}</Label>
+                  <Select
+                    value={fichaEquipe.unidadeId ? String(fichaEquipe.unidadeId) : undefined}
+                    onValueChange={(valor) =>
+                      setFichaEquipe({ ...fichaEquipe, unidadeId: Number(valor), membros: [] })
+                    }
+                  >
+                    <SelectTrigger><SelectValue placeholder={`Escolha a ${v.unidade.toLowerCase()}`} /></SelectTrigger>
+                    <SelectContent>
+                      {(organizacoes ?? []).map((o) => (
+                        <SelectItem key={o.id} value={String(o.id)}>
+                          {o.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="e-nome">Nome da equipe</Label>
+                <Input
+                  id="e-nome"
+                  value={fichaEquipe.nome}
+                  onChange={(e) => setFichaEquipe({ ...fichaEquipe, nome: e.target.value })}
+                  placeholder="Ex: Elétrica"
+                />
+              </div>
+
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-sm font-medium text-slate-700">
+                  Funcionários desta equipe ({fichaEquipe.membros.length})
+                </p>
+                {!pessoasDaUnidadeDaEquipe || !vinculosDaUnidadeDaEquipe ? (
+                  <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando os funcionários…
+                  </p>
+                ) : pessoasDaUnidadeDaEquipe.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Nenhum funcionário nesta {v.unidade.toLowerCase()} ainda — cadastre alguém
+                    na aba Funcionários e volte aqui.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-1.5 max-h-64 overflow-y-auto">
+                    {pessoasDaUnidadeDaEquipe.map((f) => {
+                      const marcado = fichaEquipe.membros.includes(f.id);
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() =>
+                            setFichaEquipe({
+                              ...fichaEquipe,
+                              membros: marcado
+                                ? fichaEquipe.membros.filter((id) => id !== f.id)
+                                : [...fichaEquipe.membros, f.id],
+                            })
+                          }
+                          className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm hover:bg-slate-50"
+                        >
+                          <Checkbox checked={marcado} className="pointer-events-none" />
+                          <span className="truncate flex-1">{f.nome}</span>
+                          {f.tipoFuncionario === "supervisor" && (
+                            <span className="text-[11px] text-indigo-600">supervisor</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFichaEquipe(null)}>Cancelar</Button>
+            <Button
+              onClick={() => void salvarEquipe().catch(() => undefined)}
+              disabled={salvandoEquipe || !vinculosDaUnidadeDaEquipe}
+            >
+              {salvandoEquipe ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</>
+              ) : (
+                "Salvar"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -707,9 +925,9 @@ export default function AdminFuncionarios() {
 /**
  * Equipes das unidades marcadas, com quem está em cada uma.
  *
- * Só leitura e exclusão: montar o time acontece na ficha da pessoa, que é o
- * lugar onde ela já está sendo cadastrada. Duas portas para a mesma associação
- * é o que fazia o gestor procurar em qual das telas ele tinha parado.
+ * Criar e montar o time acontece aqui e também na ficha da pessoa: são os dois
+ * momentos em que o gestor pensa nisso — ao cadastrar alguém e ao organizar as
+ * frentes de trabalho.
  */
 function ListaDeEquipes({
   equipes,
@@ -717,12 +935,14 @@ function ListaDeEquipes({
   equipesPorFuncionario,
   onExcluir,
   onNova,
+  onEditar,
 }: {
   equipes: Equipe[];
   funcionarios: Funcionario[];
   equipesPorFuncionario: Map<number, { equipeId: number; nome: string; cor: string | null }[]>;
   onExcluir: (id: number, nome: string) => void;
   onNova: () => void;
+  onEditar: (equipe: Equipe) => void;
 }) {
   if (equipes.length === 0) {
     return (
@@ -731,11 +951,10 @@ function ListaDeEquipes({
           <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-600 font-medium">Nenhuma equipe ainda.</p>
           <p className="text-sm text-slate-500 mt-1">
-            A equipe agrupa funcionários por frente de trabalho e recebe a O.S. designada. Ela é
-            criada dentro da ficha do funcionário.
+            A equipe agrupa funcionários por frente de trabalho e recebe a O.S. designada.
           </p>
           <Button className="mt-4" onClick={onNova}>
-            <Plus className="w-4 h-4 mr-1" /> Novo funcionário
+            <Plus className="w-4 h-4" /> Nova equipe
           </Button>
         </CardContent>
       </Card>
@@ -767,6 +986,14 @@ function ListaDeEquipes({
                     {Number(equipe.totalMembros)} membro(s)
                   </p>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onEditar(equipe)}
+                  aria-label={`Editar equipe ${equipe.nome}`}
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
