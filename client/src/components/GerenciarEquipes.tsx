@@ -439,7 +439,10 @@ function EquipeInterna({
         />
       )}
 
-      <div className="space-y-1.5">
+      {/* Segundo bloco, separado do primeiro: um cadastra a equipe, o outro
+          escolhe quem entra nela. Emendados, o botão "Cadastrar funcionário"
+          parecia parte do cadastro da equipe. */}
+      <div className="mt-5 pt-4 border-t space-y-1.5">
         <Label>Quem participa desta equipe ({escolhidos.length})</Label>
 
         {carregandoTime ? (
@@ -480,7 +483,13 @@ function EquipeInterna({
 
         {cadastrando ? (
           <FichaRapida
-            condominioId={condominioId}
+            // A ficha nasce na unidade de onde a tela foi aberta — a menos que
+            // ela nem esteja entre as atendidas, e aí na primeira marcada.
+            condominioId={
+              unidadesMarcadas.includes(condominioId)
+                ? condominioId
+                : (unidadesMarcadas[0] ?? condominioId)
+            }
             onCancelar={() => setCadastrando(false)}
             onCriado={async (id) => {
               await utils.funcionario.list.invalidate();
@@ -653,7 +662,12 @@ function FichaRapida({
   });
 
   return (
-    <div className="border rounded-md p-3 space-y-2">
+    // Fundo e título próprios: é um cadastro dentro do outro, e sem essa
+    // separação o gestor não sabia o que estava preenchendo.
+    <div className="border rounded-md p-3 space-y-2 bg-slate-50 mt-2">
+      <p className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+        <UserPlus className="w-4 h-4 text-slate-500" /> Novo funcionário
+      </p>
       <div className="space-y-1.5">
         <Label>Nome</Label>
         <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome de quem executa" autoFocus />

@@ -17,6 +17,15 @@ import { FASE_FOTO, TOM_ANEXO, estiloEtiqueta } from "@/lib/coresRegistro";
 import { prepareImageForUpload } from "@/lib/imageCompressor";
 import { QRCodeSVG } from "qrcode.react";
 import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
+import { GerenciarEquipes } from "@/components/GerenciarEquipes";
+import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Settings } from "lucide-react";
 import {
   Calendar,
   CalendarClock,
@@ -307,6 +316,15 @@ export function OsDetalhe({
   );
 
   const [comentario, setComentario] = useState("");
+  /**
+   * Cadastros abertos por cima da O.S. já aberta.
+   *
+   * Sem eles, a ordem que nasceu sem equipe e sem responsável ficava sem saída:
+   * a lista vinha vazia e o único caminho para cadastrar estava na tela de
+   * abertura, que não existe mais para uma ordem que já foi criada.
+   */
+  const [modalEquipes, setModalEquipes] = useState(false);
+  const [modalFuncionarios, setModalFuncionarios] = useState(false);
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
   const [enviando, setEnviando] = useState(false);
   const [notaAvaliacao, setNotaAvaliacao] = useState(0);
@@ -557,10 +575,37 @@ export function OsDetalhe({
 
       <p className="text-sm text-slate-600">{os.descricao || "Sem descrição inicial."}</p>
 
+      {/* Função desligada: some o campo, e quem procurava "designar equipe"
+          ficava sem saber por quê. */}
+      {!modulosIndefinidos && !temModulo("equipes") && ehGestor && (
+        <div className="border rounded-lg p-3 text-xs text-slate-500">
+          <span className="font-medium text-slate-700">Equipe designada</span> — a função
+          "Equipes de Serviço" está desligada nesta organização. Ligue em Configurações para
+          designar equipes nas ordens.
+        </div>
+      )}
+
       {/* Equipe designada: mudar aqui avisa o supervisor da equipe nova. */}
       {temModulo("equipes") && (
         <div className="border rounded-lg p-3 space-y-1.5">
-          <span className="text-sm font-medium">Equipe designada</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium">Equipe designada</span>
+            {/* Falta a equipe na lista? Cadastra aqui mesmo, sem abandonar a
+                ordem que já está aberta. */}
+            {ehGestor && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-slate-500"
+                onClick={() => setModalEquipes(true)}
+                aria-label="Cadastrar equipes"
+                title="Cadastrar equipes"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
           <Select
             value={os.equipeId ? String(os.equipeId) : ""}
             disabled={!ehGestor || atualizarOs.isPending}
@@ -692,6 +737,19 @@ export function OsDetalhe({
         <div className="flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-slate-500" />
           <span className="text-sm font-medium">Responsáveis pela O.S.</span>
+          {ehGestor && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 ml-auto text-slate-500"
+              onClick={() => setModalFuncionarios(true)}
+              aria-label="Cadastrar funcionários"
+              title="Cadastrar funcionários"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          )}
         </div>
 
         {(os.responsaveis?.length ?? 0) === 0 ? (
@@ -997,6 +1055,32 @@ export function OsDetalhe({
           </ul>
         )}
       </div>
+
+      {/* Cadastro de equipes, por cima da ordem já aberta. */}
+      <Dialog open={modalEquipes} onOpenChange={setModalEquipes}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Equipes</DialogTitle>
+          </DialogHeader>
+          <GerenciarEquipes
+            condominioId={unidadeDaOs}
+            onMudou={() => utils.equipes.list.invalidate()}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Ficha rápida de funcionário, para a ordem que nasceu sem ninguém. */}
+      <Dialog open={modalFuncionarios} onOpenChange={setModalFuncionarios}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Funcionários</DialogTitle>
+          </DialogHeader>
+          <CadastroRapidoFuncionario
+            condominioId={unidadeDaOs}
+            onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

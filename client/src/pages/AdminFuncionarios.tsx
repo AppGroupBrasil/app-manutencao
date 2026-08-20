@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -163,6 +163,8 @@ export default function AdminFuncionarios() {
    * a primeira marcada, que não é escolha de ninguém.
    */
   const [unidadeNova, setUnidadeNova] = useState<number>(0);
+  /** Unidades em que a pessoa trabalha; a de origem entra sempre. */
+  const [unidadesDoForm, setUnidadesDoForm] = useState<number[]>([]);
   /** Equipes marcadas na ficha aberta — gravadas junto com ela. */
   const [equipesDoForm, setEquipesDoForm] = useState<number[]>([]);
   /** Nome digitado no "criar equipe aqui mesmo", dentro da ficha. */
@@ -262,6 +264,7 @@ export default function AdminFuncionarios() {
     // Abre na unidade que a pessoa estava vendo; com várias marcadas, na
     // primeira delas — e o campo fica à vista para trocar.
     setUnidadeNova(orgId ?? 0);
+    setUnidadesDoForm(orgId ? [orgId] : []);
     setEquipesDoForm([]);
     setEquipeNova("");
     setCriando(true);
@@ -280,6 +283,8 @@ export default function AdminFuncionarios() {
       loginAtivo: !!f.loginAtivo,
     });
     setUnidadeNova(f.condominioId ?? orgId ?? 0);
+    // As demais chegam pela consulta e são semeadas quando ela responde.
+    setUnidadesDoForm(f.condominioId ? [f.condominioId] : []);
     setEquipesDoForm((equipesPorFuncionario.get(f.id) ?? []).map((e) => e.equipeId));
     setEquipeNova("");
     setEditando(f);
@@ -292,6 +297,36 @@ export default function AdminFuncionarios() {
     setEquipesDoForm([]);
     setEquipeNova("");
   }
+
+  /**
+   * Unidades já gravadas de quem está sendo editado.
+   *
+   * Semeadas quando chegam, e não no clique: a ficha abre com a unidade de
+   * origem e completa em seguida, sem que salvar apague vínculo nenhum.
+   */
+  const { data: unidadesGravadasDoFuncionario } = trpc.funcionario.unidades.useQuery(
+    { id: editando?.id ?? 0 },
+    { enabled: !!editando },
+  );
+
+  /**
+   * Semeia uma vez por ficha, e não a cada resposta da consulta.
+   *
+   * O React Query refaz a consulta ao voltar para a aba: sem esta trava, quem
+   * tivesse marcado unidades e trocado de janela voltava com as marcações
+   * desfeitas, sem nada na tela explicando.
+   */
+  const fichaSemeada = useRef<number | null>(null);
+  useEffect(() => {
+    if (!editando) {
+      fichaSemeada.current = null;
+      return;
+    }
+    if (!unidadesGravadasDoFuncionario || fichaSemeada.current === editando.id) return;
+
+    fichaSemeada.current = editando.id;
+    setUnidadesDoForm(unidadesGravadasDoFuncionario);
+  }, [editando, unidadesGravadasDoFuncionario]);
 
   /**
    * Equipes oferecidas na ficha: as da unidade da pessoa, e só.
@@ -500,6 +535,11 @@ export default function AdminFuncionarios() {
         // Campo em branco não mexe na senha atual.
         senha: form.senha.trim() || undefined,
         loginAtivo: form.loginAtivo,
+        // A unidade de origem fica na ficha; aqui vão as demais em que ela
+        // trabalha. Sem a consulta carregada, não mexe em nada.
+        condominiosIds: unidadesGravadasDoFuncionario
+          ? unidadesDoForm.filter((id) => id !== unidadeNova)
+          : undefined,
       });
       // `vinculos` é o que a ficha abriu marcado. Sem ele carregado, gravar
       // significaria "esta pessoa não é de nenhuma equipe" e apagaria os times
@@ -533,6 +573,7 @@ export default function AdminFuncionarios() {
       tipoFuncionario: form.tipoFuncionario,
       loginEmail: form.loginEmail.trim() || form.email.trim() || undefined,
       senha: form.senha.trim() || undefined,
+      condominiosIds: unidadesDoForm.filter((id) => id !== unidadeNova),
     });
 
     // A ficha nasce já no time: sem isto, cadastrar e montar a equipe seguiriam
@@ -758,8 +799,11 @@ export default function AdminFuncionarios() {
                   onValueChange={(valor) => {
                     setUnidadeNova(Number(valor));
                     // As equipes são da unidade anterior: manter o que estava
-                    // marcado pendurria a pessoa no time de outra unidade.
+                    // marcado pendurria a pessoa no time de outra unidade. As
+                    // unidades de trabalho reiniciam pelo mesmo motivo — a
+                    // anterior viraria vínculo de uma escolha desfeita.
                     setEquipesDoForm([]);
+                    setUnidadesDoForm([Number(valor)]);
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder={`Escolha a ${v.unidade.toLowerCase()}`} /></SelectTrigger>
@@ -771,6 +815,65 @@ export default function AdminFuncionarios() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* Onde a pessoa trabalha.
+                A ficha nasce numa unidade, mas quem atende mais de uma só
+                aparecia na primeira: na O.S. das outras ela não existia, nem
+                para ser responsável nem para entrar na equipe. */}
+            {selecao.temEscolha && (
+              <div className="space-y-1.5">
+                <Label>
+                  {v.unidade}s em que trabalha ({unidadesDoForm.length})
+                </Label>
+                <div className="border rounded-md divide-y max-h-40 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setUnidadesDoForm(
+                        unidadesDoForm.length === (organizacoes?.length ?? 0)
+                          ? [unidadeNova].filter(Boolean)
+                          : (organizacoes ?? []).map((o) => o.id),
+                      )
+                    }
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50"
+                  >
+                    <Checkbox
+                      checked={unidadesDoForm.length === (organizacoes?.length ?? 0)}
+                      className="pointer-events-none"
+                    />
+                    <span>
+                      Todas as {v.unidade.toLowerCase()}s ({organizacoes?.length ?? 0})
+                    </span>
+                  </button>
+
+                  {(organizacoes ?? []).map((o) => {
+                    const marcada = unidadesDoForm.includes(o.id);
+                    // A unidade de origem da ficha não sai: é onde a pessoa
+                    // está cadastrada, e desmarcá-la não a tiraria de lá.
+                    const fixa = o.id === unidadeNova;
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        disabled={fixa}
+                        onClick={() =>
+                          setUnidadesDoForm(
+                            marcada
+                              ? unidadesDoForm.filter((id) => id !== o.id)
+                              : [...unidadesDoForm, o.id],
+                          )
+                        }
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-70"
+                      >
+                        <Checkbox checked={marcada || fixa} className="pointer-events-none" />
+                        <span className="truncate flex-1">{o.nome}</span>
+                        {fixa && <span className="text-[11px] text-slate-400">cadastro</span>}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div className="space-y-1.5">

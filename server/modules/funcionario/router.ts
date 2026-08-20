@@ -121,6 +121,44 @@ export const funcionarioRouter = router({
      * ele mesmo cadastrou. Registros antigos, sem `criadoPorId`, continuam
      * visíveis para o master — some-los seria perder gente já cadastrada.
      */
+    /**
+     * Unidades em que a pessoa trabalha, para a ficha abrir marcada.
+     *
+     * A ficha guarda uma unidade — a de origem —, e as demais vivem em
+     * `funcionario_condominios`. Sem esta consulta a tela não teria como
+     * mostrar o que já está gravado, e salvar apagaria os vínculos.
+     */
+    unidades: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) return [];
+
+        const [ficha] = await db
+          .select({ condominioId: funcionarios.condominioId })
+          .from(funcionarios)
+          .where(eq(funcionarios.id, input.id))
+          .limit(1);
+
+        if (!ficha) return [];
+        await ctx.tenant.assert(ficha.condominioId);
+
+        const vinculos = await db
+          .select({ condominioId: funcionarioCondominios.condominioId })
+          .from(funcionarioCondominios)
+          .where(
+            and(
+              eq(funcionarioCondominios.funcionarioId, input.id),
+              or(
+                eq(funcionarioCondominios.ativo, true),
+                isNull(funcionarioCondominios.ativo),
+              ),
+            ),
+          );
+
+        return [...new Set([ficha.condominioId, ...vinculos.map((v) => v.condominioId)])];
+      }),
+
     list: protectedOrFuncionarioProcedure
       .input(
         z.object({
