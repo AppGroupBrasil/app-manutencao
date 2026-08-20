@@ -275,7 +275,7 @@ export default function Manutencoes() {
             </SelectContent>
           </Select>
           <Button onClick={() => setNovaAberta(true)}>
-            <Plus className="w-4 h-4 mr-1" /> Nova
+            <Plus className="w-4 h-4" /> Nova
           </Button>
         </div>
       </header>
@@ -329,7 +329,7 @@ export default function Manutencoes() {
                 {organizacaoAtiva ? organizacaoAtiva.nome : ""}
               </p>
               <Button className="mt-4" onClick={() => setNovaAberta(true)}>
-                <Plus className="w-4 h-4 mr-1" /> Registrar manutenção
+                <Plus className="w-4 h-4" /> Registrar manutenção
               </Button>
             </CardContent>
           </Card>
@@ -388,9 +388,9 @@ export default function Manutencoes() {
                       }}
                     >
                       {gerarPdfDaLista.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <Printer className="w-4 h-4 mr-2" />
+                        <Printer className="w-4 h-4" />
                       )}
                       PDF
                     </Button>
@@ -678,7 +678,7 @@ function DialogNova({ aberta, condominioId, onFechar, onCriada }: DialogNovaProp
         <DialogFooter>
           <Button variant="outline" onClick={onFechar}>Cancelar</Button>
           <Button onClick={submeter} disabled={criar.isPending}>
-            {criar.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando…</> : "Criar"}
+            {criar.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</> : "Criar"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -954,7 +954,7 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                       disabled={enviandoFoto}
                       onClick={() => inputFoto.current?.click()}
                     >
-                      {enviandoFoto ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-1" />}
+                      {enviandoFoto ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
                       Anexar
                     </Button>
                   </div>
@@ -1035,17 +1035,17 @@ function DialogDetalhe({ id, condominioId, onFechar }: DialogDetalheProps) {
                   }
                 }}
               >
-                <Trash2 className="w-4 h-4 mr-1" /> Excluir
+                <Trash2 className="w-4 h-4" /> Excluir
               </Button>
               <Button variant="outline" size="sm" onClick={() => recarregar()}>
-                <RefreshCw className="w-4 h-4 mr-1" /> Atualizar
+                <RefreshCw className="w-4 h-4" /> Atualizar
               </Button>
               <Button variant="outline" size="sm" disabled={gerarPdf.isPending} onClick={() => gerarPdf.mutate({ id })}>
-                {gerarPdf.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FileDown className="w-4 h-4 mr-1" />}
+                {gerarPdf.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                 PDF
               </Button>
               <Button size="sm" onClick={salvar} disabled={atualizar.isPending}>
-                {atualizar.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando…</> : "Salvar"}
+                {atualizar.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</> : "Salvar"}
               </Button>
             </DialogFooter>
           </>

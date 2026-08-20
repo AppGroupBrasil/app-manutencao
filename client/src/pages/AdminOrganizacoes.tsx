@@ -152,7 +152,7 @@ export default function AdminOrganizacoes() {
           </div>
           {podeGerenciar && (
             <Button onClick={abrirCriacao}>
-              <Plus className="w-4 h-4 mr-1" /> Nova
+              <Plus className="w-4 h-4" /> Nova
             </Button>
           )}
         </div>
@@ -296,7 +296,7 @@ Ninguém que trabalha nela entra: gestor e equipe. Os dados ficam guardados.`,
           <DialogFooter>
             <Button variant="outline" onClick={fechar}>Cancelar</Button>
             <Button onClick={salvar} disabled={salvando}>
-              {salvando ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando…</> : "Salvar"}
+              {salvando ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</> : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>

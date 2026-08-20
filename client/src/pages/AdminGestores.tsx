@@ -201,7 +201,7 @@ export default function AdminGestores() {
           </div>
           {podeGerenciar && (
             <Button onClick={abrirCriacao}>
-              <Plus className="w-4 h-4 mr-1" /> Novo
+              <Plus className="w-4 h-4" /> Novo
             </Button>
           )}
         </div>
@@ -241,7 +241,7 @@ export default function AdminGestores() {
                       {g.nome ?? "(sem nome)"}
                       {g.dono && (
                         <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white">
-                          <Crown className="w-3 h-3 mr-1" /> {v.gerente}
+                          <Crown className="w-3 h-3" /> {v.gerente}
                         </Badge>
                       )}
                     </p>
@@ -382,7 +382,7 @@ export default function AdminGestores() {
           <DialogFooter>
             <Button variant="outline" onClick={fechar}>Cancelar</Button>
             <Button onClick={salvar} disabled={salvando}>
-              {salvando ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando…</> : "Salvar"}
+              {salvando ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</> : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>
