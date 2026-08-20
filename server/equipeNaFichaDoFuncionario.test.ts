@@ -30,6 +30,8 @@ const { equipes, equipeFuncionarios, funcionarios } = await import("../drizzle/s
  * de ser "de que unidade ela é" e passou a ser "quais ela atende".
  */
 let unidadesDaEquipe: Record<number, number[]>;
+/** Equipes que são empresa contratada, e não time da casa. */
+let externas: Set<number>;
 /** Vínculos existentes (equipeId) do funcionário 7. */
 let vinculos: number[];
 /** O que a rota gravou e apagou, para o teste conferir. */
@@ -71,9 +73,12 @@ function fakeDb() {
           return encadeavel([{ id: 7, condominioId: 1 }]);
         }
         if (tabela === equipes) {
-          // Só as equipes pedidas que atendem mesmo a unidade 1.
+          // Só as equipes pedidas que atendem mesmo a unidade 1 e têm gente
+          // dentro: a rota recusa empresa contratada.
           return encadeavel(
-            ids.filter((id) => unidadesDaEquipe[id]?.includes(1)).map((id) => ({ id })),
+            ids
+              .filter((id) => unidadesDaEquipe[id]?.includes(1) && !externas.has(id))
+              .map((id) => ({ id })),
           );
         }
         // Vínculos atuais do funcionário (join com equipes).
@@ -118,8 +123,10 @@ function chamador() {
 }
 
 beforeEach(() => {
-  // 10 e 11 atendem a unidade 1; a 20 só a unidade 2; a 30 é de rede.
-  unidadesDaEquipe = { 10: [1], 11: [1], 20: [2], 30: [1, 2] };
+  // 10 e 11 atendem a unidade 1; a 20 só a unidade 2; a 30 é de rede; a 40 é
+  // empresa contratada, que atende a unidade 1 e não tem funcionário dentro.
+  unidadesDaEquipe = { 10: [1], 11: [1], 20: [2], 30: [1, 2], 40: [1] };
+  externas = new Set([40]);
   vinculos = [];
   inseridos = [];
   apagou = false;
@@ -162,6 +169,16 @@ describe("equipes.definirDoFuncionario", () => {
 
     expect(inseridos).toEqual([]);
     expect(apagou).toBe(false);
+  });
+
+  it("recusa empresa contratada: ela não tem funcionário dentro", async () => {
+    // O aviso da O.S. dela vai para o e-mail da empresa. Um funcionário
+    // marcado ali ficaria num vínculo que nenhuma tela mostra.
+    await expect(
+      chamador().definirDoFuncionario({ condominioId: 1, funcionarioId: 7, equipeIds: [40] }),
+    ).rejects.toThrow(/equipes da casa/i);
+
+    expect(inseridos).toEqual([]);
   });
 
   it("aceita equipe de rede, que atende a unidade da pessoa sem ser dela", async () => {

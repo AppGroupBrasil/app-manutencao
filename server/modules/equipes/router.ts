@@ -131,6 +131,9 @@ export const equipesRouter = router({
           nome: equipes.nome,
           descricao: equipes.descricao,
           cor: equipes.cor,
+          externa: equipes.externa,
+          email: equipes.email,
+          whatsapp: equipes.whatsapp,
           createdAt: equipes.createdAt,
           totalMembros: sql<number>`(
             SELECT COUNT(*) FROM "equipe_funcionarios" ef
@@ -252,6 +255,9 @@ export const equipesRouter = router({
                 inArray(equipes.id, input.equipeIds),
                 eq(equipeUnidades.condominioId, funcionario.condominioId),
                 eq(equipes.ativo, true),
+                // Empresa contratada não tem funcionário dentro: marcar alguém
+                // nela pela ficha criaria vínculo que nenhuma tela mostra.
+                eq(equipes.externa, false),
               ),
             )
         : [];
@@ -259,7 +265,7 @@ export const equipesRouter = router({
       if (daUnidade.length !== input.equipeIds.length) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "Só é possível usar equipes que atendem a unidade do funcionário.",
+          message: "Só é possível usar equipes da casa que atendem a unidade do funcionário.",
         });
       }
 
@@ -317,11 +323,25 @@ export const equipesRouter = router({
          * de rede.
          */
         unidades: z.array(z.number().int().positive()).max(100).optional(),
+        /** Empresa de fora: sem funcionário dentro, avisada por e-mail. */
+        externa: z.boolean().optional(),
+        email: z.string().email().max(255).optional(),
+        whatsapp: z.string().max(20).optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("DB indisponível");
+
+      // Sem e-mail, "a equipe recebe o aviso da O.S." deixa de valer para a
+      // externa: ela não tem funcionário no sistema e o aviso não teria para
+      // onde ir. Melhor recusar aqui do que descobrir na primeira designação.
+      if (input.externa && !input.email?.trim()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Informe o e-mail da empresa externa: é para onde vai o aviso da O.S.",
+        });
+      }
 
       const unidades = await unidadesDaEquipe(ctx, ctx.condominioId, input.unidades);
 
@@ -331,7 +351,10 @@ export const equipesRouter = router({
           condominioId: ctx.condominioId,
           nome: input.nome,
           descricao: input.descricao || null,
-          cor: input.cor || "#3b82f6",
+          cor: input.cor || (input.externa ? "#a855f7" : "#3b82f6"),
+          externa: input.externa ?? false,
+          email: input.email?.trim() || null,
+          whatsapp: input.whatsapp?.trim() || null,
         })
         .returning();
 
@@ -349,6 +372,8 @@ export const equipesRouter = router({
         cor: z.string().optional(),
         /** Ausente não mexe nas unidades; presente troca a lista inteira. */
         unidades: z.array(z.number().int().positive()).max(100).optional(),
+        email: z.string().email().max(255).nullable().optional(),
+        whatsapp: z.string().max(20).nullable().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -356,6 +381,24 @@ export const equipesRouter = router({
       if (!db) throw new Error("DB indisponível");
 
       const { id, unidades: pedidas, ...dados } = input;
+
+      // Externa sem e-mail deixaria de ser avisada, e a tela não diria nada:
+      // a designação seguiria "bem-sucedida" com ninguém do outro lado.
+      if (dados.email !== undefined && !dados.email) {
+        const [atual] = await db
+          .select({ externa: equipes.externa })
+          .from(equipes)
+          .where(eq(equipes.id, id))
+          .limit(1);
+
+        if (atual?.externa) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A empresa externa precisa de um e-mail: é para onde vai o aviso da O.S.",
+          });
+        }
+      }
+
       await db.update(equipes).set({ ...dados, updatedAt: new Date() }).where(eq(equipes.id, id));
 
       if (pedidas) {
@@ -436,6 +479,22 @@ export const equipesRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("DB indisponível");
+
+      // Empresa contratada não tem time no sistema: pendurar funcionário nela
+      // criaria uma equipe que a tela não sabe desenhar e que o aviso da O.S.
+      // ignora — ele vai para o e-mail da empresa, não para os membros.
+      const [equipe] = await db
+        .select({ externa: equipes.externa })
+        .from(equipes)
+        .where(eq(equipes.id, input.equipeId))
+        .limit(1);
+
+      if (equipe?.externa) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Empresa externa não tem funcionários no sistema.",
+        });
+      }
 
       // Lista de ids não passa pelo mapa de escopo: sem esta conferência daria
       // para pendurar funcionário de outra organização na equipe. O recorte é

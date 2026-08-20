@@ -34,10 +34,14 @@ vi.mock("./_core/protocolo", () => ({
 
 vi.mock("./storage", () => ({ storagePut: async () => ({ url: "" }) }));
 
-/** E-mail desligado: o teste olha o aviso dentro do sistema. */
+/** E-mails enviados, para conferir o aviso da empresa contratada. */
+const enviados: { to: string[]; subject: string }[] = [];
+
 vi.mock("./_core/email", () => ({
-  isEmailConfigured: () => false,
-  sendEmail: async () => undefined,
+  isEmailConfigured: () => true,
+  sendEmail: async (msg: { to: string[]; subject: string }) => {
+    enviados.push(msg);
+  },
 }));
 
 const {
@@ -64,6 +68,8 @@ let membros: {
 }[];
 /** Unidades que a equipe 3 atende; muda para simular equipe de outra unidade. */
 let unidadesDaEquipe: number[];
+/** A equipe 3 é empresa contratada, sem funcionário dentro? */
+let equipeExterna: boolean;
 let osAtual: Record<string, unknown>;
 let avisos: { titulo: string; userId: unknown; funcionarioId: unknown }[];
 let timeline: string[];
@@ -76,7 +82,19 @@ function fakeDb() {
     [osResponsaveis, []],
     [condominios, [{ id: 1, nome: "Creche Central", autoNotificar: false, ligado: false }]],
     [osStatus, [{ id: 10, nome: "Aguardando início", isFinal: false, ordem: 1 }]],
-    [equipes, [{ id: 3, nome: "Elétrica", cor: "#000", ativo: true }]],
+    [
+      equipes,
+      [
+        {
+          id: 3,
+          nome: equipeExterna ? "Refrigeração Silva" : "Elétrica",
+          cor: "#000",
+          ativo: true,
+          externa: equipeExterna,
+          email: equipeExterna ? "contato@silva.com.br" : null,
+        },
+      ],
+    ],
     // A O.S. do teste é da unidade 1: a equipe só pode ser designada se esta
     // unidade estiver entre as que ela atende.
     [
@@ -173,6 +191,8 @@ beforeEach(() => {
   avisos = [];
   timeline = [];
   responsaveis = [];
+  enviados.length = 0;
+  equipeExterna = false;
   unidadesDaEquipe = [1];
   membros = [
     { id: 71, nome: "Ana", email: "ana@ex.com", loginEmail: null, tipo: "supervisor" },
@@ -263,6 +283,24 @@ describe("equipe designada na abertura", () => {
 
     // Ana é supervisora: é ela quem recebe, endereçada pelo id de funcionário.
     expect(avisos.some((a) => a.funcionarioId === 71)).toBe(true);
+  });
+
+  it("empresa contratada é avisada por e-mail, sem aviso no portal", async () => {
+    equipeExterna = true;
+
+    await comoGerente().create({
+      condominioId: 1,
+      titulo: "Trocar compressor",
+      prazoLimite: "2026-08-20",
+      equipeId: 3,
+    });
+
+    expect(enviados[0]?.to).toEqual(["contato@silva.com.br"]);
+    // Ninguém de fora tem conta no portal: aviso interno seria endereçado a
+    // funcionário que não existe.
+    expect(avisos).toEqual([]);
+    expect(responsaveis).toEqual([]);
+    expect(timeline.some((t) => t.includes("Refrigeração Silva"))).toBe(true);
   });
 
   it("o time inteiro entra como responsável pela O.S.", async () => {

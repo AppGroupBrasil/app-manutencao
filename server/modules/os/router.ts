@@ -265,6 +265,17 @@ async function membrosViramResponsaveis(
   ordemServicoId: number,
   equipeId: number,
 ): Promise<number> {
+  // Empresa contratada não põe ninguém como responsável: quem responde por ela
+  // não tem ficha no sistema. Perguntar aqui, e não confiar em "a tabela de
+  // membros está vazia": um contato cadastrado por engano viraria responsável.
+  const [equipe] = await db
+    .select({ externa: equipes.externa })
+    .from(equipes)
+    .where(eq(equipes.id, equipeId))
+    .limit(1);
+
+  if (equipe?.externa) return 0;
+
   const membros = await db
     .select({
       id: funcionarios.id,
@@ -338,10 +349,34 @@ async function notificarEquipeDesignada(
   equipeId: number,
 ): Promise<{ equipe: string | null; avisados: string[] }> {
   const [equipe] = await db
-    .select({ nome: equipes.nome })
+    .select({ nome: equipes.nome, externa: equipes.externa, email: equipes.email })
     .from(equipes)
     .where(eq(equipes.id, equipeId))
     .limit(1);
+
+  // Empresa de fora não tem funcionário no sistema: o aviso é o e-mail dela, e
+  // não existe supervisor para notificar dentro do portal.
+  if (equipe?.externa) {
+    if (equipe.email) {
+      const { isEmailConfigured, sendEmail } = await import("../../_core/email");
+      if (isEmailConfigured()) {
+        await sendEmail({
+          to: [equipe.email],
+          subject: `O.S. ${os.protocolo} designada para ${equipe.nome}`,
+          text: [
+            `A ordem de serviço ${os.protocolo} foi designada para ${equipe.nome}.`,
+            ``,
+            `Serviço: ${os.titulo}`,
+            os.prazoLimite ? `Data máxima para finalização: ${formatarDia(os.prazoLimite)}` : ``,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        });
+      }
+    }
+
+    return { equipe: equipe.nome, avisados: equipe.email ? [equipe.email] : [] };
+  }
 
   const membros = await db
     .select({

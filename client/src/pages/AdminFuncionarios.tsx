@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { ArrowLeft, Loader2, Pencil, Plus, Search, SlidersHorizontal, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Pencil, Plus, Search, SlidersHorizontal, Trash2, Users } from "lucide-react";
 import { PermissoesFuncionario } from "@/components/PermissoesFuncionario";
 import { SeletorUnidades } from "@/components/SeletorUnidades";
 import { useBootstrap } from "@/hooks/useBootstrap";
@@ -69,6 +69,10 @@ type Equipe = {
   totalMembros: number;
   /** Em quantas unidades ela atende. Mais de uma é equipe de rede. */
   totalUnidades?: number;
+  /** Empresa contratada: sem funcionários dentro, avisada por e-mail. */
+  externa?: boolean;
+  email?: string | null;
+  whatsapp?: string | null;
 };
 
 /**
@@ -89,6 +93,13 @@ type FichaEquipe = {
    * precisa aparecer na O.S. de qualquer uma delas.
    */
   unidades: number[] | null;
+  /**
+   * Empresa contratada. Não tem funcionário dentro: quem recebe o aviso da
+   * O.S. é o e-mail dela, e por isso ele é obrigatório.
+   */
+  externa: boolean;
+  email: string;
+  whatsapp: string;
   /**
    * Funcionários marcados. `null` é "ninguém mexeu ainda": vale o que está
    * gravado no servidor.
@@ -290,10 +301,16 @@ export default function AdminFuncionarios() {
    * não vieram na lista — a ficha diria "nenhuma equipe" com equipes existindo.
    */
   const fichaAberta = criando || !!editando;
-  const { data: equipesDaUnidadeDoForm } = trpc.equipes.list.useQuery(
+  const { data: equipesDaUnidade } = trpc.equipes.list.useQuery(
     { condominioId: unidadeNova, unidades: [unidadeNova] },
     { enabled: usaEquipes && fichaAberta && unidadeNova > 0 },
   );
+  /**
+   * Empresa contratada fica de fora: ela não tem funcionário dentro, e marcar
+   * alguém nela criaria um vínculo que o aviso da O.S. ignora — ele vai para o
+   * e-mail da empresa, não para os membros.
+   */
+  const equipesDaUnidadeDoForm = (equipesDaUnidade ?? []).filter((e) => !e.externa);
 
   /**
    * Equipe criada de dentro da ficha, já marcada.
@@ -339,17 +356,28 @@ export default function AdminFuncionarios() {
     { enabled: usaEquipes && unidadeDaEquipe > 0 },
   );
 
-  function abrirCriacaoEquipe() {
+  function abrirCriacaoEquipe(externa = false) {
     setFichaEquipe({
       id: null,
       nome: "",
       unidades: orgId ? [orgId] : [],
       membros: [],
+      externa,
+      email: "",
+      whatsapp: "",
     });
   }
 
   function abrirEdicaoEquipe(equipe: Equipe) {
-    setFichaEquipe({ id: equipe.id, nome: equipe.nome, unidades: null, membros: null });
+    setFichaEquipe({
+      id: equipe.id,
+      nome: equipe.nome,
+      unidades: null,
+      membros: null,
+      externa: !!equipe.externa,
+      email: equipe.email ?? "",
+      whatsapp: equipe.whatsapp ?? "",
+    });
   }
 
   /** Quem o servidor diz que está na equipe aberta. */
@@ -372,29 +400,55 @@ export default function AdminFuncionarios() {
     if (unidadesMarcadas.length === 0) {
       return toast.error(`Marque ao menos uma ${v.unidade.toLowerCase()}`);
     }
+    // Sem e-mail a empresa contratada não seria avisada de nada, e a tela não
+    // teria como dizer isso depois da designação.
+    if (fichaEquipe.externa && !fichaEquipe.email.trim()) {
+      return toast.error("Informe o e-mail da empresa: é para onde vai o aviso da O.S.");
+    }
+    // Sem esta conferência o erro viria do validador do servidor, em inglês.
+    if (fichaEquipe.externa && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fichaEquipe.email.trim())) {
+      return toast.error("E-mail inválido");
+    }
     // `definirDoFuncionario` grava a lista inteira de equipes da pessoa: sem os
     // vínculos carregados, montar este time apagaria os outros dela.
-    if (!vinculosDaUnidadeDaEquipe) {
+    if (!fichaEquipe.externa && !vinculosDaUnidadeDaEquipe) {
       return toast.error(`Aguarde carregar os funcionários desta ${v.unidade.toLowerCase()}.`);
     }
 
     let equipeId = fichaEquipe.id;
     if (equipeId) {
-      await atualizarEquipe.mutateAsync({ id: equipeId, nome, unidades: unidadesMarcadas });
+      await atualizarEquipe.mutateAsync({
+        id: equipeId,
+        nome,
+        unidades: unidadesMarcadas,
+        email: fichaEquipe.externa ? fichaEquipe.email.trim() : undefined,
+        whatsapp: fichaEquipe.externa ? fichaEquipe.whatsapp.trim() || null : undefined,
+      });
     } else {
       equipeId = (
         await criarEquipe.mutateAsync({
           condominioId: unidadesMarcadas[0],
           nome,
           unidades: unidadesMarcadas,
+          externa: fichaEquipe.externa,
+          email: fichaEquipe.externa ? fichaEquipe.email.trim() : undefined,
+          whatsapp: fichaEquipe.externa ? fichaEquipe.whatsapp.trim() || undefined : undefined,
         })
       ).id;
+    }
+
+    // Empresa contratada não tem funcionário dentro: o time acaba aqui.
+    if (fichaEquipe.externa) {
+      await recarregar();
+      toast.success(fichaEquipe.id ? "Empresa atualizada" : `Empresa "${nome}" cadastrada`);
+      setFichaEquipe(null);
+      return;
     }
 
     /** As outras equipes de cada pessoa, que precisam sobreviver à gravação. */
     const outras = new Map<number, number[]>();
     const jaEstavam = new Set<number>();
-    for (const vinculo of vinculosDaUnidadeDaEquipe) {
+    for (const vinculo of vinculosDaUnidadeDaEquipe ?? []) {
       if (vinculo.equipeId === equipeId) {
         jaEstavam.add(vinculo.funcionarioId);
         continue;
@@ -518,9 +572,16 @@ export default function AdminFuncionarios() {
           {/* O botão é da aba que está aberta: em Equipes ele abria a ficha de
               funcionário, e não havia como criar uma equipe pela tela. */}
           {abaEquipes ? (
-            <Button onClick={abrirCriacaoEquipe}>
-              <Plus className="w-4 h-4" /> Nova equipe
-            </Button>
+            // Os dois caminhos à mão: time da casa e empresa contratada são
+            // cadastros diferentes, e escolher isso é a primeira pergunta.
+            <div className="flex gap-2">
+              <Button onClick={() => abrirCriacaoEquipe(false)}>
+                <Plus className="w-4 h-4" /> Nova equipe
+              </Button>
+              <Button variant="outline" onClick={() => abrirCriacaoEquipe(true)}>
+                <Building2 className="w-4 h-4" /> Empresa externa
+              </Button>
+            </div>
           ) : (
             <Button onClick={abrirCriacao}>
               <Plus className="w-4 h-4" /> Novo
@@ -872,9 +933,19 @@ export default function AdminFuncionarios() {
       <Dialog open={!!fichaEquipe} onOpenChange={(aberto) => !aberto && setFichaEquipe(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{fichaEquipe?.id ? "Editar equipe" : "Nova equipe"}</DialogTitle>
+            <DialogTitle>
+              {fichaEquipe?.externa
+                ? fichaEquipe.id
+                  ? "Editar empresa externa"
+                  : "Nova empresa externa"
+                : fichaEquipe?.id
+                  ? "Editar equipe"
+                  : "Nova equipe"}
+            </DialogTitle>
             <DialogDescription>
-              A equipe agrupa funcionários por frente de trabalho e recebe a O.S. designada.
+              {fichaEquipe?.externa
+                ? "Empresa contratada: recebe a O.S. designada por e-mail, sem funcionários no sistema."
+                : "A equipe agrupa funcionários por frente de trabalho e recebe a O.S. designada."}
             </DialogDescription>
           </DialogHeader>
 
@@ -943,6 +1014,34 @@ export default function AdminFuncionarios() {
                 </div>
               )}
 
+              {/* Empresa contratada não tem funcionário dentro: o que ela
+                  precisa é do contato para onde o aviso da O.S. vai. */}
+              {fichaEquipe.externa ? (
+                <div className="border-t pt-3 space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="e-email">E-mail</Label>
+                    <Input
+                      id="e-email"
+                      type="email"
+                      value={fichaEquipe.email}
+                      onChange={(e) => setFichaEquipe({ ...fichaEquipe, email: e.target.value })}
+                      placeholder="contato@empresa.com.br"
+                    />
+                    <p className="text-xs text-slate-500">
+                      É para cá que vai o aviso quando a O.S. for designada a esta empresa.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="e-zap">WhatsApp (opcional)</Label>
+                    <Input
+                      id="e-zap"
+                      value={fichaEquipe.whatsapp}
+                      onChange={(e) => setFichaEquipe({ ...fichaEquipe, whatsapp: e.target.value })}
+                      placeholder="(11) 99999-9999"
+                    />
+                  </div>
+                </div>
+              ) : (
               <div className="border-t pt-3 space-y-2">
                 <p className="text-sm font-medium text-slate-700">
                   Funcionários desta equipe ({membrosMarcados.length})
@@ -985,6 +1084,7 @@ export default function AdminFuncionarios() {
                   </div>
                 )}
               </div>
+              )}
             </div>
           )}
 
@@ -996,10 +1096,11 @@ export default function AdminFuncionarios() {
               // lista vazia e devolveria "marque ao menos uma unidade" numa
               // equipe que tem unidades. Sem unidade nenhuma escolhida a
               // consulta nem roda, e aí quem avisa é o próprio salvar.
+              // A empresa contratada não espera vínculo nenhum: ela não tem time.
               disabled={
                 salvandoEquipe ||
                 (!!fichaEquipe?.id && !unidadesGravadas) ||
-                (unidadeDaEquipe > 0 && !vinculosDaUnidadeDaEquipe)
+                (!fichaEquipe?.externa && unidadeDaEquipe > 0 && !vinculosDaUnidadeDaEquipe)
               }
             >
               {salvandoEquipe ? (
@@ -1034,7 +1135,7 @@ function ListaDeEquipes({
   funcionarios: Funcionario[];
   equipesPorFuncionario: Map<number, { equipeId: number; nome: string; cor: string | null }[]>;
   onExcluir: (id: number, nome: string) => void;
-  onNova: () => void;
+  onNova: (externa: boolean) => void;
   onEditar: (equipe: Equipe) => void;
 }) {
   if (equipes.length === 0) {
@@ -1044,11 +1145,17 @@ function ListaDeEquipes({
           <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-600 font-medium">Nenhuma equipe ainda.</p>
           <p className="text-sm text-slate-500 mt-1">
-            A equipe agrupa funcionários por frente de trabalho e recebe a O.S. designada.
+            A equipe recebe a O.S. designada e responde pelo serviço — seja o time da casa ou
+            uma empresa contratada.
           </p>
-          <Button className="mt-4" onClick={onNova}>
-            <Plus className="w-4 h-4" /> Nova equipe
-          </Button>
+          <div className="flex justify-center gap-2 mt-4">
+            <Button onClick={() => onNova(false)}>
+              <Plus className="w-4 h-4" /> Nova equipe
+            </Button>
+            <Button variant="outline" onClick={() => onNova(true)}>
+              <Building2 className="w-4 h-4" /> Empresa externa
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -1073,8 +1180,15 @@ function ListaDeEquipes({
                   style={{ background: equipe.cor ?? "#3b82f6" }}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-800 truncate">{equipe.nome}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="font-medium text-slate-800 truncate">
+                    {equipe.nome}
+                    {equipe.externa && (
+                      <span className="ml-1.5 text-[11px] font-normal text-purple-700">
+                        externa
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
                     {/* Equipe de rede não tem uma unidade para nomear: o que
                         descreve ela é em quantas atende. */}
                     {Number(equipe.totalUnidades ?? 1) > 1
@@ -1082,7 +1196,9 @@ function ListaDeEquipes({
                       : equipe.unidadeNome
                         ? `${equipe.unidadeNome} · `
                         : ""}
-                    {Number(equipe.totalMembros)} membro(s)
+                    {equipe.externa
+                      ? (equipe.email ?? "sem e-mail")
+                      : `${Number(equipe.totalMembros)} membro(s)`}
                   </p>
                 </div>
                 <Button

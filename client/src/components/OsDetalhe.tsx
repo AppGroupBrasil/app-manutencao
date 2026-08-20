@@ -39,8 +39,6 @@ import {
 /** O seletor não aceita valor vazio; esta é a opção "tirar a equipe". */
 const SEM_EQUIPE = "nenhuma";
 
-/** Abre o campo do nome da empresa de fora que ficou com o serviço. */
-const EQUIPE_EXTERNA = "externa";
 
 const FASES = [
   { valor: "antes", rotulo: "Antes" },
@@ -309,8 +307,6 @@ export function OsDetalhe({
   );
 
   const [comentario, setComentario] = useState("");
-  /** Campo do nome da empresa de fora, aberto pelo seletor de equipe. */
-  const [externaAberta, setExternaAberta] = useState(false);
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
   const [enviando, setEnviando] = useState(false);
   const [notaAvaliacao, setNotaAvaliacao] = useState(0);
@@ -351,6 +347,8 @@ export function OsDetalhe({
     { condominioId: unidadeDaOs },
     { enabled: unidadeDaOs > 0 && !modulosIndefinidos && temModulo("equipes") },
   );
+  /** A equipe que está com esta O.S.: mostra o time dela ou o contato da empresa. */
+  const equipeDesignada = (equipesDaUnidade ?? []).find((e) => e.id === os?.equipeId);
 
   const gerarPdf = trpc.ordensServico.generatePDF.useMutation({
     onSuccess: (res) => {
@@ -564,34 +562,20 @@ export function OsDetalhe({
         <div className="border rounded-lg p-3 space-y-1.5">
           <span className="text-sm font-medium">Equipe designada</span>
           <Select
-            value={
-              // `externaAberta` primeiro: escolher "Empresa externa…" ainda não
-              // gravou nada, e ler só a O.S. faria o seletor pular de volta
-              // para a equipe antiga enquanto o nome está sendo digitado.
-              externaAberta
-                ? EQUIPE_EXTERNA
-                : os.equipeId
-                  ? String(os.equipeId)
-                  : os.equipeExterna
-                    ? EQUIPE_EXTERNA
-                    : ""
-            }
+            value={os.equipeId ? String(os.equipeId) : ""}
             disabled={!ehGestor || atualizarOs.isPending}
-            onValueChange={(valor) => {
-              if (valor === EQUIPE_EXTERNA) {
-                // Só abre o campo; gravar é no `blur`, com o nome digitado.
-                setExternaAberta(true);
-                return;
-              }
-              setExternaAberta(false);
+            onValueChange={(valor) =>
               atualizarOs.mutate({
                 id: ordemServicoId,
                 // Designação errada precisa ter volta, senão a ordem fica
                 // pendurada numa equipe que não vai fazer o serviço.
                 equipeId: valor === SEM_EQUIPE ? null : Number(valor),
-                equipeExterna: valor === SEM_EQUIPE ? null : undefined,
-              });
-            }}
+                // Escolher uma equipe apaga o nome digitado à mão nas ordens
+                // antigas — ela passa a ser quem responde. Tirar a designação
+                // não apaga: seria descartar o histórico sem ninguém pedir.
+                equipeExterna: valor === SEM_EQUIPE ? undefined : null,
+              })
+            }
           >
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Nenhuma equipe designada" />
@@ -601,43 +585,36 @@ export function OsDetalhe({
               {(equipesDaUnidade ?? []).map((e) => (
                 <SelectItem key={e.id} value={String(e.id)}>
                   {e.nome}
+                  {e.externa ? " (externa)" : ""}
                 </SelectItem>
               ))}
-              <SelectItem value={EQUIPE_EXTERNA}>Empresa externa…</SelectItem>
             </SelectContent>
           </Select>
 
-          {(externaAberta || (!!os.equipeExterna && !os.equipeId)) && (
-            <Input
-              className="h-9"
-              defaultValue={os.equipeExterna ?? ""}
-              disabled={!ehGestor || atualizarOs.isPending}
-              placeholder="Nome da empresa (ex: Refrigeração Silva)"
-              onBlur={(e) => {
-                const nome = e.target.value.trim();
-                if (nome === (os.equipeExterna ?? "")) return;
-                atualizarOs.mutate({
-                  id: ordemServicoId,
-                  equipeExterna: nome || null,
-                  // Empresa de fora e equipe de casa são o mesmo campo: uma
-                  // desfaz a outra.
-                  equipeId: nome ? null : undefined,
-                });
-              }}
-            />
+          {/* Ordem antiga, aberta quando a empresa de fora era nome digitado.
+              Fica à vista até alguém escolher uma equipe cadastrada. */}
+          {!os.equipeId && os.equipeExterna && (
+            <p className="text-xs text-slate-600">
+              Serviço com <strong>{os.equipeExterna}</strong> (anotado antes de a empresa virar
+              cadastro).
+            </p>
           )}
 
           {/* Sem equipe atendendo a unidade, o seletor vazio parecia defeito:
               o gestor via o campo, nenhuma opção e nenhuma explicação. */}
           {(equipesDaUnidade?.length ?? 0) === 0 && (
             <p className="text-xs text-slate-500">
-              Nenhuma equipe atende esta unidade ainda — cadastre em Funcionários,
-              aba Equipes, e marque esta unidade.
+              Nenhuma equipe atende esta unidade ainda — cadastre pela engrenagem, em
+              Funcionários, ou na aba Equipes.
             </p>
           )}
 
-          {os.equipeId ? (
-            <MembrosDaEquipeEscolhida equipeId={os.equipeId} />
+          {equipeDesignada ? (
+            <MembrosDaEquipeEscolhida
+              equipeId={equipeDesignada.id}
+              externa={equipeDesignada.externa}
+              email={equipeDesignada.email}
+            />
           ) : (
             <p className="text-xs text-slate-500">
               {ehGestor

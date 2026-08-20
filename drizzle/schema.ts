@@ -1534,6 +1534,16 @@ export const equipes = pgTable("equipes", {
   nome: varchar("nome", { length: 255 }).notNull(),
   descricao: text("descricao"),
   cor: varchar("cor", { length: 20 }).default("#3b82f6"),
+  /**
+   * Empresa de fora: equipe sem funcionário dentro.
+   *
+   * Quem recebe o aviso da O.S. designada é o e-mail dela, e não o supervisor
+   * do time — é a única diferença de comportamento entre as duas.
+   */
+  externa: boolean("externa").default(false).notNull(),
+  /** Contato da empresa externa, para onde vai o aviso da O.S. */
+  email: varchar("email", { length: 255 }),
+  whatsapp: varchar("whatsapp", { length: 20 }),
   ativo: boolean("ativo").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),

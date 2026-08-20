@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { Loader2, Users } from "lucide-react";
+import { Building2, Loader2, Users } from "lucide-react";
 
 /**
  * Quem está na equipe escolhida para a O.S.
@@ -9,11 +9,33 @@ import { Loader2, Users } from "lucide-react";
  * o time aparece embaixo do seletor, e a frase diz quem vai ser avisado — que é
  * a pergunta seguinte de quem acabou de designar.
  */
-export function MembrosDaEquipeEscolhida({ equipeId }: { equipeId: number }) {
+export function MembrosDaEquipeEscolhida({
+  equipeId,
+  externa,
+  email,
+}: {
+  equipeId: number;
+  /** Empresa de fora: não tem membros, e o aviso vai para o e-mail dela. */
+  externa?: boolean | null;
+  email?: string | null;
+}) {
   const { data: membros, isLoading } = trpc.equipes.membros.useQuery(
     { equipeId },
-    { enabled: equipeId > 0 },
+    { enabled: equipeId > 0 && !externa },
   );
+
+  if (externa) {
+    return (
+      <div className="mt-2 rounded-md border bg-slate-50 px-2.5 py-2">
+        <p className="text-[11px] uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+          <Building2 className="w-3.5 h-3.5" /> Empresa externa
+        </p>
+        <p className="text-xs text-slate-700 mt-1">
+          {email ? `Aviso da O.S. vai para ${email}.` : "Sem e-mail cadastrado: ninguém será avisado."}
+        </p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

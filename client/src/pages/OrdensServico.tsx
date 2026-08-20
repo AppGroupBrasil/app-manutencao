@@ -256,17 +256,12 @@ const FORM_VAZIO = {
   /** Data máxima de finalização; obrigatória nas unidades com o fluxo. */
   prazoLimite: "",
   /**
-   * Equipe que fica com o serviço; o supervisor dela recebe o aviso.
-   * `EQUIPE_EXTERNA` é a empresa de fora, com o nome digitado ao lado.
+   * Equipe que fica com o serviço: time da casa ou empresa contratada, que é
+   * uma equipe cadastrada como as outras. Quem recebe o aviso é ela.
    */
   equipeId: "",
-  /** Nome da empresa terceirizada, quando o serviço não é de casa. */
-  equipeExterna: "",
   observacoes: "",
 };
-
-/** Valor do seletor que abre o campo de nome da empresa de fora. */
-const EQUIPE_EXTERNA = "externa";
 
 /** Página do gestor: resolve a unidade pela sessão e entrega o conteúdo. */
 export default function OrdensServico({ osInicial }: { osInicial?: number }) {
@@ -421,6 +416,8 @@ export function ConteudoOrdensServico({
     { condominioId: unidadeNova },
     { enabled: unidadeNova > 0 && !modulosIndefinidos && temModulo("equipes") },
   );
+  /** A equipe marcada no formulário, para mostrar o time ou o contato dela. */
+  const equipeEscolhida = (equipesDaUnidade ?? []).find((e) => String(e.id) === form.equipeId);
 
   const [busca, setBusca] = useState("");
   /**
@@ -1081,7 +1078,6 @@ export function ConteudoOrdensServico({
                       prioridadeId: "",
                       statusId: "",
                       equipeId: "",
-                      equipeExterna: "",
                     }));
                     setResponsaveisNova([]);
                   }}
@@ -1188,39 +1184,23 @@ export function ConteudoOrdensServico({
                 </div>
                 <Select
                   value={form.equipeId}
-                  onValueChange={(valor) =>
-                    setForm({
-                      ...form,
-                      equipeId: valor,
-                      // Trocar para uma equipe de casa apaga o nome digitado:
-                      // a O.S. tem um responsável só pelo serviço.
-                      equipeExterna: valor === EQUIPE_EXTERNA ? form.equipeExterna : "",
-                    })
-                  }
+                  onValueChange={(valor) => setForm({ ...form, equipeId: valor })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Designar depois" />
                   </SelectTrigger>
                   <SelectContent>
+                    {/* Equipe da casa e empresa contratada na mesma lista: quem
+                        designa quer dizer quem faz o serviço, não de que
+                        cadastro o nome veio. */}
                     {(equipesDaUnidade ?? []).map((e) => (
                       <SelectItem key={e.id} value={String(e.id)}>
                         {e.nome}
+                        {e.externa ? " (externa)" : ""}
                       </SelectItem>
                     ))}
-                    {/* Serviço entregue a terceiro: sem esta saída o nome da
-                        empresa acabava na observação, onde nenhuma tela lê. */}
-                    <SelectItem value={EQUIPE_EXTERNA}>Empresa externa…</SelectItem>
                   </SelectContent>
                 </Select>
-
-                {form.equipeId === EQUIPE_EXTERNA && (
-                  <Input
-                    className="mt-2"
-                    value={form.equipeExterna}
-                    onChange={(e) => setForm({ ...form, equipeExterna: e.target.value })}
-                    placeholder="Nome da empresa (ex: Refrigeração Silva)"
-                  />
-                )}
 
                 {(equipesDaUnidade?.length ?? 0) === 0 && (
                   <p className="text-xs text-slate-500 mt-1">
@@ -1230,8 +1210,12 @@ export function ConteudoOrdensServico({
                 )}
                 {/* Quem está na equipe escolhida: some a dúvida de para quem o
                     serviço foi, sem sair da abertura. */}
-                {form.equipeId && form.equipeId !== EQUIPE_EXTERNA && (
-                  <MembrosDaEquipeEscolhida equipeId={Number(form.equipeId)} />
+                {equipeEscolhida && (
+                  <MembrosDaEquipeEscolhida
+                    equipeId={equipeEscolhida.id}
+                    externa={equipeEscolhida.externa}
+                    email={equipeEscolhida.email}
+                  />
                 )}
               </div>
             )}
@@ -1498,10 +1482,7 @@ export function ConteudoOrdensServico({
                 criar.isPending ||
                 form.titulo.trim().length < 3 ||
                 !habilitado ||
-                !form.prazoLimite ||
-                // Escolheu "Empresa externa…" e não digitou o nome: salvar
-                // assim criaria a O.S. sem responsável nenhum, calado.
-                (form.equipeId === EQUIPE_EXTERNA && form.equipeExterna.trim().length < 2)
+                !form.prazoLimite
               }
               onClick={() =>
                 criar.mutate({
@@ -1515,14 +1496,7 @@ export function ConteudoOrdensServico({
                   solicitanteNome: form.solicitanteNome.trim() || undefined,
                   dataAbertura: form.dataAbertura || undefined,
                   prazoLimite: form.prazoLimite,
-                  equipeId:
-                    form.equipeId && form.equipeId !== EQUIPE_EXTERNA
-                      ? Number(form.equipeId)
-                      : undefined,
-                  equipeExterna:
-                    form.equipeId === EQUIPE_EXTERNA
-                      ? form.equipeExterna.trim() || undefined
-                      : undefined,
+                  equipeId: form.equipeId ? Number(form.equipeId) : undefined,
                   observacoes: form.observacoes.trim() || undefined,
                 })
               }
