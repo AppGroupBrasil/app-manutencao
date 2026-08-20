@@ -824,7 +824,17 @@ export default function AdminFuncionarios() {
           <DialogHeader>
             <DialogTitle>Como funciona</DialogTitle>
           </DialogHeader>
-          <ComoFuncionaEquipes onFechar={() => setAjudaEquipes(false)} />
+          <ComoFuncionaEquipes
+            onFechar={() => setAjudaEquipes(false)}
+            onCadastrarEquipe={() => {
+              setAjudaEquipes(false);
+              abrirCriacaoEquipe(false);
+            }}
+            onCadastrarFuncionario={() => {
+              setAjudaEquipes(false);
+              abrirCriacao();
+            }}
+          />
         </DialogContent>
       </Dialog>
 

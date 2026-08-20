@@ -1368,6 +1368,16 @@ export function ConteudoOrdensServico({
             </p>
           </div>
 
+          {/* Logo abaixo das etapas, e não escondido dentro de um passo: é a
+              primeira coisa que quem não conhece o sistema precisa achar. */}
+          {/* O tutorial é sobre equipes: sem a função ligada ele ensinaria um
+              caminho que não existe nesta organização. */}
+          {ehGestor && temModulo("equipes") && (
+            <Button className="w-full" onClick={() => setAjudaEquipes(true)}>
+              <HelpCircle className="w-4 h-4" /> Como funciona
+            </Button>
+          )}
+
           <div className="space-y-5">
             {/* Veio dos passos com várias unidades marcadas: quem preenche
                 daqui em diante precisa saber que sai uma ordem em cada uma. */}
@@ -1575,14 +1585,6 @@ export function ConteudoOrdensServico({
                     está conhecendo o sistema não imagina que ali se cadastra
                     equipe, e muito menos que existe uma explicação. */}
                 <div className="flex flex-wrap gap-2 mt-1 mb-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAjudaEquipes(true)}
-                  >
-                    <HelpCircle className="w-4 h-4" /> Como funciona
-                  </Button>
 
                   <Button
                     type="button"
@@ -2011,7 +2013,17 @@ export function ConteudoOrdensServico({
           <DialogHeader>
             <DialogTitle>Como funciona</DialogTitle>
           </DialogHeader>
-          <ComoFuncionaEquipes onFechar={() => setAjudaEquipes(false)} />
+          <ComoFuncionaEquipes
+            onFechar={() => setAjudaEquipes(false)}
+            onCadastrarEquipe={() => {
+              setAjudaEquipes(false);
+              setModalEquipes(true);
+            }}
+            onCadastrarFuncionario={() => {
+              setAjudaEquipes(false);
+              setModalFuncionarios(true);
+            }}
+          />
         </DialogContent>
       </Dialog>
 

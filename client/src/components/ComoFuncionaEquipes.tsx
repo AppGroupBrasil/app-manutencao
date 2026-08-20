@@ -25,13 +25,44 @@ import {
  * Os elementos aqui são figura — não clicam, não salvam nada. É de propósito:
  * o tutorial ensina o caminho, e o caminho de verdade é a tela atrás dele.
  */
-export function ComoFuncionaEquipes({ onFechar }: { onFechar: () => void }) {
+export function ComoFuncionaEquipes({
+  onFechar,
+  onCadastrarEquipe,
+  onCadastrarFuncionario,
+}: {
+  onFechar: () => void;
+  /**
+   * Leva ao cadastro de verdade, do passo em que a pessoa está.
+   *
+   * Sem isto o tutorial termina e devolve alguém que entendeu o caminho ao
+   * ponto de partida, para procurar o botão de novo. Explicar e não abrir a
+   * porta é meio serviço.
+   */
+  onCadastrarEquipe?: () => void;
+  onCadastrarFuncionario?: () => void;
+}) {
   const v = useVocabulario();
   const { data: organizacoes } = trpc.condominio.list.useQuery();
   const [passo, setPasso] = useState(0);
 
-  const passos = [
+  /**
+   * O tipo é explícito porque nem todo passo tem atalho.
+   *
+   * Sem ele, o TypeScript infere a união dos formatos e o dia em que alguém
+   * acrescentar um passo sem `acao` a leitura de `atual.acao` para de compilar
+   * — num lugar que não tem nada a ver com a mudança.
+   */
+  const passos: {
+    acao?: { rotulo: string; onClick: () => void };
+    titulo: string;
+    texto: string;
+    figura: React.ReactNode;
+  }[] = [
     {
+      acao: onCadastrarEquipe ? {
+        rotulo: "Quero cadastrar uma equipe agora",
+        onClick: onCadastrarEquipe,
+      } : undefined,
       titulo: "Comece pela equipe",
       texto:
         "A equipe é quem recebe a ordem de serviço e responde por ela. Toque em “Nova equipe” para o time da casa, ou “Nova equipe externa” para uma empresa contratada.",
@@ -110,6 +141,10 @@ export function ComoFuncionaEquipes({ onFechar }: { onFechar: () => void }) {
       ),
     },
     {
+      acao: onCadastrarFuncionario ? {
+        rotulo: "Quero cadastrar um funcionário agora",
+        onClick: onCadastrarFuncionario,
+      } : undefined,
       titulo: "Não achou a pessoa? Cadastre aqui",
       texto:
         "Se o funcionário ainda não existe, toque em “Cadastrar funcionário”, preencha o nome e a função. Ele já entra marcado na equipe.",
@@ -132,6 +167,10 @@ export function ComoFuncionaEquipes({ onFechar }: { onFechar: () => void }) {
       ),
     },
     {
+      acao: onCadastrarEquipe ? {
+        rotulo: "Entendi, quero cadastrar",
+        onClick: onCadastrarEquipe,
+      } : undefined,
       titulo: "Salve e designe na ordem",
       texto:
         "Ao salvar, a equipe passa a aparecer no campo “Equipe designada” da ordem de serviço. Designou, ela recebe o aviso e responde pelo serviço.",
@@ -190,6 +229,14 @@ export function ComoFuncionaEquipes({ onFechar }: { onFechar: () => void }) {
           daqui, com o passo destacado. */}
       <div className="rounded-lg border bg-white p-3">{atual.figura}</div>
 
+      {/* O atalho do passo: quem entendeu vai direto ao cadastro, em vez de
+          fechar o tutorial e procurar o botão outra vez. */}
+      {atual.acao && (
+        <Button className="w-full" onClick={atual.acao.onClick}>
+          {atual.acao.rotulo}
+        </Button>
+      )}
+
       <div className="flex gap-2">
         <Button
           variant="outline"
@@ -199,10 +246,14 @@ export function ComoFuncionaEquipes({ onFechar }: { onFechar: () => void }) {
           {passo === 0 ? "Fechar" : "Voltar"}
         </Button>
 
-        <Button className="flex-1" onClick={() => (ultimo ? onFechar() : setPasso(passo + 1))}>
+        <Button
+          variant={atual.acao ? "outline" : "default"}
+          className="flex-1"
+          onClick={() => (ultimo ? onFechar() : setPasso(passo + 1))}
+        >
           {ultimo ? (
             <>
-              <Check className="w-4 h-4" /> Entendi, quero cadastrar
+              <Check className="w-4 h-4" /> Fechar
             </>
           ) : (
             "Próximo"
