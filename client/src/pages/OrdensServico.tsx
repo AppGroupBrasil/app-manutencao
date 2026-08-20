@@ -24,6 +24,7 @@ import { toast } from "@/components/ui/sonner";
 import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
 import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
+import { ComoFuncionaEquipes } from "@/components/ComoFuncionaEquipes";
 
 /**
  * Data de daqui a N dias, no fuso de quem está usando.
@@ -123,7 +124,9 @@ import {
   Building2,
   Calendar,
   Camera,
+  HelpCircle,
   Settings,
+  UserPlus,
   Hash,
   ImagePlus,
   Loader2,
@@ -581,6 +584,8 @@ export function ConteudoOrdensServico({
   };
   /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
   const [modalEquipes, setModalEquipes] = useState(false);
+  /** O passo a passo de como montar equipe, aberto pelo "Como funciona". */
+  const [ajudaEquipes, setAjudaEquipes] = useState(false);
   /** Ficha rápida de funcionário, pela engrenagem dos responsáveis. */
   const [modalFuncionarios, setModalFuncionarios] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
@@ -1563,25 +1568,30 @@ export function ConteudoOrdensServico({
                 montar a ordem inteira para ela morrer no clique final. */}
             {temModulo("equipes") && ehGestor && (
               <div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label>Equipe designada</Label>
-                  {/* Falta a equipe na lista? Resolve aqui, sem perder o que já
-                      foi digitado nesta O.S. Só quem responde pela unidade
-                      cadastra — o servidor recusa o funcionário de qualquer
-                      forma. */}
-                  {ehGestor && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-slate-500"
-                      onClick={() => setModalEquipes(true)}
-                      aria-label="Cadastrar equipes e membros"
-                      title="Cadastrar equipes e membros"
-                    >
-                      <Settings className="w-4 h-4" />
-                    </Button>
-                  )}
+                <Label>Equipe designada</Label>
+
+                {/* Botões com o nome escrito, na frente.
+                    Antes era só uma engrenagem cinza ao lado do rótulo: quem
+                    está conhecendo o sistema não imagina que ali se cadastra
+                    equipe, e muito menos que existe uma explicação. */}
+                <div className="flex flex-wrap gap-2 mt-1 mb-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAjudaEquipes(true)}
+                  >
+                    <HelpCircle className="w-4 h-4" /> Como funciona
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModalEquipes(true)}
+                  >
+                    <Users className="w-4 h-4" /> Cadastrar equipe
+                  </Button>
                 </div>
                 <Select
                   value={form.equipeId}
@@ -1627,17 +1637,16 @@ export function ConteudoOrdensServico({
                 <span className="text-sm font-medium">Responsáveis pela O.S.</span>
                 {/* Mesma ideia da equipe: quem falta na lista é cadastrado aqui,
                     sem abandonar a O.S. começada. */}
+                {/* Com o nome escrito, pela mesma razão do botão da equipe:
+                    engrenagem cinza não diz a ninguém que ali se cadastra. */}
                 {ehGestor && (
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-8 px-2 text-slate-500"
                     onClick={() => setModalFuncionarios(true)}
-                    aria-label="Cadastrar funcionários"
-                    title="Cadastrar funcionários"
                   >
-                    <Settings className="w-4 h-4" />
+                    <UserPlus className="w-4 h-4" /> Cadastrar funcionário
                   </Button>
                 )}
               </div>
@@ -1794,18 +1803,17 @@ export function ConteudoOrdensServico({
                 Fica no último passo, junto do botão que cria. */}
             {mostrar("avisos") && organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
+                  {/* Mesmo tratamento das outras: nome escrito no lugar do
+                      ícone cinza que ninguém sabia para que servia. */}
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-8 px-2 text-slate-500"
                     onClick={() => setModalFuncionarios(true)}
-                    aria-label="Cadastrar funcionários"
-                    title="Cadastrar funcionários"
                   >
-                    <Settings className="w-4 h-4" />
+                    <UserPlus className="w-4 h-4" /> Cadastrar funcionário
                   </Button>
                 </div>
 
@@ -1993,6 +2001,17 @@ export function ConteudoOrdensServico({
             </div>
 
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cadastro de equipes, por cima da abertura da O.S. */}
+      {/* O passo a passo, por cima da ordem: explica sem tirar ninguém do lugar. */}
+      <Dialog open={ajudaEquipes} onOpenChange={setAjudaEquipes}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Como funciona</DialogTitle>
+          </DialogHeader>
+          <ComoFuncionaEquipes onFechar={() => setAjudaEquipes(false)} />
         </DialogContent>
       </Dialog>
 

@@ -23,8 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { ArrowLeft, Building2, Loader2, Pencil, Plus, Search, SlidersHorizontal, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Building2, HelpCircle, Loader2, Pencil, Plus, Search, SlidersHorizontal, Trash2, Users } from "lucide-react";
 import { PermissoesFuncionario } from "@/components/PermissoesFuncionario";
+import { ComoFuncionaEquipes } from "@/components/ComoFuncionaEquipes";
 import { SeletorUnidades } from "@/components/SeletorUnidades";
 import { useBootstrap } from "@/hooks/useBootstrap";
 import { useUnidadesSelecionadas } from "@/hooks/useUnidadesSelecionadas";
@@ -177,6 +178,8 @@ export default function AdminFuncionarios() {
   const [aba, setAba] = useState<"pessoas" | "equipes">("pessoas");
   /** Equipe aberta na aba Equipes: nome, unidade e quem está dentro. */
   const [fichaEquipe, setFichaEquipe] = useState<FichaEquipe | null>(null);
+  /** O passo a passo de como montar equipe, por cima da aba. */
+  const [ajudaEquipes, setAjudaEquipes] = useState(false);
 
   const { data: lista, isLoading } = trpc.funcionario.list.useQuery(
     { condominioId: orgId ?? 0, unidades: selecao.marcadas },
@@ -692,6 +695,18 @@ export default function AdminFuncionarios() {
               <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
             </div>
           ) : (
+          <>
+          {/* O mesmo caminho em miniatura que existe no modal da O.S.: quem
+              cadastra equipe por aqui tem a mesma dúvida. */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mb-3"
+            onClick={() => setAjudaEquipes(true)}
+          >
+            <HelpCircle className="w-4 h-4" /> Como funciona
+          </Button>
+
           <ListaDeEquipes
             equipes={equipes ?? []}
             funcionarios={(lista ?? []) as Funcionario[]}
@@ -702,6 +717,7 @@ export default function AdminFuncionarios() {
             onNova={abrirCriacaoEquipe}
             onEditar={abrirEdicaoEquipe}
           />
+          </>
           )
         ) : (
         <>
@@ -801,6 +817,16 @@ export default function AdminFuncionarios() {
         </>
         )}
       </main>
+
+      {/* O passo a passo de como montar equipe, igual ao do modal da O.S. */}
+      <Dialog open={ajudaEquipes} onOpenChange={setAjudaEquipes}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Como funciona</DialogTitle>
+          </DialogHeader>
+          <ComoFuncionaEquipes onFechar={() => setAjudaEquipes(false)} />
+        </DialogContent>
+      </Dialog>
 
       {permissoesDe && (
         <PermissoesFuncionario
