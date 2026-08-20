@@ -105,6 +105,8 @@ export function AberturaGuiada({
   const [tocouNaEquipe, setTocouNaEquipe] = useState(false);
   const [responsaveis, setResponsaveis] = useState<number[]>([]);
   const [principal, setPrincipal] = useState<number | null>(null);
+  /** Depois que a pessoa mexe na lista, a sugestão automática não volta. */
+  const [tocouNosResponsaveis, setTocouNosResponsaveis] = useState(false);
   const [modalEquipes, setModalEquipes] = useState(false);
   const [modalFuncionarios, setModalFuncionarios] = useState(false);
 
@@ -175,6 +177,21 @@ export function AberturaGuiada({
   }, [equipeUnica, equipeId, tocouNaEquipe]);
 
   /**
+   * Equipe de uma pessoa só: ela já chega marcada no passo dos responsáveis.
+   *
+   * O passo continua existindo — pular do 2 para o 4 deixava quem está seguindo
+   * a contagem sem entender o que perdeu. Aqui ele só confirma e segue.
+   */
+  useEffect(() => {
+    if (tocouNosResponsaveis || responsaveis.length > 0) return;
+    if ((membrosDaEquipe?.length ?? 0) !== 1) return;
+
+    const unico = membrosDaEquipe![0].funcionarioId;
+    setResponsaveis([unico]);
+    setPrincipal(unico);
+  }, [membrosDaEquipe, responsaveis.length, tocouNosResponsaveis]);
+
+  /**
    * Unidades marcadas que a equipe escolhida não atende.
    *
    * A ordem dessas unidades nasce sem equipe — melhor dizer antes do que
@@ -205,21 +222,7 @@ export function AberturaGuiada({
   const indice = roteiro.indexOf(passo);
   const primeiroPasso = indice === 0;
 
-  const avancar = () => {
-    /**
-     * Equipe de uma pessoa só: ela é a responsável, e perguntar isso seria
-     * pedir para confirmar o óbvio. O passo continua alcançável pelo "Voltar".
-     */
-    if (passo === "equipe" && (membrosDaEquipe?.length ?? 0) === 1) {
-      const unico = membrosDaEquipe![0].funcionarioId;
-      setResponsaveis([unico]);
-      setPrincipal(unico);
-      setPasso("ordem");
-      return;
-    }
-
-    setPasso(roteiro[Math.min(indice + 1, roteiro.length - 1)]);
-  };
+  const avancar = () => setPasso(roteiro[Math.min(indice + 1, roteiro.length - 1)]);
   /** No primeiro passo, "voltar" é desistir — não há para onde recuar. */
   const voltar = () => (primeiroPasso ? onCancelar() : setPasso(roteiro[indice - 1]));
 
@@ -476,7 +479,9 @@ export function AberturaGuiada({
       {passo === "pessoas" && (
         <div className="space-y-2">
           <p className="text-sm text-slate-600">
-            Marque quem responde por esta ordem. A estrela indica o responsável principal.
+            {(membrosDaEquipe?.length ?? 0) === 1 && !tocouNosResponsaveis
+              ? "A equipe tem uma pessoa, e ela já está marcada. Pode continuar ou incluir mais alguém."
+              : "Marque quem responde por esta ordem. A estrela indica o responsável principal."}
           </p>
 
           {candidatos.length === 0 ? (
@@ -493,6 +498,7 @@ export function AberturaGuiada({
                       type="button"
                       className="flex items-center gap-2 flex-1 text-left"
                       onClick={() => {
+                        setTocouNosResponsaveis(true);
                         const novos = marcado
                           ? responsaveis.filter((id) => id !== p.id)
                           : [...responsaveis, p.id];
