@@ -80,8 +80,15 @@ type FichaEquipe = {
   id: number | null;
   nome: string;
   unidadeId: number;
-  /** Funcionários marcados para o time. */
-  membros: number[];
+  /**
+   * Funcionários marcados. `null` é "ninguém mexeu ainda": vale o que está
+   * gravado no servidor.
+   *
+   * A distinção importa porque a lista da tela pode não mostrar o time inteiro
+   * — `funcionario.list` recorta por quem cadastrou —, e uma lista semeada pela
+   * tela tiraria da equipe quem o gestor nunca chegou a ver.
+   */
+  membros: number[] | null;
 };
 
 type Formulario = {
@@ -154,6 +161,11 @@ export default function AdminFuncionarios() {
    * um fluxo só. Função desligada some da tela inteira, abas inclusive.
    */
   const usaEquipes = !modulosIndefinidos && temModulo("equipes");
+  /**
+   * A aba de equipes só vale com a função ligada: sem o `usaEquipes`, desligar
+   * equipes com a aba aberta deixaria a tela em equipes sem as abas para voltar.
+   */
+  const abaEquipes = usaEquipes && aba === "equipes";
   const { data: equipes, isLoading: carregandoEquipes } = trpc.equipes.list.useQuery(
     { condominioId: orgId ?? 0, unidades: selecao.marcadas },
     { enabled: !!orgId && usaEquipes },
@@ -316,11 +328,21 @@ export default function AdminFuncionarios() {
       id: equipe.id,
       nome: equipe.nome,
       unidadeId: equipe.condominioId,
-      membros: ((lista ?? []) as Funcionario[])
-        .filter((f) => (equipesPorFuncionario.get(f.id) ?? []).some((e) => e.equipeId === equipe.id))
-        .map((f) => f.id),
+      membros: null,
     });
   }
+
+  /** Quem o servidor diz que está na equipe aberta. */
+  const membrosGravados = useMemo(
+    () =>
+      (vinculosDaUnidadeDaEquipe ?? [])
+        .filter((x) => x.equipeId === fichaEquipe?.id)
+        .map((x) => x.funcionarioId),
+    [vinculosDaUnidadeDaEquipe, fichaEquipe?.id],
+  );
+
+  /** O que os quadradinhos mostram: o que foi marcado, ou o que está gravado. */
+  const membrosMarcados = fichaEquipe?.membros ?? membrosGravados;
 
   /** Grava o nome da equipe e o time inteiro de uma vez. */
   async function salvarEquipe() {
@@ -352,7 +374,9 @@ export default function AdminFuncionarios() {
       outras.set(vinculo.funcionarioId, [...(outras.get(vinculo.funcionarioId) ?? []), vinculo.equipeId]);
     }
 
-    const marcados = new Set(fichaEquipe.membros);
+    // Sem marcação nenhuma, o time fica como está: o `null` é justamente para
+    // salvar só o nome sem tocar em quem já é da equipe.
+    const marcados = new Set(fichaEquipe.membros ?? jaEstavam);
     const mudaram = [...new Set([...jaEstavam, ...marcados])].filter(
       (id) => jaEstavam.has(id) !== marcados.has(id),
     );
@@ -462,7 +486,7 @@ export default function AdminFuncionarios() {
           <SeletorUnidades selecao={selecao} className="w-[240px]" />
           {/* O botão é da aba que está aberta: em Equipes ele abria a ficha de
               funcionário, e não havia como criar uma equipe pela tela. */}
-          {aba === "equipes" ? (
+          {abaEquipes ? (
             <Button onClick={abrirCriacaoEquipe}>
               <Plus className="w-4 h-4" /> Nova equipe
             </Button>
@@ -497,7 +521,7 @@ export default function AdminFuncionarios() {
           </div>
         )}
 
-        {aba === "equipes" ? (
+        {abaEquipes ? (
           carregandoEquipes ? (
             <div className="py-16 text-center">
               <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
@@ -860,7 +884,7 @@ export default function AdminFuncionarios() {
 
               <div className="border-t pt-3 space-y-2">
                 <p className="text-sm font-medium text-slate-700">
-                  Funcionários desta equipe ({fichaEquipe.membros.length})
+                  Funcionários desta equipe ({membrosMarcados.length})
                 </p>
                 {!pessoasDaUnidadeDaEquipe || !vinculosDaUnidadeDaEquipe ? (
                   <p className="text-xs text-slate-500 flex items-center gap-1.5">
@@ -874,7 +898,7 @@ export default function AdminFuncionarios() {
                 ) : (
                   <div className="grid grid-cols-1 gap-1.5 max-h-64 overflow-y-auto">
                     {pessoasDaUnidadeDaEquipe.map((f) => {
-                      const marcado = fichaEquipe.membros.includes(f.id);
+                      const marcado = membrosMarcados.includes(f.id);
                       return (
                         <button
                           key={f.id}
@@ -883,8 +907,8 @@ export default function AdminFuncionarios() {
                             setFichaEquipe({
                               ...fichaEquipe,
                               membros: marcado
-                                ? fichaEquipe.membros.filter((id) => id !== f.id)
-                                : [...fichaEquipe.membros, f.id],
+                                ? membrosMarcados.filter((id) => id !== f.id)
+                                : [...membrosMarcados, f.id],
                             })
                           }
                           className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm hover:bg-slate-50"
@@ -907,7 +931,10 @@ export default function AdminFuncionarios() {
             <Button variant="outline" onClick={() => setFichaEquipe(null)}>Cancelar</Button>
             <Button
               onClick={() => void salvarEquipe().catch(() => undefined)}
-              disabled={salvandoEquipe || !vinculosDaUnidadeDaEquipe}
+              // Sem unidade escolhida a consulta nem roda: travar por ela
+              // deixaria o botão morto sem dizer o que falta. Quem avisa é o
+              // próprio salvar.
+              disabled={salvandoEquipe || (unidadeDaEquipe > 0 && !vinculosDaUnidadeDaEquipe)}
             >
               {salvandoEquipe ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</>
