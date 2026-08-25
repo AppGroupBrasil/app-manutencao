@@ -99,4 +99,35 @@ describe("PDF da O.S. com blocos escondidos", () => {
     // detalhe.
     expect(enxuta.length).toBeLessThan(completa.length);
   });
+
+  it("cada bloco impresso some de fato, um por um", async () => {
+    const completa = await generateOSPDF({ ...BASE });
+
+    // Um a um, e não em bloco: escondendo tudo de uma vez, um único campo que
+    // continuasse impresso passaria despercebido na conta do tamanho.
+    for (const id of [
+      "solicitante",
+      "descricao",
+      "dataAbertura",
+      "responsaveis",
+      "classificacao",
+    ]) {
+      const folha = await generateOSPDF({ ...BASE, camposOcultos: [id] });
+
+      expect(folha.length, `bloco ${id} continuou na folha`).toBeLessThan(completa.length);
+    }
+  });
+
+  it("bloco que a folha não imprime não muda nada nela", async () => {
+    const completa = await generateOSPDF({ ...BASE });
+
+    // Equipe, local, observações e avisos não são impressos nesta folha. O
+    // teste registra isso: no dia em que algum deles passar a sair no papel,
+    // ele quebra e lembra de ligá-lo ao "ocultar".
+    for (const id of ["equipe", "local", "observacoes", "avisos"]) {
+      const folha = await generateOSPDF({ ...BASE, camposOcultos: [id] });
+
+      expect(folha.length, `bloco ${id} passou a sair na folha`).toBe(completa.length);
+    }
+  });
 });

@@ -42,13 +42,26 @@ export function useCamposOcultosOs(
   condominioId: number,
   /** Só quem gerencia escolhe: o servidor recusa a gravação do funcionário. */
   podeEditar: boolean,
+  /**
+   * Quando consultar o servidor.
+   *
+   * Nem toda tela que usa este hook vive dentro do módulo de O.S.: o
+   * calendário do painel soma vencimentos, checklists e vistorias, e existe em
+   * organização que nunca ligou ordens de serviço. A rota é `osProcedure` e
+   * recusa quem não tem o módulo — consultar sempre encheria o painel dessa
+   * gente de erro por uma informação que ela nem usa.
+   *
+   * Enquanto está desligado, nada é escondido: sem resposta do servidor, o
+   * padrão é a ordem completa.
+   */
+  ativo = true,
 ): ControleCamposOcultos {
   const utils = trpc.useUtils();
   const [editando, setEditando] = useState(false);
 
   const { data } = trpc.ordensServico.camposOcultos.useQuery(
     { condominioId },
-    { enabled: condominioId > 0 },
+    { enabled: ativo && condominioId > 0 },
   );
 
   const salvar = trpc.ordensServico.setCamposOcultos.useMutation({
