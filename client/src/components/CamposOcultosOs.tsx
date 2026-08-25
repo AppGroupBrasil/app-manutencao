@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useBootstrap } from "@/hooks/useBootstrap";
+import { useVocabulario } from "@/hooks/useVocabulario";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { CAMPOS_OCULTAVEIS_OS } from "@shared/camposOcultaveisOs";
@@ -42,31 +44,29 @@ export function useCamposOcultosOs(
   condominioId: number,
   /** Só quem gerencia escolhe: o servidor recusa a gravação do funcionário. */
   podeEditar: boolean,
-  /**
-   * Quando consultar o servidor.
-   *
-   * Nem toda tela que usa este hook vive dentro do módulo de O.S.: o
-   * calendário do painel soma vencimentos, checklists e vistorias, e existe em
-   * organização que nunca ligou ordens de serviço. A rota é `osProcedure` e
-   * recusa quem não tem o módulo — consultar sempre encheria o painel dessa
-   * gente de erro por uma informação que ela nem usa.
-   *
-   * Enquanto está desligado, nada é escondido: sem resposta do servidor, o
-   * padrão é a ordem completa.
-   */
-  ativo = true,
 ): ControleCamposOcultos {
   const utils = trpc.useUtils();
   const [editando, setEditando] = useState(false);
 
-  const { data } = trpc.ordensServico.camposOcultos.useQuery(
-    { condominioId },
-    { enabled: ativo && condominioId > 0 },
-  );
+  /**
+   * A lista vem do `bootstrap`, e não de uma consulta por tela.
+   *
+   * Consultada por tela, ela chegava depois do primeiro desenho: o campo
+   * escondido aparecia por um instante em cada carregamento — piscando na cara
+   * do cliente justamente o que ele mandou tirar. O bootstrap já carregou
+   * antes de qualquer tela existir, tem cache de cinco minutos e não depende
+   * do módulo de O.S., o que faz o calendário do painel obedecer também.
+   *
+   * Vale para qualquer unidade do cliente: a gravação replica a mesma lista em
+   * todas, então a da unidade ativa responde por todas.
+   */
+  const { camposOcultosOs } = useBootstrap();
 
   const salvar = trpc.ordensServico.setCamposOcultos.useMutation({
     onSuccess: async (res) => {
-      await utils.ordensServico.camposOcultos.invalidate();
+      // O bootstrap é quem carrega a lista: sem invalidá-lo, o bloco continua
+      // na tela por até cinco minutos depois de escondido.
+      await utils.system.bootstrap.invalidate();
       // Dizer em quantas unidades valeu responde a dúvida seguinte, que é
       // sempre "preciso repetir isso nas outras?".
       if (res.unidades > 1) toast.success(`Aplicado nas ${res.unidades} unidades`);
@@ -74,7 +74,7 @@ export function useCamposOcultosOs(
     onError: (e) => toast.error(e.message || "Não foi possível salvar"),
   });
 
-  const ocultos = data ?? [];
+  const ocultos = camposOcultosOs;
   const oculto = (id: string) => ocultos.includes(id);
 
   return {
@@ -162,6 +162,10 @@ export function BlocoDaOs({
  * Fica no topo do formulário, e só para quem gerencia.
  */
 export function BarraOcultarFuncoes({ ctl }: { ctl: ControleCamposOcultos }) {
+  // O cliente chama a unidade do jeito dele — "creche", "loja", "obra". Texto
+  // com "unidade" fixo destoaria do resto da tela, que já é traduzido.
+  const v = useVocabulario();
+
   return (
     <div className="space-y-2">
       <Button
@@ -181,9 +185,9 @@ export function BarraOcultarFuncoes({ ctl }: { ctl: ControleCamposOcultos }) {
 
       {ctl.editando && (
         <p className="text-xs text-indigo-900 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">
-          Toque no olho de cada bloco para tirá-lo da ordem de serviço. Vale para todas as
-          unidades e pode ser desfeito aqui mesmo. Título, {"unidade"} e prazo não saem: sem
-          eles a ordem não pode ser criada.
+          Toque no olho de cada bloco para tirá-lo da ordem de serviço. Vale para todas as{" "}
+          {v.unidade.toLowerCase()}s e pode ser desfeito aqui mesmo. Título,{" "}
+          {v.unidade.toLowerCase()} e prazo não saem: sem eles a ordem não pode ser criada.
         </p>
       )}
     </div>

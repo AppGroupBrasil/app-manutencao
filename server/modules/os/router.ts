@@ -29,6 +29,7 @@ import {
 } from "../../../drizzle/schema"; // Adjusted path
 import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "drizzle-orm";
 import { IDS_CAMPOS_OCULTAVEIS_OS } from "../../../shared/camposOcultaveisOs";
+import { camposOcultosDaUnidade } from "../../_core/camposOcultosOs";
 
 /**
  * Ficha em uso.
@@ -538,21 +539,7 @@ export const osRouter = router({
      */
     camposOcultos: osProcedure
       .input(z.object({ condominioId: z.number() }))
-      .query(async ({ input }) => {
-        const db = await getDb();
-        if (!db) return [] as string[];
-
-        const [config] = await db
-          .select({ campos: osConfiguracoes.camposOcultos })
-          .from(osConfiguracoes)
-          .where(eq(osConfiguracoes.condominioId, input.condominioId))
-          .limit(1);
-
-        // Filtrado contra o catálogo: id que saiu do produto fica no banco das
-        // contas antigas, e devolvê-lo faria a tela procurar um bloco que não
-        // existe mais.
-        return (config?.campos ?? []).filter((id) => IDS_CAMPOS_OCULTAVEIS_OS.includes(id));
-      }),
+      .query(({ input }) => camposOcultosDaUnidade(input.condominioId)),
 
     /**
      * Grava a lista — e repete em todas as unidades do mesmo cliente.
@@ -2296,15 +2283,7 @@ export const osRouter = router({
          * telas usam. É também a página que o cliente mais mostra para fora —
          * o pior lugar para reaparecer um campo que ele mandou tirar.
          */
-        const [configDaUnidade] = await db
-          .select({ campos: osConfiguracoes.camposOcultos })
-          .from(osConfiguracoes)
-          .where(eq(osConfiguracoes.condominioId, os.condominioId))
-          .limit(1);
-
-        const camposOcultos = (configDaUnidade?.campos ?? []).filter((id) =>
-          IDS_CAMPOS_OCULTAVEIS_OS.includes(id),
-        );
+        const camposOcultos = await camposOcultosDaUnidade(os.condominioId);
 
         return {
           ...publico,
@@ -2514,17 +2493,9 @@ export const osRouter = router({
          * gerente que cuida da rede pode estar noutra tela, e a folha é da
          * ordem.
          */
-        const [configDaUnidade] = await db
-          .select({ campos: osConfiguracoes.camposOcultos })
-          .from(osConfiguracoes)
-          .where(eq(osConfiguracoes.condominioId, os.condominioId))
-          .limit(1);
-
         // Preparar dados para PDF
         const pdfData = {
-          camposOcultos: (configDaUnidade?.campos ?? []).filter((id) =>
-            IDS_CAMPOS_OCULTAVEIS_OS.includes(id),
-          ),
+          camposOcultos: await camposOcultosDaUnidade(os.condominioId),
           osId: input.osId,
           protocolo: os.protocolo || "",
           // Alimenta o QR da folha, que é link de leitura pública.

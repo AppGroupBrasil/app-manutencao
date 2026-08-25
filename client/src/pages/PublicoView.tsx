@@ -34,15 +34,10 @@ export default function PublicoView() {
   /**
    * Os blocos que o cliente escondeu da O.S. valem nesta ficha também.
    *
-   * Pela unidade da própria ordem, e só quando a ficha é de uma — esta tela
-   * também abre vistoria, manutenção e ocorrência, e a rota consultada é do
-   * módulo de ordens de serviço.
+   * A lista vem do `bootstrap`, então serve igual para a ficha de vistoria ou
+   * manutenção que esta mesma tela abre — nesses casos ninguém a consulta.
    */
-  const campos = useCamposOcultosOs(
-    osData?.condominioId ?? 0,
-    false,
-    tipo === 'os' && !!osData?.condominioId,
-  );
+  const campos = useCamposOcultosOs(osData?.condominioId ?? 0, false);
 
   const { data: vistoriaData, isLoading: vistoriaLoading } = trpc.vistoria.getById.useQuery(
     { id },

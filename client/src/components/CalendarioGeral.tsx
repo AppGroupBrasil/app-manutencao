@@ -158,16 +158,11 @@ export function CalendarioGeral({
   /**
    * Os blocos que o cliente escondeu da O.S. — aqui só se obedece.
    *
-   * Pela unidade da ordem que está sendo reprogramada, e só enquanto o
-   * reprogramar está aberto, exatamente como a lista de candidatos acima: este
-   * calendário também roda no painel de quem não tem ordens de serviço, e a
-   * rota é do módulo de O.S.
+   * Sai do `bootstrap`, que este calendário já carrega de qualquer forma: sem
+   * consulta extra, e sem depender do módulo de ordens de serviço — o painel
+   * soma vencimentos, checklists e vistorias, e roda em quem nunca ligou O.S.
    */
-  const campos = useCamposOcultosOs(
-    unidadeDoReprogramando,
-    false,
-    reprogramando !== null && !!podeGerenciar,
-  );
+  const campos = useCamposOcultosOs(unidadeDoReprogramando, false);
   const [mesVisivel, setMesVisivel] = useState(() => {
     const agora = new Date();
     return new Date(agora.getFullYear(), agora.getMonth(), 1);

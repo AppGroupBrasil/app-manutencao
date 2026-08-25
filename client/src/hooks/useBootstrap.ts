@@ -77,6 +77,13 @@ export function useBootstrap() {
     labels: data?.labels ?? {},
     /** true quando o servidor ainda não disse quais módulos valem. */
     modulosIndefinidos: indefinido,
+    /**
+     * Blocos da O.S. que este cliente escondeu.
+     *
+     * Vazio enquanto a resposta não chega: nada some por falta de informação,
+     * pelo mesmo critério de `temModulo` acima.
+     */
+    camposOcultosOs: data?.camposOcultosOs ?? [],
     temModulo,
     filtrarModulos,
     isLoading: query.isLoading,

@@ -10,6 +10,7 @@ import {
 import { getCatalogoVisivel, getModulosHabilitados } from "./modules";
 import { condominios } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { camposOcultosDaUnidade } from "./camposOcultosOs";
 
 /** Limite defensivo: admin_master enxerga todos os tenants da base. */
 const MAX_TENANTS_LISTADOS = 200;
@@ -37,6 +38,9 @@ export const systemRouter = router({
         modulosHabilitados: [] as string[],
         catalogo: [] as { id: string; nome: string; categoria: string }[],
         labels: {} as Record<string, string>,
+        // Sem organização não há o que esconder: nada é ocultado por falta de
+        // resposta, que é o mesmo critério dos módulos aqui em cima.
+        camposOcultosOs: [] as string[],
       };
     }
 
@@ -63,7 +67,21 @@ export const systemRouter = router({
 
     const modulosHabilitados = await getModulosHabilitados(condominioId);
 
+    /**
+     * Blocos da O.S. que este cliente escondeu.
+     *
+     * Vem no bootstrap pelo mesmo motivo de `labels`: é configuração do
+     * cliente, lida por várias telas, e o bootstrap já carrega antes delas.
+     * Consultado por tela, o campo escondido aparecia por um instante em cada
+     * carregamento — piscando justamente o que o cliente mandou tirar.
+     *
+     * Serve para qualquer unidade dele: a gravação replica a mesma lista em
+     * todas. E não exige o módulo de ordens de serviço, o que faz o calendário
+     * do painel — que soma vencimentos, checklists e vistorias — poder obedecer
+     * sem consultar uma rota que recusaria quem não tem O.S.
+     */
     return {
+      camposOcultosOs: await camposOcultosDaUnidade(condominioId),
       tenant: {
         id: condominioId,
         nome: org?.nome ?? null,
