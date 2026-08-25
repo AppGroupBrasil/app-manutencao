@@ -24,6 +24,11 @@ import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
 import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
 import { ComoFuncionaEquipes } from "@/components/ComoFuncionaEquipes";
+import {
+  BarraOcultarFuncoes,
+  BlocoDaOs,
+  useCamposOcultosOs,
+} from "@/components/CamposOcultosOs";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { SeletorUnidades, type SelecaoDeUnidades } from "@/components/SeletorUnidades";
@@ -461,6 +466,14 @@ export function ConteudoOrdensServico({
    * pode ser que a pessoa venha editar uma equipe que já existe.
    */
   const [equipeDireto, setEquipeDireto] = useState(false);
+  /**
+   * Os blocos que este cliente não usa, e o modo de escolhê-los.
+   *
+   * Lido pela unidade da ordem que está sendo aberta, porque é o formulário
+   * dela que se monta — a gravação já replicou a lista em todas as unidades do
+   * cliente.
+   */
+  const campos = useCamposOcultosOs(unidadeNova, ehGestor);
   const [form, setForm] = useState(FORM_VAZIO);
   /**
    * A equipe marcada no formulário, para mostrar o time ou o contato dela.
@@ -1097,13 +1110,23 @@ export function ConteudoOrdensServico({
         open={modalNova}
         onOpenChange={(aberto) => {
           setModalNova(aberto);
-          if (!aberto) limparFotosNovas();
+          if (!aberto) {
+            limparFotosNovas();
+            // Fechar sai do modo de escolha: reabrir para lançar uma ordem e
+            // encontrar a tela cheia de olhos e bordas tracejadas assusta.
+            campos.setEditando(false);
+          }
         }}
       >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
           </DialogHeader>
+
+          {/* Só para quem gerencia: o servidor recusa a gravação feita por
+              funcionário, e o botão prometeria o que não entrega. */}
+          {ehGestor && <BarraOcultarFuncoes ctl={campos} />}
+
           <div className="space-y-5">
             <Secao titulo="O chamado">
             {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
@@ -1153,6 +1176,7 @@ export function ConteudoOrdensServico({
             {/* Quem pediu o serviço nem sempre é quem digita: o gerente abre
                 pelo coordenador da unidade, o gestor abre pela cozinheira que
                 avisou. Campo livre, porque não há cadastro para isso. */}
+            <BlocoDaOs id="solicitante" ctl={campos}>
             <div>
               <Label>Responsável pela abertura</Label>
               <Input
@@ -1161,7 +1185,10 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, solicitanteNome: e.target.value })}
               />
             </div>
+            </BlocoDaOs>
 
+            {/* Sem `BlocoDaOs`: título é obrigatório no servidor, e esconder
+                seria oferecer um jeito de travar a própria tela. */}
             <div>
               <Label>Título</Label>
               <Input
@@ -1170,6 +1197,7 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, titulo: e.target.value })}
               />
             </div>
+            <BlocoDaOs id="descricao" ctl={campos}>
             <div>
               <Label>Descrição</Label>
               <Textarea
@@ -1179,9 +1207,11 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, descricao: e.target.value })}
               />
             </div>
+            </BlocoDaOs>
             </Secao>
 
             <Secao titulo="Prazos e execução">
+            <BlocoDaOs id="dataAbertura" ctl={campos}>
             <div>
               <Label>Data de abertura do chamado</Label>
               <Input
@@ -1193,8 +1223,11 @@ export function ConteudoOrdensServico({
                 O dia em que o pedido chegou — pode ser anterior ao de hoje.
               </p>
             </div>
+            </BlocoDaOs>
 
-            {/* Prazo: é ele que coloca a O.S. no calendário e cobra alguém. */}
+            {/* Prazo: é ele que coloca a O.S. no calendário e cobra alguém.
+                Fora da lista de ocultáveis pelo mesmo motivo do título — o
+                servidor exige. */}
             <div>
               <Label>Data máxima de finalização</Label>
               <Input
@@ -1214,14 +1247,19 @@ export function ConteudoOrdensServico({
 
                 Só para quem responde pela unidade: o servidor recusa o
                 cadastro feito por funcionário, e oferecer o botão a ele seria
-                abrir uma porta que bate na cara. */}
-            {ehGestor && (
+                abrir uma porta que bate na cara.
+
+                Não é um bloco ocultável: ela serve tanto à equipe quanto aos
+                responsáveis, e sumir junto com um deles tiraria do gestor o
+                caminho de cadastrar gente. Só desaparece quando os dois
+                sumiram — aí não sobrou nada para ela alimentar. */}
+            {ehGestor && (campos.visivel("equipe") || campos.visivel("responsaveis")) && (
               <div className="rounded-lg border-2 border-amber-200 bg-amber-50 p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
                     <Users className="w-4 h-4" /> Equipe e funcionários
                   </span>
-                  {temModulo("equipes") && (
+                  {temModulo("equipes") && campos.visivel("equipe") && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -1235,7 +1273,7 @@ export function ConteudoOrdensServico({
                 </div>
 
                 <p className="text-xs text-amber-900/80">
-                  {temModulo("equipes")
+                  {temModulo("equipes") && campos.visivel("equipe")
                     ? "Cadastre primeiro os funcionários. Depois crie a equipe e marque quem participa dela."
                     : "Cadastre aqui quem pode responder por esta O.S."}
                 </p>
@@ -1252,7 +1290,7 @@ export function ConteudoOrdensServico({
                     <UserPlus className="w-4 h-4" /> Cadastrar funcionário
                   </Button>
 
-                  {temModulo("equipes") && (
+                  {temModulo("equipes") && campos.visivel("equipe") && (
                     <Button
                       type="button"
                       variant="outline"
@@ -1277,6 +1315,7 @@ export function ConteudoOrdensServico({
                 oferecer o campo a ele era deixar montar a ordem inteira para
                 ela morrer no clique final, com tudo o que foi digitado. */}
             {temModulo("equipes") && ehGestor && (
+              <BlocoDaOs id="equipe" ctl={campos}>
               <div>
                 <Label>Equipe designada</Label>
                 <Select
@@ -1315,10 +1354,12 @@ export function ConteudoOrdensServico({
                   />
                 )}
               </div>
+              </BlocoDaOs>
             )}
 
             {/* Responsáveis. Quem falta na lista se cadastra pela moldura
                 acima, sem abandonar a O.S. começada. */}
+            <BlocoDaOs id="responsaveis" ctl={campos}>
             <div className="border rounded-lg p-3 space-y-2">
               <span className="text-sm font-medium">Responsáveis pela O.S.</span>
               {(candidatosNova?.length ?? 0) === 0 ? (
@@ -1348,10 +1389,12 @@ export function ConteudoOrdensServico({
                 </div>
               )}
             </div>
+            </BlocoDaOs>
 
             </Secao>
 
             <Secao titulo="Detalhes">
+            <BlocoDaOs id="classificacao" ctl={campos}>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Categoria</Label>
@@ -1408,10 +1451,12 @@ export function ConteudoOrdensServico({
                 </SelectContent>
               </Select>
             </div>
+            </BlocoDaOs>
 
             {/* Local ocupa a linha inteira: "Bloco A, sala 3, atrás da caixa
                 d'água" não cabe em meia tela, e é essa descrição que faz a
                 equipe achar o serviço sem telefonar. */}
+            <BlocoDaOs id="local" ctl={campos}>
             <div>
               <Label>Local</Label>
               <Input
@@ -1420,10 +1465,12 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, endereco: e.target.value })}
               />
             </div>
+            </BlocoDaOs>
 
             {/* Antes e depois já na abertura: quem está no local fotografa o
                 problema agora, e o "depois" entra quando o serviço terminar —
                 aqui ou dentro da própria ordem. */}
+            <BlocoDaOs id="fotos" ctl={campos}>
             <div className="border rounded-lg p-3 space-y-2">
               <span className="text-sm font-medium">Fotos de antes e depois</span>
               <div className="grid grid-cols-1 gap-3">
@@ -1453,7 +1500,9 @@ export function ConteudoOrdensServico({
                 ))}
               </div>
             </div>
+            </BlocoDaOs>
 
+            <BlocoDaOs id="observacoes" ctl={campos}>
             <div>
               <Label>Observações adicionais</Label>
               <Textarea
@@ -1463,6 +1512,7 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
               />
             </div>
+            </BlocoDaOs>
 
             </Secao>
 
@@ -1474,6 +1524,7 @@ export function ConteudoOrdensServico({
                 botão de cadastrar chama `funcionario.create`. Quatro erros
                 esperando um clique de quem não pode nenhum deles. */}
             {ehGestor && organizacao && (
+              <BlocoDaOs id="avisos" ctl={campos}>
               <div className="border rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
@@ -1561,6 +1612,7 @@ export function ConteudoOrdensServico({
                   )}
                 </div>
               </div>
+              </BlocoDaOs>
             )}
 
             {/* Rodapé colado: o botão sumia no fim de doze campos, e quem abre

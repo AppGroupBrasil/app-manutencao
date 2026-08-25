@@ -18,6 +18,7 @@ import { prepareImageForUpload } from "@/lib/imageCompressor";
 import { QRCodeSVG } from "qrcode.react";
 import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
+import { useCamposOcultosOs } from "@/components/CamposOcultosOs";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import {
   Dialog,
@@ -331,6 +332,15 @@ export function OsDetalhe({
   const [cadastro, setCadastro] = useState<"funcionarios" | "equipes" | null>(null);
   /** Abre direto no formulário da equipe nova, para quem veio dos funcionários. */
   const [equipeDireto, setEquipeDireto] = useState(false);
+  /**
+   * Os blocos que este cliente escondeu, para o detalhe respeitar a mesma
+   * escolha da abertura.
+   *
+   * `false` no segundo argumento: aqui só se obedece. A escolha é feita no
+   * formulário de abertura, num lugar só — dois pontos de configuração para a
+   * mesma coisa é o começo de duas listas que discordam.
+   */
+  const campos = useCamposOcultosOs(unidadeDaOs, false);
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
   const [enviando, setEnviando] = useState(false);
   const [notaAvaliacao, setNotaAvaliacao] = useState(0);
@@ -575,7 +585,9 @@ export function OsDetalhe({
           <Calendar className="w-3.5 h-3.5" />{" "}
           {os.dataAbertura ? formatarDia(os.dataAbertura) : formatarDataHora(os.createdAt)}
         </span>
-        {os.solicitanteNome && <span>Aberta por {os.solicitanteNome}</span>}
+        {campos.visivel("solicitante") && os.solicitanteNome && (
+          <span>Aberta por {os.solicitanteNome}</span>
+        )}
         {os.prazoLimite && <span>Prazo: {formatarDia(os.prazoLimite)}</span>}
       </div>
 
@@ -592,7 +604,7 @@ export function OsDetalhe({
       )}
 
       {/* Equipe designada: mudar aqui avisa o supervisor da equipe nova. */}
-      {temModulo("equipes") && (
+      {temModulo("equipes") && campos.visivel("equipe") && (
         <div className="border rounded-lg p-3 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium">Equipe designada</span>
@@ -682,19 +694,21 @@ export function OsDetalhe({
       )}
 
       {/* Observações adicionais: sai do campo e grava, como o resto da tela. */}
-      <div className="border rounded-lg p-3 space-y-1.5">
-        <span className="text-sm font-medium">Observações adicionais</span>
-        <Textarea
-          rows={2}
-          defaultValue={os.observacoes ?? ""}
-          placeholder="Acesso, horário, contato no local..."
-          onBlur={(e) => {
-            const valor = e.target.value.trim();
-            if (valor === (os.observacoes ?? "")) return;
-            atualizarOs.mutate({ id: ordemServicoId, observacoes: valor || null });
-          }}
-        />
-      </div>
+      {campos.visivel("observacoes") && (
+        <div className="border rounded-lg p-3 space-y-1.5">
+          <span className="text-sm font-medium">Observações adicionais</span>
+          <Textarea
+            rows={2}
+            defaultValue={os.observacoes ?? ""}
+            placeholder="Acesso, horário, contato no local..."
+            onBlur={(e) => {
+              const valor = e.target.value.trim();
+              if (valor === (os.observacoes ?? "")) return;
+              atualizarOs.mutate({ id: ordemServicoId, observacoes: valor || null });
+            }}
+          />
+        </div>
+      )}
 
       <AgendaDaOs
         os={os}
@@ -744,6 +758,7 @@ export function OsDetalhe({
       </div>
 
       {/* Responsáveis */}
+      {campos.visivel("responsaveis") && (
       <div className="border rounded-lg p-3 space-y-2">
         <div className="flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-slate-500" />
@@ -819,8 +834,10 @@ export function OsDetalhe({
           )}
         </div>
       </div>
+      )}
 
       {/* Fotos por fase */}
+      {campos.visivel("fotos") && (
       <div className="border rounded-lg p-3 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium">Fotos</span>
@@ -924,6 +941,7 @@ export function OsDetalhe({
           </div>
         )}
       </div>
+      )}
 
       {/* Anexos */}
       <div className="border rounded-lg p-3 space-y-2">

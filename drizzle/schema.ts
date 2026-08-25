@@ -2257,6 +2257,14 @@ export const osConfiguracoes = pgTable("os_configuracoes", {
   habilitarGestaoFinanceira: boolean("habilitarGestaoFinanceira").default(true),
   habilitarRelatoriosGastos: boolean("habilitarRelatoriosGastos").default(true),
   habilitarVinculoManutencao: boolean("habilitarVinculoManutencao").default(true),
+  /**
+   * Blocos da O.S. que este cliente não vê — ids de `CAMPOS_OCULTAVEIS_OS`.
+   *
+   * Nulo ou vazio é a ordem completa. Vale para todas as unidades do cliente:
+   * a gravação repete a lista em cada uma, porque a tela lê a configuração da
+   * unidade que está aberta.
+   */
+  camposOcultos: json("camposOcultos").$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

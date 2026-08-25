@@ -28,6 +28,7 @@ import {
   users
 } from "../../../drizzle/schema"; // Adjusted path
 import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "drizzle-orm";
+import { IDS_CAMPOS_OCULTAVEIS_OS } from "../../../shared/camposOcultaveisOs";
 
 /**
  * Ficha em uso.
@@ -527,6 +528,105 @@ function formatarDia(dia: string): string {
 }
 
 export const osRouter = router({
+    // ========== CAMPOS OCULTOS ==========
+    /**
+     * Quais blocos da O.S. este cliente não vê.
+     *
+     * Leitura aberta a quem abre ordem, funcionário incluído: é ele quem vê o
+     * formulário montado, e sem isto a tela dele mostraria o campo que o gestor
+     * escondeu.
+     */
+    camposOcultos: osProcedure
+      .input(z.object({ condominioId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [] as string[];
+
+        const [config] = await db
+          .select({ campos: osConfiguracoes.camposOcultos })
+          .from(osConfiguracoes)
+          .where(eq(osConfiguracoes.condominioId, input.condominioId))
+          .limit(1);
+
+        // Filtrado contra o catálogo: id que saiu do produto fica no banco das
+        // contas antigas, e devolvê-lo faria a tela procurar um bloco que não
+        // existe mais.
+        return (config?.campos ?? []).filter((id) => IDS_CAMPOS_OCULTAVEIS_OS.includes(id));
+      }),
+
+    /**
+     * Grava a lista — e repete em todas as unidades do mesmo cliente.
+     *
+     * O campo que o cliente não usa, ele não usa em nenhuma unidade; com quinze
+     * delas, pedir que o gestor repita a escolha quinze vezes é o mesmo que não
+     * ter a função. A tela lê pela unidade aberta, então a lista tem de existir
+     * em cada uma.
+     */
+    setCamposOcultos: osConfigProcedure
+      .input(
+        z.object({
+          condominioId: z.number(),
+          campos: z.array(z.enum(IDS_CAMPOS_OCULTAVEIS_OS as [string, ...string[]])),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        // Sem repetidos: a tela alterna por clique e um duplo toque gravaria o
+        // mesmo id duas vezes.
+        const campos = [...new Set(input.campos)];
+
+        /**
+         * As unidades do mesmo dono, e só elas.
+         *
+         * O alcance do `admin_master` é a base inteira: gravar em
+         * `ctx.tenant.ids()` cru esconderia o campo para todos os clientes da
+         * plataforma de uma vez. O recorte é o `sindicoId` da unidade aberta,
+         * cruzado com o alcance de quem está pedindo.
+         */
+        const [dona] = await db
+          .select({ sindicoId: condominios.sindicoId })
+          .from(condominios)
+          .where(eq(condominios.id, input.condominioId))
+          .limit(1);
+
+        const alcance = new Set(await ctx.tenant.ids());
+        const irmas = dona?.sindicoId
+          ? await db
+              .select({ id: condominios.id })
+              .from(condominios)
+              .where(eq(condominios.sindicoId, dona.sindicoId))
+          : [];
+
+        const destinos = [
+          ...new Set(
+            [input.condominioId, ...irmas.map((u) => u.id)].filter((id) => alcance.has(id)),
+          ),
+        ];
+
+        for (const condominioId of destinos) {
+          // A linha de configuração pode não existir: unidade criada antes de
+          // alguém abrir a tela de configurações nunca ganhou a sua.
+          const [existente] = await db
+            .select({ id: osConfiguracoes.id })
+            .from(osConfiguracoes)
+            .where(eq(osConfiguracoes.condominioId, condominioId))
+            .limit(1);
+
+          if (existente) {
+            await db
+              .update(osConfiguracoes)
+              .set({ camposOcultos: campos })
+              .where(eq(osConfiguracoes.condominioId, condominioId));
+          } else {
+            await db.insert(osConfiguracoes).values({ condominioId, camposOcultos: campos });
+          }
+        }
+
+        return { unidades: destinos.length };
+      }),
+
     // ========== CONFIGURAÇÕES ==========
     getConfiguracoes: osProcedure
       .input(z.object({ condominioId: z.number() }))
