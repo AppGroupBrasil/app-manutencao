@@ -3,6 +3,7 @@ import { trpc } from '@/lib/trpc';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useCamposOcultosOs } from '@/components/CamposOcultosOs';
 import { 
   FileText, 
   Calendar, 
@@ -28,6 +29,19 @@ export default function PublicoView() {
   const { data: osData, isLoading: osLoading } = trpc.ordensServico.getById.useQuery(
     { id },
     { enabled: tipo === 'os' && id > 0 }
+  );
+
+  /**
+   * Os blocos que o cliente escondeu da O.S. valem nesta ficha também.
+   *
+   * Pela unidade da própria ordem, e só quando a ficha é de uma — esta tela
+   * também abre vistoria, manutenção e ocorrência, e a rota consultada é do
+   * módulo de ordens de serviço.
+   */
+  const campos = useCamposOcultosOs(
+    osData?.condominioId ?? 0,
+    false,
+    tipo === 'os' && !!osData?.condominioId,
   );
 
   const { data: vistoriaData, isLoading: vistoriaLoading } = trpc.vistoria.getById.useQuery(
@@ -114,39 +128,39 @@ export default function PublicoView() {
           </div>
           
           <h2 className="text-xl font-semibold mb-2">{osData.titulo}</h2>
-          
-          {osData.descricao && (
+
+          {campos.visivel('descricao') && osData.descricao && (
             <p className="text-gray-600 mb-4">{osData.descricao}</p>
           )}
-          
+
           <Separator className="my-4" />
-          
+
           <div className="space-y-3">
-            {osData.categoria && (
+            {campos.visivel('classificacao') && osData.categoria && (
               <div className="flex items-center gap-2 text-sm">
                 <FileText className="h-4 w-4 text-gray-400" />
                 <span className="text-gray-500">Categoria:</span>
                 <span className="font-medium">{osData.categoria?.nome || 'N/A'}</span>
               </div>
             )}
-            
-            {osData.prioridade && (
+
+            {campos.visivel('classificacao') && osData.prioridade && (
               <div className="flex items-center gap-2 text-sm">
                 <AlertCircle className="h-4 w-4 text-gray-400" />
                 <span className="text-gray-500">Prioridade:</span>
                 <span className="font-medium">{osData.prioridade?.nome || 'N/A'}</span>
               </div>
             )}
-            
-            {osData.setor && (
+
+            {campos.visivel('local') && osData.setor && (
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="h-4 w-4 text-gray-400" />
                 <span className="text-gray-500">Local:</span>
                 <span className="font-medium">{osData.setor?.nome || 'N/A'}</span>
               </div>
             )}
-            
-            {osData.createdAt && (
+
+            {campos.visivel('dataAbertura') && osData.createdAt && (
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="h-4 w-4 text-gray-400" />
                 <span className="text-gray-500">Data:</span>

@@ -29,7 +29,9 @@ vi.mock("./_core/permissaoFuncionario", () => ({
   assegurarExclusaoFuncionario: async () => undefined,
 }));
 
-const { osConfiguracoes, condominios } = await import("../drizzle/schema");
+const { osConfiguracoes, condominios, ordensServico, osImagens } = await import(
+  "../drizzle/schema"
+);
 
 /**
  * As unidades do cliente do teste: a 1 (onde a O.S. é aberta) e a 2.
@@ -38,6 +40,28 @@ const { osConfiguracoes, condominios } = await import("../drizzle/schema");
  * que é o resultado do recorte por `sindicoId` que a rota faz.
  */
 const IRMAS = [{ id: 1 }, { id: 2 }];
+
+/**
+ * A ordem que a página pública devolve pelo QR.
+ *
+ * Tem preenchido tudo o que pode ser escondido: é assim que o teste percebe se
+ * algum campo escapou para dentro da resposta.
+ */
+const ORDEM_PUBLICA = {
+  id: 50,
+  condominioId: 1,
+  protocolo: "OS-260825-0001",
+  titulo: "Trocar lâmpadas do pátio",
+  descricao: "Três lâmpadas queimadas.",
+  endereco: "Bloco A, pátio coberto",
+  solicitanteNome: "Coordenadora Marta",
+  dataAbertura: "2026-08-20",
+  shareToken: "tok-123",
+  chatToken: "segredo-do-chat",
+  categoriaId: 1,
+  prioridadeId: 1,
+  statusId: 1,
+};
 
 /** O que a rota gravou, por unidade — é o que o teste inspeciona. */
 let gravados: { condominioId: number; campos: unknown }[];
@@ -58,6 +82,8 @@ function fakeDb() {
   const encadeavel = (semLimite: unknown[], comLimite = semLimite) => {
     const p: any = Promise.resolve(semLimite);
     p.limit = () => Promise.resolve(comLimite);
+    // A rota pública ordena imagens e linha do tempo antes de responder.
+    p.orderBy = () => encadeavel(semLimite, comLimite);
     return p;
   };
 
@@ -72,6 +98,12 @@ function fakeDb() {
           if (tabela === osConfiguracoes) {
             const linha = { id: 5, campos: listaGravada };
             return encadeavel(configuracaoJaExiste ? [linha] : [], configuracaoJaExiste ? [linha] : []);
+          }
+          if (tabela === ordensServico) {
+            return encadeavel([ORDEM_PUBLICA], [ORDEM_PUBLICA]);
+          }
+          if (tabela === osImagens) {
+            return encadeavel([{ id: 1, url: "foto.jpg", tipo: "antes" }]);
           }
           return encadeavel([]);
         },
@@ -234,5 +266,57 @@ describe("campos ocultos da O.S.", () => {
     const lista = await comoGerente([1]).camposOcultos({ condominioId: 1 });
 
     expect(lista).toEqual([]);
+  });
+});
+
+describe("página pública da O.S. pelo QR", () => {
+  /** A página abre sem login: a chamada é feita sem usuário e sem funcionário. */
+  const semLogin = () =>
+    createCallerFactory(osRouter)({
+      req: { headers: {} },
+      res: {},
+      user: null,
+      funcionario: null,
+      tenant: createTenantAccess(null, null, { idsFornecidos: [] }),
+    } as never);
+
+  it("devolve a ordem inteira quando nada está escondido", async () => {
+    const os = await semLogin().getByShareToken({ token: "tok-123" });
+
+    expect(os.descricao).toBe("Três lâmpadas queimadas.");
+    expect(os.endereco).toBe("Bloco A, pátio coberto");
+    expect(os.imagens).toHaveLength(1);
+  });
+
+  it("não manda para o navegador o que o cliente escondeu", async () => {
+    configuracaoJaExiste = true;
+    listaGravada = ["descricao", "local", "solicitante", "dataAbertura", "classificacao", "fotos"];
+
+    const os = await semLogin().getByShareToken({ token: "tok-123" });
+
+    // O corpo da resposta, e não só a tela: esta página é aberta por quem o
+    // cliente quiser, e mandar o dado contando que o navegador não o desenhe
+    // deixaria o campo a um "ver código-fonte" de distância.
+    expect(os.descricao).toBeNull();
+    expect(os.endereco).toBeNull();
+    expect(os.solicitanteNome).toBeNull();
+    expect(os.dataAbertura).toBeNull();
+    expect(os.categoria).toBeNull();
+    expect(os.prioridade).toBeNull();
+    expect(os.imagens).toEqual([]);
+
+    // A lista acompanha, para a tela não desenhar linha vazia no lugar.
+    expect(os.camposOcultos).toContain("local");
+  });
+
+  it("o token do chat continua fora da resposta pública", async () => {
+    configuracaoJaExiste = true;
+    listaGravada = ["descricao"];
+
+    const os = await semLogin().getByShareToken({ token: "tok-123" });
+
+    // Já era assim antes desta função existir; o teste fica de guarda para o
+    // dia em que alguém reescrever o `return` desta rota.
+    expect(os).not.toHaveProperty("chatToken");
   });
 });

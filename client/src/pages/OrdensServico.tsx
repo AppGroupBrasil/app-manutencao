@@ -469,9 +469,10 @@ export function ConteudoOrdensServico({
   /**
    * Os blocos que este cliente não usa, e o modo de escolhê-los.
    *
-   * Lido pela unidade da ordem que está sendo aberta, porque é o formulário
-   * dela que se monta — a gravação já replicou a lista em todas as unidades do
-   * cliente.
+   * Vale para o formulário e também para os cartões da lista. Lido pela
+   * unidade da ordem que está sendo aberta: na rede, a lista soma ordens de
+   * várias unidades, mas a gravação replica a mesma escolha em todas as do
+   * cliente — a resposta é a mesma, venha de qual vier.
    */
   const campos = useCamposOcultosOs(unidadeNova, ehGestor);
   const [form, setForm] = useState(FORM_VAZIO);
@@ -927,19 +928,25 @@ export function ConteudoOrdensServico({
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                      <Etiqueta texto={os.prioridade?.nome} cor={os.prioridade?.cor} />
+                      {/* Prioridade sai com a classificação; o status fica.
+                          Ele é o andamento da ordem, e o seletor logo abaixo é
+                          o único lugar do sistema onde a ordem é movida — sem
+                          a etiqueta, o gestor não saberia o que está mudando. */}
+                      {campos.visivel("classificacao") && (
+                        <Etiqueta texto={os.prioridade?.nome} cor={os.prioridade?.cor} />
+                      )}
                       <Etiqueta texto={os.status?.nome} cor={os.status?.cor} />
                     </div>
                   </div>
 
-                  {os.responsavelPrincipalNome && (
+                  {campos.visivel("responsaveis") && os.responsavelPrincipalNome && (
                     <p className="text-xs text-slate-500 mt-2">
                       <span className="font-medium">Responsável:</span> {os.responsavelPrincipalNome}
                     </p>
                   )}
 
                   <h4 className="font-semibold text-slate-800 mt-2">{os.titulo}</h4>
-                  {os.descricao && (
+                  {campos.visivel("descricao") && os.descricao && (
                     <p className="text-sm text-slate-600 line-clamp-2">{os.descricao}</p>
                   )}
 
@@ -951,23 +958,27 @@ export function ConteudoOrdensServico({
                         <Building2 className="w-3.5 h-3.5" /> {os.unidade.nome}
                       </span>
                     )}
-                    <span className="inline-flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5" /> {os.endereco || "—"}
-                    </span>
+                    {campos.visivel("local") && (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5" /> {os.endereco || "—"}
+                      </span>
+                    )}
                     {/* Abertura: quando e por quem. É o que o cliente cobra
                         primeiro quando pergunta "de quando é esse chamado?". */}
                     {/* A data que vale é a que a pessoa informou; sem ela, a
                         do registro. */}
-                    <span className="inline-flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />{" "}
-                      {os.dataAbertura ? formatarDia(os.dataAbertura) : formatarDataHora(os.createdAt)}
-                    </span>
-                    {os.solicitanteNome && (
+                    {campos.visivel("dataAbertura") && (
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" />{" "}
+                        {os.dataAbertura ? formatarDia(os.dataAbertura) : formatarDataHora(os.createdAt)}
+                      </span>
+                    )}
+                    {campos.visivel("solicitante") && os.solicitanteNome && (
                       <span className="inline-flex items-center gap-1">
                         <UserCircle className="w-3.5 h-3.5" /> {os.solicitanteNome}
                       </span>
                     )}
-                    {os.equipe?.nome ? (
+                    {!campos.visivel("equipe") ? null : os.equipe?.nome ? (
                       <span
                         className="inline-flex items-center gap-1"
                         style={{ color: os.equipe.cor ?? undefined }}
@@ -987,7 +998,9 @@ export function ConteudoOrdensServico({
                         {textoDoPrazo(os.prazoLimite, !!os.dataFim).texto}
                       </span>
                     )}
-                    {os.categoria?.nome && <span>{os.categoria.nome}</span>}
+                    {campos.visivel("classificacao") && os.categoria?.nome && (
+                      <span>{os.categoria.nome}</span>
+                    )}
                   </div>
 
                   {/* O dia marcado: sem ele a ordem aparece só pelo prazo, e

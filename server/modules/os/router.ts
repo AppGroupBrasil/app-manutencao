@@ -2288,12 +2288,40 @@ export const osRouter = router({
         // escrever no chat da O.S. pela rota pública de mensagem.
         const { chatToken, ...publico } = os;
 
+        /**
+         * Os blocos que o cliente escondeu — a folha pública obedece igual.
+         *
+         * Vai junto na resposta porque aqui não há login: quem abre o QR não
+         * tem conta, e não poderia consultar a rota protegida que as outras
+         * telas usam. É também a página que o cliente mais mostra para fora —
+         * o pior lugar para reaparecer um campo que ele mandou tirar.
+         */
+        const [configDaUnidade] = await db
+          .select({ campos: osConfiguracoes.camposOcultos })
+          .from(osConfiguracoes)
+          .where(eq(osConfiguracoes.condominioId, os.condominioId))
+          .limit(1);
+
+        const camposOcultos = (configDaUnidade?.campos ?? []).filter((id) =>
+          IDS_CAMPOS_OCULTAVEIS_OS.includes(id),
+        );
+
         return {
           ...publico,
-          categoria,
-          prioridade,
+          camposOcultos,
+          // Escondido não vai nem no corpo da resposta: a página é pública, e
+          // mandar o dado para o navegador contando que a tela não o desenhe
+          // deixaria o campo a um "ver código-fonte" de distância.
+          descricao: camposOcultos.includes("descricao") ? null : publico.descricao,
+          endereco: camposOcultos.includes("local") ? null : publico.endereco,
+          solicitanteNome: camposOcultos.includes("solicitante")
+            ? null
+            : publico.solicitanteNome,
+          dataAbertura: camposOcultos.includes("dataAbertura") ? null : publico.dataAbertura,
+          categoria: camposOcultos.includes("classificacao") ? null : categoria,
+          prioridade: camposOcultos.includes("classificacao") ? null : prioridade,
           status,
-          imagens,
+          imagens: camposOcultos.includes("fotos") ? [] : imagens,
           timeline,
         };
       }),

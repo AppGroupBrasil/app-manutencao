@@ -59,6 +59,16 @@ export default function OrdemServicoPublica({ token }: { token: string }) {
     { valor: "depois", rotulo: "Depois" },
   ];
 
+  /**
+   * Os blocos que o cliente escondeu da ordem valem aqui também.
+   *
+   * A lista vem junto dos dados porque esta página abre sem login — quem lê o
+   * QR não tem conta para consultar a rota das outras telas. O servidor já
+   * devolve vazio o que está escondido; isto é para a linha não aparecer com
+   * um traço no lugar do que sumiu.
+   */
+  const mostrar = (id: string) => !(os.camposOcultos ?? []).includes(id);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b">
@@ -104,12 +114,18 @@ export default function OrdemServicoPublica({ token }: { token: string }) {
             )}
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5" /> {os.endereco || "Local não informado"}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" /> Aberta em {formatarDataHora(os.createdAt)}
-              </span>
+              {mostrar("local") && (
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" /> {os.endereco || "Local não informado"}
+                </span>
+              )}
+              {mostrar("dataAbertura") && (
+                <span className="inline-flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" /> Aberta em {formatarDataHora(os.createdAt)}
+                </span>
+              )}
+              {/* A conclusão fica: é o desfecho do serviço, e não o registro da
+                  abertura que o cliente pode ter escondido. */}
               {os.dataFim && <span>Concluída em {formatarDataHora(os.dataFim)}</span>}
             </div>
           </CardContent>
