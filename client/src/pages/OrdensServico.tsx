@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,93 +24,6 @@ import { OsDetalhe } from "@/components/OsDetalhe";
 import { GerenciarEquipes } from "@/components/GerenciarEquipes";
 import { MembrosDaEquipeEscolhida } from "@/components/MembrosDaEquipeEscolhida";
 import { ComoFuncionaEquipes } from "@/components/ComoFuncionaEquipes";
-
-/**
- * Data de daqui a N dias, no fuso de quem está usando.
- *
- * `toISOString` devolve UTC: no Brasil, das 21h em diante ele já está no dia
- * seguinte, e "amanhã" viraria depois de amanhã sem ninguém entender por quê.
- */
-function emDias(dias: number): string {
-  const dia = new Date();
-  dia.setDate(dia.getDate() + dias);
-  const mes = String(dia.getMonth() + 1).padStart(2, "0");
-  const diaDoMes = String(dia.getDate()).padStart(2, "0");
-  return `${dia.getFullYear()}-${mes}-${diaDoMes}`;
-}
-
-/**
- * O formulário completo, fatiado em passos.
- *
- * É a mesma tela do modo completo, mostrada uma parte por vez — os campos são
- * os mesmos, não há duplicação, e acrescentar um campo novo continua sendo
- * mexer num lugar só.
- *
- * `obrigatorio` marca o passo que não pode ser pulado: sem título e sem prazo
- * a ordem não existe. Os demais ganham "Pular", porque quem está no corredor
- * com o celular na mão não deveria precisar responder categoria e setor para
- * registrar um vazamento.
- */
-type Bloco =
-  | "unidades"
-  | "solicitante"
-  | "servico"
-  | "dataAbertura"
-  | "prazo"
-  | "equipe"
-  | "classificacao"
-  | "local"
-  | "fotos"
-  | "observacoes"
-  | "avisos";
-
-/**
- * Os dois modos são passo a passo; muda o que cada um pergunta.
- *
- * O simples pede o que toda ordem precisa — onde, o quê, quando e quem. O
- * completo acrescenta os campos de quem organiza depois: quem pediu, quando
- * chegou, classificação, local, fotos e avisos. Nenhum campo é exclusivo de um
- * modo por acaso: o completo é o simples com mais perguntas.
- *
- * `obrigatorio` marca o passo que não pode ser pulado. Os demais ganham
- * "Pular", porque quem está no corredor com o celular na mão não deveria
- * precisar responder categoria e setor para registrar um vazamento.
- */
-const PASSOS_POR_MODO = {
-  guiado: [
-    { titulo: "Onde vai ser feito", blocos: ["unidades"], obrigatorio: true },
-    { titulo: "O que precisa ser feito", blocos: ["servico"], obrigatorio: true },
-    { titulo: "Para quando", blocos: ["prazo"], obrigatorio: true },
-    { titulo: "Quem executa", blocos: ["equipe"], obrigatorio: false },
-    { titulo: "Fotos", blocos: ["fotos", "observacoes"], obrigatorio: false },
-  ],
-  grid: [
-    { titulo: "Onde vai ser feito", blocos: ["unidades"], obrigatorio: true },
-    { titulo: "O chamado", blocos: ["solicitante", "servico"], obrigatorio: true },
-    { titulo: "Datas", blocos: ["dataAbertura", "prazo"], obrigatorio: true },
-    { titulo: "Quem executa", blocos: ["equipe"], obrigatorio: false },
-    { titulo: "Classificação", blocos: ["classificacao"], obrigatorio: false },
-    { titulo: "Local e observações", blocos: ["local", "observacoes"], obrigatorio: false },
-    { titulo: "Fotos e avisos", blocos: ["fotos", "avisos"], obrigatorio: false },
-  ],
-} satisfies Record<"guiado" | "grid", { titulo: string; blocos: Bloco[]; obrigatorio: boolean }[]>;
-
-/** Onde fica gravado o modo de abertura preferido de quem usa este navegador. */
-/**
- * Chave nova de propósito.
- *
- * A versão anterior perguntava o modo numa tela de escolha, e quem clicou em
- * "formulário completo" ficou preso nele — inclusive quem só queria ver o que
- * era. Trocar a chave devolve todo mundo ao padrão, que agora é o passo a passo.
- */
-/**
- * Chave nova outra vez, e pelo mesmo motivo de antes.
- *
- * Quem já experimentou o alternador ficou com "formulário completo" gravado, e
- * o valor guardado vence o padrão — a pessoa continuaria sem ver os passos sem
- * entender por quê. Trocar a chave devolve todo mundo ao padrão novo.
- */
-const MODO_ABERTURA_KEY = "os_modo_abertura_v3";
 import { CadastroRapidoFuncionario } from "@/components/CadastroRapidoFuncionario";
 import { BotaoCompartilhar } from "@/components/CompartilharWhatsapp";
 import { SeletorUnidades, type SelecaoDeUnidades } from "@/components/SeletorUnidades";
@@ -527,67 +439,12 @@ export function ConteudoOrdensServico({
   const [filtroUnidades, setFiltroUnidades] = useState<number[]>([]);
   const [pagina, setPagina] = useState(1);
   const [modalNova, setModalNova] = useState(false);
-  /**
-   * Como abrir a ordem: formulário inteiro ou uma pergunta por vez.
-   *
-   * `null` é "ainda não escolheu" — a tela pergunta na primeira vez e guarda a
-   * resposta no navegador, porque repetir a pergunta a cada ordem cansa mais do
-   * que o formulário que se quis simplificar.
-   */
-  const [modo, setModo] = useState<"grid" | "guiado">(
-    // Passo a passo por padrão: é o modo em que quem nunca abriu uma ordem
-    // entende o que a tela quer. O formulário inteiro continua a um clique.
-    () => (localStorage.getItem(MODO_ABERTURA_KEY) as "grid" | "guiado" | null) ?? "guiado",
-  );
-  /**
-   * Em qual passo o formulário simples está.
-   *
-   * É o mesmo formulário do modo completo, mostrado uma parte por vez: os
-   * campos são exatamente os mesmos, e nada precisa ser preenchido duas vezes.
-   * Fatiar em vez de duplicar também evita que os dois modos saiam do lugar
-   * quando alguém acrescentar um campo.
-   */
-  const [passoForm, setPassoForm] = useState(0);
-  /**
-   * O roteiro de passos deste modo: o simples pergunta menos, e só isso.
-   *
-   * Com uma unidade só, o primeiro passo sai do caminho — ele existiria para
-   * mostrar um nome que a pessoa não pode mudar, e um passo que não se
-   * responde é um passo que faz duvidar do resto.
-   */
-  const passos = useMemo(
-    () =>
-      PASSOS_POR_MODO[modo].filter(
-        (p) => !(p.blocos.length === 1 && p.blocos[0] === "unidades" && !podeEscolherUnidade),
-      ),
-    [modo, podeEscolherUnidade],
-  );
-  const passoAtual = passos[Math.min(passoForm, passos.length - 1)];
-  const ultimoPasso = passoForm >= passos.length - 1;
-  /** Este bloco de campos pertence ao passo em que a pessoa está? */
-  const mostrar = (bloco: Bloco) => (passoAtual.blocos as readonly Bloco[]).includes(bloco);
-
-  /**
-   * Unidades escolhidas no passo 1, quando são mais de uma.
-   *
-   * O formulário grava uma ordem; com lote, ele repete a mesma ordem em cada
-   * unidade marcada.
-   */
-  const [unidadesDoLote, setUnidadesDoLote] = useState<number[]>([]);
-  const escolherModo = (escolhido: "grid" | "guiado") => {
-    localStorage.setItem(MODO_ABERTURA_KEY, escolhido);
-    setModo(escolhido);
-    // Volta ao primeiro passo, porque os dois roteiros têm tamanhos
-    // diferentes. O que já foi preenchido fica: trocar de modo é mudar quantas
-    // perguntas se responde, não recomeçar a ordem.
-    setPassoForm(0);
-  };
-  /** Cadastro de equipes aberto por cima da O.S., pela engrenagem. */
+  /** Cadastro de equipes aberto por cima da O.S., pela moldura. */
   const [modalEquipes, setModalEquipes] = useState(false);
+  /** Ficha rápida de funcionário, também pela moldura. */
+  const [modalFuncionarios, setModalFuncionarios] = useState(false);
   /** O passo a passo de como montar equipe, aberto pelo "Como funciona". */
   const [ajudaEquipes, setAjudaEquipes] = useState(false);
-  /** Ficha rápida de funcionário, pela engrenagem dos responsáveis. */
-  const [modalFuncionarios, setModalFuncionarios] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   /**
    * A equipe marcada no formulário, para mostrar o time ou o contato dela.
@@ -598,33 +455,6 @@ export function ConteudoOrdensServico({
    */
   const equipeEscolhida = (equipesDaUnidade ?? []).find((e) => String(e.id) === form.equipeId);
   const [responsaveisNova, setResponsaveisNova] = useState<number[]>([]);
-
-  /**
-   * O que impede de seguir, dito com todas as letras.
-   *
-   * "Falta o título" com o título preenchido é o pior recado possível: o campo
-   * exige três letras, e quem digitou "d" ficava olhando um botão apagado sem
-   * entender o que o sistema queria.
-   */
-  const faltaNoFormulario = [
-    form.titulo.trim().length === 0 ? "Falta o título do serviço." : "",
-    !form.prazoLimite ? "Falta a data máxima de finalização." : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  /**
-   * O que falta neste passo — vazio quando dá para seguir.
-   *
-   * A conta é por bloco visível, e não por nome de passo: os dois modos
-   * agrupam os campos de jeitos diferentes, e amarrar a regra ao agrupamento
-   * quebraria no dia em que um passo mudar de lugar.
-   */
-  const faltaNoPasso = mostrar("servico") && form.titulo.trim().length === 0
-    ? "Escreva o título do serviço para continuar."
-    : mostrar("prazo") && !form.prazoLimite
-      ? "Escolha a data máxima de finalização para continuar."
-      : "";
   /**
    * Fotos escolhidas na abertura, antes de a O.S. existir.
    *
@@ -670,30 +500,6 @@ export function ConteudoOrdensServico({
     });
   };
 
-  /**
-   * O que foi enviado na criação, para repetir nas outras unidades do lote.
-   *
-   * Num ref porque o `onSuccess` não recebe o input de volta, e reler o
-   * formulário lá dentro pegaria o estado já limpo.
-   */
-  const ultimoPedido = useRef<{
-    titulo: string;
-    descricao?: string;
-    prazoLimite: string;
-    endereco?: string;
-    solicitanteNome?: string;
-    dataAbertura?: string;
-    observacoes?: string;
-  } | null>(null);
-
-  /**
-   * A criação das cópias do lote, sem os avisos da criação principal.
-   *
-   * Separada de propósito: reaproveitar `criar` faria cada cópia rodar o
-   * `onSuccess` inteiro — inclusive a parte que cria cópias.
-   */
-  const criarCopia = trpc.ordensServico.create.useMutation();
-
   const criar = trpc.ordensServico.create.useMutation({
     onSuccess: async (res) => {
       // Responsáveis são registros filhos: entram depois que a O.S. existe.
@@ -731,73 +537,18 @@ export function ConteudoOrdensServico({
         }
       }
 
-      /**
-       * As demais unidades marcadas no passo 1 recebem a mesma ordem.
-       *
-       * A cópia é feita aqui, e não no servidor, porque é a mesma chamada de
-       * criação — muda só a unidade. Fotos ficam na primeira: repetir o upload
-       * em quinze ordens travaria o celular de quem está no corredor.
-       */
-      const copias: string[] = [];
-      const pedido = ultimoPedido.current;
-
-      for (const unidade of unidadesDoLote.filter((id) => id !== unidadeNova)) {
-        if (!pedido) break;
-
-        try {
-          // `criarCopia`, e não `criar`: chamar a própria mutação aqui dentro
-          // dispararia este mesmo `onSuccess` a cada cópia, que criaria as
-          // cópias de novo — um laço que só para quando o banco enche.
-          const copia = await criarCopia.mutateAsync({
-            ...pedido,
-            condominioId: unidade,
-            // Equipe só onde ela atende: nas outras a ordem nasce sem equipe,
-            // em vez de o servidor recusar e derrubar a cópia.
-            equipeId:
-              form.equipeId && (equipeEscolhida?.unidades ?? []).includes(unidade)
-                ? Number(form.equipeId)
-                : undefined,
-          });
-          copias.push(copia.protocolo);
-
-          // Os mesmos responsáveis: é a mesma ordem, repetida noutra unidade.
-          for (const funcionarioId of responsaveisNova) {
-            const pessoa = candidatosNova?.find((c) => c.id === funcionarioId);
-            if (!pessoa) continue;
-            await addResponsavel
-              .mutateAsync({
-                ordemServicoId: copia.id,
-                nome: pessoa.nome,
-                cargo: pessoa.cargo ?? undefined,
-                email: pessoa.email ?? undefined,
-                telefone: pessoa.telefone ?? undefined,
-                funcionarioId: pessoa.id,
-              })
-              .catch(() => undefined);
-          }
-        } catch (erro) {
-          console.error("[os] falha ao repetir a ordem na unidade", unidade, erro);
-          const nome = unidades?.find((u) => u.id === unidade)?.nome ?? unidade;
-          toast.error(`Não foi possível abrir em ${nome}.`);
-        }
-      }
-
       setModalNova(false);
       setForm(FORM_VAZIO);
       setResponsaveisNova([]);
-      setUnidadesDoLote([]);
-      setPassoForm(0);
       limparFotosNovas();
       await invalidar();
       // Aberta em outra unidade não aparece nesta lista: dizer para onde foi
       // evita a pessoa procurar na tela errada.
       const destino = unidades?.find((u) => u.id === unidadeNova);
       toast.success(
-        copias.length > 0
-          ? `${copias.length + 1} ordens criadas: ${[res.protocolo, ...copias].join(", ")}`
-          : unidadeNova === condominioId || !destino
-            ? `O.S. ${res.protocolo} criada`
-            : `O.S. ${res.protocolo} criada em ${destino.nome}`,
+        unidadeNova === condominioId || !destino
+          ? `O.S. ${res.protocolo} criada`
+          : `O.S. ${res.protocolo} criada em ${destino.nome}`,
       );
     },
     onError: (e) => toast.error(e.message || "Erro ao criar a O.S."),
@@ -1311,149 +1062,48 @@ export function ConteudoOrdensServico({
         open={modalNova}
         onOpenChange={(aberto) => {
           setModalNova(aberto);
-          if (!aberto) {
-            limparFotosNovas();
-            // Reabrir começa de novo pelas perguntas, e não no formulário que
-            // ficou pela metade da vez passada.
-            setPassoForm(0);
-            setUnidadesDoLote([]);
-          }
+          if (!aberto) limparFotosNovas();
         }}
       >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Nova Ordem de Serviço</DialogTitle>
           </DialogHeader>
-
-          {/* O alternador fica no topo, à vista.
-              No rodapé, depois de doze campos, ninguém achava — e quem abriu no
-              modo errado não sabia que havia outro. */}
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-            {(
-              [
-                { chave: "guiado" as const, rotulo: "Formulário simples" },
-                { chave: "grid" as const, rotulo: "Formulário completo" },
-              ]
-            ).map((opcao) => (
-              <button
-                key={opcao.chave}
-                onClick={() => escolherModo(opcao.chave)}
-                className={`flex-1 text-sm px-3 py-2 rounded-md transition-colors ${
-                  modo === opcao.chave
-                    ? "bg-white text-slate-800 shadow-sm font-medium"
-                    : "text-slate-600 hover:text-slate-800"
-                }`}
-              >
-                {opcao.rotulo}
-              </button>
-            ))}
-          </div>
-
-          {/* A barra vale para os dois modos: os dois são passo a passo, e o
-              que muda é quantas perguntas cada um faz. */}
-          <div className="space-y-1">
-            <div className="flex gap-1.5">
-              {passos.map((p, i) => (
-                <span
-                  key={p.titulo}
-                  className={`h-2 flex-1 rounded-full transition-colors ${
-                    i <= passoForm ? "bg-slate-800" : "bg-slate-200"
-                  }`}
-                />
-              ))}
-            </div>
-            <p className="text-sm text-slate-500">
-              Passo {Math.min(passoForm, passos.length - 1) + 1} de {passos.length} ·{" "}
-              {passoAtual.titulo}
-            </p>
-          </div>
-
-          {/* Logo abaixo das etapas, e não escondido dentro de um passo: é a
-              primeira coisa que quem não conhece o sistema precisa achar. */}
-          {/* Só no passo em que se escolhe equipe e responsáveis: é ali que a
-              dúvida existe. Nos outros, o botão pergunta algo que a pessoa não
-              está fazendo — e ocupa a primeira linha da tela sem motivo.
-
-              Sem a função ligada ele nem aparece: ensinaria um caminho que não
-              existe nesta organização. */}
-          {ehGestor && temModulo("equipes") && mostrar("equipe") && (
-            <Button className="w-full" onClick={() => setAjudaEquipes(true)}>
-              <HelpCircle className="w-4 h-4" /> Como funciona
-            </Button>
-          )}
-
           <div className="space-y-5">
-            {/* Veio dos passos com várias unidades marcadas: quem preenche
-                daqui em diante precisa saber que sai uma ordem em cada uma. */}
-            {unidadesDoLote.length > 1 && (
-              <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-                Este preenchimento vai abrir <strong>{unidadesDoLote.length} ordens</strong>, uma
-                em cada {v.unidade.toLowerCase()} marcada. Categoria, prioridade e status valem
-                só para a primeira — esses cadastros são de cada {v.unidade.toLowerCase()}. Fotos
-                também ficam na primeira.
-              </div>
-            )}
-
-            {mostrar("unidades") && (
             <Secao titulo="O chamado">
-            {/* No formulário simples, a unidade é marcação: marcar mais de uma
-                abre a mesma ordem em cada uma, que é como se pede "trocar as
-                lâmpadas em todas". No completo segue a escolha única de
-                sempre, para não mudar o que já se conhece. */}
+            {/* Unidade de atendimento: quem cuida de várias precisa ver, antes
+                de digitar qualquer coisa, para onde esta ordem vai. */}
             {podeEscolherUnidade ? (
-              <div className="space-y-1.5">
-                <Label>
-                  Onde o serviço vai ser feito ({unidadesDoLote.length || 1})
-                </Label>
-                <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const todas = (unidades ?? []).map((u) => u.id);
-                      const jaTodas = unidadesDoLote.length === todas.length;
-                      setUnidadesDoLote(jaTodas ? [] : todas);
-                      if (!jaTodas && todas.length > 0) setUnidadeNova(todas[0]);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium hover:bg-slate-50"
-                  >
-                    <Checkbox
-                      checked={unidadesDoLote.length === (unidades?.length ?? 0)}
-                      className="pointer-events-none"
-                    />
-                    <span>
-                      Todas as {v.unidade.toLowerCase()}s ({unidades?.length ?? 0})
-                    </span>
-                  </button>
-
-                  {(unidades ?? []).map((u) => {
-                    const marcada =
-                      unidadesDoLote.length > 0
-                        ? unidadesDoLote.includes(u.id)
-                        : u.id === unidadeNova;
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => {
-                          const base =
-                            unidadesDoLote.length > 0 ? unidadesDoLote : [unidadeNova];
-                          const novas = marcada
-                            ? base.filter((id) => id !== u.id)
-                            : [...base, u.id];
-
-                          setUnidadesDoLote(novas);
-                          // A primeira marcada é a unidade dos cadastros da
-                          // tela: categoria, status e equipe vêm dela.
-                          if (novas.length > 0) setUnidadeNova(novas[0]);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
-                      >
-                        <Checkbox checked={marcada} className="pointer-events-none" />
-                        <span className="truncate">{u.nome}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div>
+                <Label>{v.unidade} de atendimento</Label>
+                <Select
+                  value={String(unidadeNova)}
+                  onValueChange={(valor) => {
+                    setUnidadeNova(Number(valor));
+                    // Categoria, prioridade, status e equipe são da unidade
+                    // anterior: manter o que estava escolhido gravaria a ordem
+                    // apontando para cadastro de outra unidade.
+                    setForm((atual) => ({
+                      ...atual,
+                      categoriaId: "",
+                      prioridadeId: "",
+                      statusId: "",
+                      equipeId: "",
+                    }));
+                    setResponsaveisNova([]);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unidades!.map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             ) : (
               organizacao && (
@@ -1465,14 +1115,9 @@ export function ConteudoOrdensServico({
                 </div>
               )
             )}
-            </Secao>
-            )}
-
             {/* Quem pediu o serviço nem sempre é quem digita: o gerente abre
                 pelo coordenador da unidade, o gestor abre pela cozinheira que
                 avisou. Campo livre, porque não há cadastro para isso. */}
-            {mostrar("solicitante") && (
-            <Secao titulo="Quem pediu">
             <div>
               <Label>Responsável pela abertura</Label>
               <Input
@@ -1481,19 +1126,7 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, solicitanteNome: e.target.value })}
               />
             </div>
-            </Secao>
-            )}
 
-            {mostrar("servico") && (
-            <Secao titulo="O que precisa ser feito">
-            {/* Com uma unidade só o passo de escolha não existe, mas para onde
-                a ordem vai continua sendo informação — aparece aqui. */}
-            {!podeEscolherUnidade && organizacao && (
-              <div className="rounded-lg border bg-slate-50 px-3 py-2">
-                <span className="text-xs text-slate-500">{v.unidade} de atendimento</span>
-                <p className="text-sm font-medium text-slate-800">{organizacao.nome}</p>
-              </div>
-            )}
             <div>
               <Label>Título</Label>
               <Input
@@ -1512,10 +1145,8 @@ export function ConteudoOrdensServico({
               />
             </div>
             </Secao>
-            )}
 
-            {mostrar("dataAbertura") && (
-            <Secao titulo="Quando o pedido chegou">
+            <Secao titulo="Prazos e execução">
             <div>
               <Label>Data de abertura do chamado</Label>
               <Input
@@ -1527,12 +1158,8 @@ export function ConteudoOrdensServico({
                 O dia em que o pedido chegou — pode ser anterior ao de hoje.
               </p>
             </div>
-            </Secao>
-            )}
 
             {/* Prazo: é ele que coloca a O.S. no calendário e cobra alguém. */}
-            {mostrar("prazo") && (
-            <Secao titulo="Para quando">
             <div>
               <Label>Data máxima de finalização</Label>
               <Input
@@ -1540,65 +1167,75 @@ export function ConteudoOrdensServico({
                 value={form.prazoLimite}
                 onChange={(e) => setForm({ ...form, prazoLimite: e.target.value })}
               />
-
-              {/* Atalhos antes do calendário: digitar data no celular é onde
-                  mais gente desiste, e "daqui a uma semana" é o que a pessoa
-                  tem na cabeça — não o dia 27. */}
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {[
-                  { rotulo: "Amanhã", dias: 1 },
-                  { rotulo: "Em 7 dias", dias: 7 },
-                  { rotulo: "Em 15 dias", dias: 15 },
-                  { rotulo: "Em 30 dias", dias: 30 },
-                ].map((atalho) => {
-                  const valor = emDias(atalho.dias);
-                  return (
-                    <button
-                      key={atalho.dias}
-                      type="button"
-                      onClick={() => setForm({ ...form, prazoLimite: valor })}
-                      className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${
-                        form.prazoLimite === valor
-                          ? "bg-slate-800 text-white border-slate-800"
-                          : "bg-white text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      {atalho.rotulo}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
-            </Secao>
-            )}
 
-            {mostrar("equipe") && (
-            <Secao titulo="Quem executa">
-            {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
-                sem precisar reabrir a ordem depois.
+            {/* A moldura dos cadastros.
+                Antes eram duas engrenagens cinza, uma ao lado do rótulo da
+                equipe e outra no bloco dos responsáveis: ninguém que estava
+                conhecendo o sistema imaginava que ali se cadastrava gente. Os
+                dois caminhos passam a morar num quadro só, com o nome escrito
+                e na ordem em que se usa — primeiro as pessoas, depois o time
+                que se monta com elas.
 
-                Só para quem responde pela unidade: o servidor recusa a
-                designação feita por funcionário, e oferecer o campo a ele era
-                montar a ordem inteira para ela morrer no clique final. */}
-            {temModulo("equipes") && ehGestor && (
-              <div>
-                <Label>Equipe designada</Label>
+                Só para quem responde pela unidade: o servidor recusa o
+                cadastro feito por funcionário, e oferecer o botão a ele seria
+                abrir uma porta que bate na cara. */}
+            {ehGestor && (
+              <div className="rounded-lg border-2 border-amber-200 bg-amber-50 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+                    <Users className="w-4 h-4" /> Equipe e funcionários
+                  </span>
+                  {temModulo("equipes") && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-amber-800 hover:bg-amber-100"
+                      onClick={() => setAjudaEquipes(true)}
+                    >
+                      <HelpCircle className="w-4 h-4" /> Como funciona
+                    </Button>
+                  )}
+                </div>
 
-                {/* Botões com o nome escrito, na frente.
-                    Antes era só uma engrenagem cinza ao lado do rótulo: quem
-                    está conhecendo o sistema não imagina que ali se cadastra
-                    equipe, e muito menos que existe uma explicação. */}
-                <div className="flex flex-wrap gap-2 mt-1 mb-2">
+                <p className="text-xs text-amber-900/80">
+                  {temModulo("equipes")
+                    ? "Cadastre primeiro os funcionários. Depois crie a equipe e marque quem participa dela."
+                    : "Cadastre aqui quem pode responder por esta O.S."}
+                </p>
 
+                {/* Nesta ordem porque é nesta ordem que se faz: a tela da
+                    equipe só tem quem marcar depois que as fichas existem. */}
+                <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    onClick={() => setModalEquipes(true)}
+                    className="bg-white"
+                    onClick={() => setModalFuncionarios(true)}
                   >
-                    <Users className="w-4 h-4" /> Cadastrar equipe
+                    <UserPlus className="w-4 h-4" /> Cadastrar funcionário
                   </Button>
+
+                  {temModulo("equipes") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-white"
+                      onClick={() => setModalEquipes(true)}
+                    >
+                      <Users className="w-4 h-4" /> Cadastrar equipe
+                    </Button>
+                  )}
                 </div>
+              </div>
+            )}
+
+            {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
+                sem precisar reabrir a ordem depois. */}
+            {temModulo("equipes") && (
+              <div>
+                <Label>Equipe designada</Label>
                 <Select
                   value={form.equipeId}
                   onValueChange={(valor) => setForm({ ...form, equipeId: valor })}
@@ -1622,7 +1259,7 @@ export function ConteudoOrdensServico({
                 {(equipesDaUnidade?.length ?? 0) === 0 && (
                   <p className="text-xs text-slate-500 mt-1">
                     Nenhuma equipe atende esta {v.unidade.toLowerCase()} ainda
-                    {ehGestor ? " — cadastre pela engrenagem ao lado" : ""}.
+                    {ehGestor ? " — cadastre em “Cadastrar equipe”, acima" : ""}.
                   </p>
                 )}
                 {/* Quem está na equipe escolhida: some a dúvida de para quem o
@@ -1637,27 +1274,15 @@ export function ConteudoOrdensServico({
               </div>
             )}
 
-            {/* Responsáveis */}
+            {/* Responsáveis. Quem falta na lista se cadastra pela moldura
+                acima, sem abandonar a O.S. começada. */}
             <div className="border rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium">Responsáveis pela O.S.</span>
-                {/* Mesma ideia da equipe: quem falta na lista é cadastrado aqui,
-                    sem abandonar a O.S. começada. */}
-                {/* Com o nome escrito, pela mesma razão do botão da equipe:
-                    engrenagem cinza não diz a ninguém que ali se cadastra. */}
-                {ehGestor && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setModalFuncionarios(true)}
-                  >
-                    <UserPlus className="w-4 h-4" /> Cadastrar funcionário
-                  </Button>
-                )}
-              </div>
+              <span className="text-sm font-medium">Responsáveis pela O.S.</span>
               {(candidatosNova?.length ?? 0) === 0 ? (
-                <p className="text-xs text-slate-400">Nenhuma pessoa cadastrada nesta unidade.</p>
+                <p className="text-xs text-slate-400">
+                  Nenhuma pessoa cadastrada nesta unidade
+                  {ehGestor ? " — cadastre em “Cadastrar funcionário”, acima" : ""}.
+                </p>
               ) : (
                 <div className="max-h-40 overflow-y-auto divide-y border rounded-md">
                   {candidatosNova!.map((c) => (
@@ -1682,9 +1307,7 @@ export function ConteudoOrdensServico({
             </div>
 
             </Secao>
-            )}
 
-            {mostrar("classificacao") && (
             <Secao titulo="Detalhes">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1754,11 +1377,7 @@ export function ConteudoOrdensServico({
                 onChange={(e) => setForm({ ...form, endereco: e.target.value })}
               />
             </div>
-            </Secao>
-            )}
 
-            {mostrar("fotos") && (
-            <Secao titulo="Fotos e observações">
             {/* Antes e depois já na abertura: quem está no local fotografa o
                 problema agora, e o "depois" entra quando o serviço terminar —
                 aqui ou dentro da própria ordem. */}
@@ -1803,23 +1422,22 @@ export function ConteudoOrdensServico({
             </div>
 
             </Secao>
-            )}
 
-            {/* Avisos de abertura: configuração da unidade, só o gestor vê.
-                Fica no último passo, junto do botão que cria. */}
-            {mostrar("avisos") && organizacao && (
+            {/* Avisos de abertura: configuração da unidade, só o gestor vê. */}
+            {organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
-                  {/* Mesmo tratamento das outras: nome escrito no lugar do
-                      ícone cinza que ninguém sabia para que servia. */}
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
+                    className="h-8 px-2 text-slate-500"
                     onClick={() => setModalFuncionarios(true)}
+                    aria-label="Cadastrar funcionários"
+                    title="Cadastrar funcionários"
                   >
-                    <UserPlus className="w-4 h-4" /> Cadastrar funcionário
+                    <Settings className="w-4 h-4" />
                   </Button>
                 </div>
 
@@ -1899,81 +1517,15 @@ export function ConteudoOrdensServico({
             {/* Rodapé colado: o botão sumia no fim de doze campos, e quem abre
                 O.S. pelo celular rolava a tela toda para achar. */}
             <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 pt-3 pb-4 sm:pb-6 bg-white border-t shadow-[0_-10px_16px_-12px_rgba(15,23,42,0.25)]">
-            {/* O rodapé é a navegação: voltar, pular o que não é obrigatório e
-                seguir. O botão que cria a ordem só aparece no último passo. */}
-            {!ultimoPasso && (
-              <>
-              {/* O passo obrigatório diz o que falta antes de a pessoa clicar
-                  no botão apagado e concluir que a tela travou. */}
-              {faltaNoPasso && <p className="text-xs text-amber-700 mb-2">{faltaNoPasso}</p>}
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    passoForm === 0 ? setModalNova(false) : setPassoForm(passoForm - 1)
-                  }
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  {passoForm === 0 ? "Cancelar" : "Voltar"}
-                </Button>
-
-                {!passoAtual.obrigatorio && (
-                  <Button variant="ghost" onClick={() => setPassoForm(passoForm + 1)}>
-                    Pular
-                  </Button>
-                )}
-
-                <Button
-                  className="flex-1"
-                  disabled={!!faltaNoPasso}
-                  onClick={() => setPassoForm(passoForm + 1)}
-                >
-                  Continuar
-                </Button>
-              </div>
-              </>
-            )}
-
-            {ultimoPasso && (
-            <>
-            {/* Botão bloqueado sem dizer por quê é o que faz a pessoa clicar
-                três vezes e desistir. Aqui ele diz o que falta e onde está. */}
-            {(form.titulo.trim().length === 0 || !form.prazoLimite) && (
-              <p className="text-xs text-amber-700 mb-2">
-                {faltaNoFormulario} Volte um passo para preencher.
-              </p>
-            )}
-            <div className="flex gap-2">
-            {passoForm > 0 && (
-              <Button variant="outline" onClick={() => setPassoForm(passoForm - 1)}>
-                <ArrowLeft className="w-4 h-4" /> Voltar
-              </Button>
-            )}
             <Button
               className="w-full"
               disabled={
                 criar.isPending ||
-                // Enquanto o lote está sendo repetido, clicar de novo abriria
-                // tudo em dobro.
-                criarCopia.isPending ||
-                form.titulo.trim().length === 0 ||
+                form.titulo.trim().length < 3 ||
                 !habilitado ||
                 !form.prazoLimite
               }
-              onClick={() => {
-                // O que a cópia nas outras unidades vai repetir. Fica antes da
-                // chamada porque o `onSuccess` já encontra o formulário limpo.
-                ultimoPedido.current = {
-                  titulo: form.titulo.trim(),
-                  descricao: form.descricao.trim() || undefined,
-                  prazoLimite: form.prazoLimite,
-                  endereco: form.endereco.trim() || undefined,
-                  solicitanteNome: form.solicitanteNome.trim() || undefined,
-                  dataAbertura: form.dataAbertura || undefined,
-                  observacoes: form.observacoes.trim() || undefined,
-                };
-
+              onClick={() =>
                 criar.mutate({
                   condominioId: unidadeNova,
                   titulo: form.titulo.trim(),
@@ -1987,31 +1539,23 @@ export function ConteudoOrdensServico({
                   prazoLimite: form.prazoLimite,
                   equipeId: form.equipeId ? Number(form.equipeId) : undefined,
                   observacoes: form.observacoes.trim() || undefined,
-                });
-              }}
+                })
+              }
             >
-              {criar.isPending || criarCopia.isPending ? (
+              {criar.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <Plus className="w-4 h-4 mr-2" />
               )}
-              {/* Com lote, o botão diz quantas ordens saem daqui: "Criar
-                  Ordem de Serviço" faria três virarem surpresa. */}
-              {unidadesDoLote.length > 1
-                ? `Criar ${unidadesDoLote.length} ordens`
-                : "Criar Ordem de Serviço"}
+              Criar Ordem de Serviço
             </Button>
             </div>
-            </>
-            )}
-            </div>
-
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Cadastro de equipes, por cima da abertura da O.S. */}
-      {/* O passo a passo, por cima da ordem: explica sem tirar ninguém do lugar. */}
+      {/* O passo a passo de como montar equipe, por cima da ordem: explica sem
+          tirar ninguém do lugar, e cada passo leva ao cadastro de verdade. */}
       <Dialog open={ajudaEquipes} onOpenChange={setAjudaEquipes}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
