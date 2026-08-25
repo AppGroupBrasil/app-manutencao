@@ -43,6 +43,17 @@ interface OSPDFData {
   // Solicitante
   solicitanteNome?: string;
   solicitanteTipo?: string;
+  /**
+   * Blocos que este cliente escondeu da ordem — ids de `CAMPOS_OCULTAVEIS_OS`.
+   *
+   * A folha impressa segue a mesma escolha da tela. Sem isto, o cliente que
+   * pediu para tirar "solicitante" recebia um PDF com o campo lá, e a função
+   * de ocultar viraria meia promessa.
+   *
+   * Nem todo bloco tem correspondência aqui: equipe, local, observações e
+   * avisos não são impressos, então esconder não muda nada nesta folha.
+   */
+  camposOcultos?: string[];
 }
 
 // ===== CORES PREMIUM =====
@@ -200,9 +211,14 @@ function getTimelineLabel(tipo: string): string {
 
 // ===== GERADOR PRINCIPAL =====
 export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
+  /** Este bloco entra na folha? A escolha é a mesma que vale na tela. */
+  const mostrar = (id: string) => !(data.camposOcultos ?? []).includes(id);
+
   // Pre-fetch de todas as imagens (antes de iniciar o doc)
   const imageBuffers: Array<{ buffer: Buffer; tipo?: string; descricao?: string; url: string }> = [];
-  if (data.imagens && data.imagens.length > 0) {
+  // Fotos escondidas nem são baixadas: além de não entrarem na folha, evitam
+  // doze requisições de imagem para nada.
+  if (data.imagens && data.imagens.length > 0 && mostrar("fotos")) {
     // Baixa em paralelo, mas guarda por índice: com `push` dentro do
     // `Promise.all`, a folha saía na ordem em que a rede respondia — o "depois"
     // aparecia antes do "antes" sem nenhum motivo visível.
@@ -330,6 +346,10 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
     // ==========================================
     //  BARRA DE INFO: STATUS / PRIORIDADE / CATEGORIA / SETOR
     // ==========================================
+    // A barra inteira sai quando o cliente esconde a classificação: são as
+    // quatro colunas dela, e meia barra com dois "N/A" seria pior do que
+    // nenhuma.
+    if (mostrar('classificacao')) {
     doc.save();
     drawRoundedRect(doc, margin, y, contentWidth, 50, 8, { fill: '#f8fafc', stroke: COLORS.border, lineWidth: 0.5 });
 
@@ -362,53 +382,111 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
 
     doc.restore();
     y += 62;
+    }
 
     // ==========================================
     //  SECAO: INFORMACOES GERAIS
     // ==========================================
     y = drawSectionTitle(doc, ' ', 'INFORMACOES GERAIS', y, pageWidth, margin);
 
+    /**
+     * As duas colunas do cartão, montadas como lista.
+     *
+     * Antes cada campo tinha a altura escrita na mão (`isY + 35`, `isY + 62`).
+     * Escondendo um deles, o buraco ficava no meio do cartão e os de baixo não
+     * subiam. Em lista, some o item e os seguintes ocupam o lugar.
+     */
+    const totalHours = data.tempoEstimadoDias * 24 + data.tempoEstimadoHoras + data.tempoEstimadoMinutos / 60;
+    const prazoText = totalHours > 0 ? `${data.tempoEstimadoDias}d ${data.tempoEstimadoHoras}h ${data.tempoEstimadoMinutos}min` : 'Nao definido';
+
+    type ItemInfo = { rotulo: string; cor: string; valor: string; destaque?: boolean };
+
+    const colEsquerda: ItemInfo[] = [
+      { rotulo: 'TITULO', cor: '#1a56db', valor: data.titulo || 'Sem titulo', destaque: true },
+      // Quem responde pela ordem sai junto com o bloco de responsáveis: é a
+      // mesma informação, e deixar só este seria esconder pela metade.
+      ...(mostrar('responsaveis')
+        ? [{
+            rotulo: 'RESPONSAVEL PRINCIPAL',
+            cor: '#8b5cf6',
+            valor: data.responsavelPrincipalNome || 'Nao atribuido',
+          }]
+        : []),
+      ...(mostrar('solicitante')
+        ? [{
+            rotulo: 'SOLICITANTE',
+            cor: '#ec4899',
+            valor: data.solicitanteNome
+              ? `${data.solicitanteNome}${data.solicitanteTipo ? ` (${data.solicitanteTipo})` : ''}`
+              : 'N/A',
+          }]
+        : []),
+    ];
+
+    const colDireita: ItemInfo[] = [
+      ...(mostrar('dataAbertura')
+        ? [{ rotulo: 'DATA DE CRIACAO', cor: '#0ea5e9', valor: formatDateTime(data.dataCriacao) }]
+        : []),
+      { rotulo: 'PRAZO ESTIMADO', cor: '#f59e0b', valor: prazoText },
+      // O sistema não trabalha com valores: onde ficava o dinheiro, entra o
+      // local. É o nome da unidade, e não o endereço digitado na ordem — por
+      // isso não sai junto com o bloco "local".
+      { rotulo: 'LOCAL/ITEM', cor: '#06b6d4', valor: data.condominioNome || 'N/A' },
+    ];
+
+    /**
+     * A grade das duas colunas: primeira linha em 0, as demais de 27 em 27 a
+     * partir de 35.
+     *
+     * Os números saem da folha antiga, e a grade é a mesma dos dois lados de
+     * propósito — é o que mantém "PRAZO ESTIMADO" na mesma altura de
+     * "RESPONSAVEL PRINCIPAL". Calcular por índice em vez de escrever a altura
+     * em cada campo é o que faz a coluna refluir quando um bloco sai, sem
+     * perder o alinhamento com a outra.
+     */
+    const topoDoIndice = (i: number) => (i === 0 ? 0 : 35 + (i - 1) * 27);
+    const toposEsq = colEsquerda.map((_, i) => topoDoIndice(i));
+    const toposDir = colDireita.map((_, i) => topoDoIndice(i));
+    /**
+     * A altura fecha no último rótulo mais o valor abaixo dele e um respiro.
+     *
+     * Os 23 saem da folha antiga: último rótulo em 62, cartão terminando em
+     * 95. Calcular em vez de fixar é o que faz o cartão encolher quando um
+     * bloco sai.
+     */
+    const fimDaColuna = (t: number[]) => (t.length === 0 ? 0 : t[t.length - 1] + 23);
+    const alturaCartao = 10 + Math.max(fimDaColuna(toposEsq), fimDaColuna(toposDir));
+
     doc.save();
-    drawRoundedRect(doc, margin, y, contentWidth, 95, 6, { fill: COLORS.cardBg, stroke: COLORS.border, lineWidth: 0.5 });
+    drawRoundedRect(doc, margin, y, contentWidth, alturaCartao, 6, { fill: COLORS.cardBg, stroke: COLORS.border, lineWidth: 0.5 });
     // Barra lateral de accent
-    drawRoundedRect(doc, margin, y, 4, 95, 2, { fill: '#1a56db' });
+    drawRoundedRect(doc, margin, y, 4, alturaCartao, 2, { fill: '#1a56db' });
 
     const isY = y + 10;
     const half = contentWidth / 2;
 
-    // Col esquerda
-    doc.fontSize(8).fillColor('#1a56db').font('Helvetica-Bold').text('TITULO', margin + 14, isY);
-    doc.fontSize(11).fillColor(COLORS.dark).font('Helvetica-Bold').text(data.titulo || 'Sem titulo', margin + 14, isY + 12, { width: half - 28 });
+    const desenharColuna = (itens: ItemInfo[], deslocamentos: number[], x: number) => {
+      itens.forEach((item, i) => {
+        const topo = isY + deslocamentos[i];
+        doc.fontSize(8).fillColor(item.cor).font('Helvetica-Bold').text(item.rotulo, x, topo);
+        doc
+          .fontSize(item.destaque ? 11 : 10)
+          .fillColor(item.destaque ? COLORS.dark : COLORS.text)
+          .font(item.destaque ? 'Helvetica-Bold' : 'Helvetica')
+          .text(item.valor, x, topo + 12, { width: half - 28 });
+      });
+    };
 
-    doc.fontSize(8).fillColor('#8b5cf6').font('Helvetica-Bold').text('RESPONSAVEL PRINCIPAL', margin + 14, isY + 35);
-    doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(data.responsavelPrincipalNome || 'Nao atribuido', margin + 14, isY + 47, { width: half - 28 });
-
-    doc.fontSize(8).fillColor('#ec4899').font('Helvetica-Bold').text('SOLICITANTE', margin + 14, isY + 62);
-    doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(
-      data.solicitanteNome ? `${data.solicitanteNome}${data.solicitanteTipo ? ` (${data.solicitanteTipo})` : ''}` : 'N/A',
-      margin + 14, isY + 74, { width: half - 28 }
-    );
-
-    // Col direita
-    doc.fontSize(8).fillColor('#0ea5e9').font('Helvetica-Bold').text('DATA DE CRIACAO', margin + half + 14, isY);
-    doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(formatDateTime(data.dataCriacao), margin + half + 14, isY + 12, { width: half - 28 });
-
-    const totalHours = data.tempoEstimadoDias * 24 + data.tempoEstimadoHoras + data.tempoEstimadoMinutos / 60;
-    const prazoText = totalHours > 0 ? `${data.tempoEstimadoDias}d ${data.tempoEstimadoHoras}h ${data.tempoEstimadoMinutos}min` : 'Nao definido';
-    doc.fontSize(8).fillColor('#f59e0b').font('Helvetica-Bold').text('PRAZO ESTIMADO', margin + half + 14, isY + 35);
-    doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(prazoText, margin + half + 14, isY + 47, { width: half - 28 });
-
-    // O sistema não trabalha com valores: onde ficava o dinheiro, entra o local.
-    doc.fontSize(8).fillColor('#06b6d4').font('Helvetica-Bold').text('LOCAL/ITEM', margin + half + 14, isY + 62);
-    doc.fontSize(10).fillColor(COLORS.text).font('Helvetica').text(data.condominioNome || 'N/A', margin + half + 14, isY + 74, { width: half - 28 });
+    desenharColuna(colEsquerda, toposEsq, margin + 14);
+    desenharColuna(colDireita, toposDir, margin + half + 14);
 
     doc.restore();
-    y += 105 + 12;
+    y += alturaCartao + 22;
 
     // ==========================================
     //  SECAO: DESCRICAO DO SERVICO
     // ==========================================
-    if (data.descricao) {
+    if (data.descricao && mostrar('descricao')) {
       y = checkPageBreak(doc, 80, margin, y);
       y = drawSectionTitle(doc, ' ', 'DESCRICAO DO SERVICO', y, pageWidth, margin);
 
@@ -429,7 +507,7 @@ export async function generateOSPDF(data: OSPDFData): Promise<Buffer> {
     // ==========================================
     //  SECAO: RESPONSAVEIS
     // ==========================================
-    if (data.responsaveis && data.responsaveis.length > 0) {
+    if (data.responsaveis && data.responsaveis.length > 0 && mostrar('responsaveis')) {
       y = checkPageBreak(doc, 80, margin, y);
       y = drawSectionTitle(doc, ' ', 'EQUIPA RESPONSAVEL', y, pageWidth, margin);
 

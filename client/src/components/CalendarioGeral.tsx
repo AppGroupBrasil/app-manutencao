@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { useCamposOcultosOs } from "@/components/CamposOcultosOs";
 import { SITUACAO_PRAZO } from "@/lib/coresRegistro";
 import {
   CalendarClock,
@@ -154,6 +155,13 @@ export function CalendarioGeral({
     { condominioId: unidadeDoReprogramando },
     { enabled: reprogramando !== null && !!podeGerenciar && unidadeDoReprogramando > 0 },
   );
+  /**
+   * Os blocos que o cliente escondeu da O.S. — aqui só se obedece.
+   *
+   * Pela unidade da ordem que está sendo reprogramada, pelo mesmo motivo da
+   * lista de candidatos acima.
+   */
+  const campos = useCamposOcultosOs(unidadeDoReprogramando, false);
   const [mesVisivel, setMesVisivel] = useState(() => {
     const agora = new Date();
     return new Date(agora.getFullYear(), agora.getMonth(), 1);
@@ -473,8 +481,12 @@ export function CalendarioGeral({
                   </p>
                 )}
               {/* Designar a equipe aqui mesmo: o gerente distribui a agenda de
-                  uma vez, sem abrir cada ordem. Quem já está na O.S. continua. */}
-              {(candidatos?.length ?? 0) > 0 && (
+                  uma vez, sem abrir cada ordem. Quem já está na O.S. continua.
+
+                  Segue o mesmo "ocultar" da ordem: para o cliente que tirou os
+                  responsáveis da O.S., a lista não pode reaparecer aqui — seria
+                  a promessa cumprida pela metade, como acontecia no detalhe. */}
+              {(candidatos?.length ?? 0) > 0 && campos.visivel("responsaveis") && (
                 <div>
                   <p className="text-xs font-medium text-slate-700 mb-1">
                     Quem vai fazer o serviço

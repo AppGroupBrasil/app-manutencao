@@ -2479,8 +2479,24 @@ export const osRouter = router({
         const [condominio] = await db.select().from(condominios)
           .where(eq(condominios.id, os.condominioId));
 
+        /**
+         * O que este cliente escondeu da ordem — a folha segue a mesma escolha.
+         *
+         * Pela unidade da O.S., e não pela unidade ativa de quem imprime: o
+         * gerente que cuida da rede pode estar noutra tela, e a folha é da
+         * ordem.
+         */
+        const [configDaUnidade] = await db
+          .select({ campos: osConfiguracoes.camposOcultos })
+          .from(osConfiguracoes)
+          .where(eq(osConfiguracoes.condominioId, os.condominioId))
+          .limit(1);
+
         // Preparar dados para PDF
         const pdfData = {
+          camposOcultos: (configDaUnidade?.campos ?? []).filter((id) =>
+            IDS_CAMPOS_OCULTAVEIS_OS.includes(id),
+          ),
           osId: input.osId,
           protocolo: os.protocolo || "",
           // Alimenta o QR da folha, que é link de leitura pública.
