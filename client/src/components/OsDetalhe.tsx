@@ -577,21 +577,27 @@ export function OsDetalhe({
             {v.unidade}: <span className="text-slate-700">{os.unidade.nome}</span>
           </span>
         )}
-        <span className="inline-flex items-center gap-1">
-          <MapPin className="w-3.5 h-3.5" /> {os.endereco || "—"}
-        </span>
+        {campos.visivel("local") && (
+          <span className="inline-flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5" /> {os.endereco || "—"}
+          </span>
+        )}
         {/* Data informada por quem registrou; sem ela, a do próprio registro. */}
-        <span className="inline-flex items-center gap-1">
-          <Calendar className="w-3.5 h-3.5" />{" "}
-          {os.dataAbertura ? formatarDia(os.dataAbertura) : formatarDataHora(os.createdAt)}
-        </span>
+        {campos.visivel("dataAbertura") && (
+          <span className="inline-flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5" />{" "}
+            {os.dataAbertura ? formatarDia(os.dataAbertura) : formatarDataHora(os.createdAt)}
+          </span>
+        )}
         {campos.visivel("solicitante") && os.solicitanteNome && (
           <span>Aberta por {os.solicitanteNome}</span>
         )}
         {os.prazoLimite && <span>Prazo: {formatarDia(os.prazoLimite)}</span>}
       </div>
 
-      <p className="text-sm text-slate-600">{os.descricao || "Sem descrição inicial."}</p>
+      {campos.visivel("descricao") && (
+        <p className="text-sm text-slate-600">{os.descricao || "Sem descrição inicial."}</p>
+      )}
 
       {/* Função desligada: some o campo, e quem procurava "designar equipe"
           ficava sem saber por quê. */}
