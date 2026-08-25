@@ -325,6 +325,8 @@ export function OsDetalhe({
    */
   const [modalEquipes, setModalEquipes] = useState(false);
   const [modalFuncionarios, setModalFuncionarios] = useState(false);
+  /** Abre direto no formulário da equipe nova, para quem veio dos funcionários. */
+  const [equipeDireto, setEquipeDireto] = useState(false);
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
   const [enviando, setEnviando] = useState(false);
   const [notaAvaliacao, setNotaAvaliacao] = useState(0);
@@ -598,7 +600,12 @@ export function OsDetalhe({
                 variant="ghost"
                 size="sm"
                 className="h-8 px-2 text-slate-500"
-                onClick={() => setModalEquipes(true)}
+                onClick={() => {
+                  // Pela engrenagem, a lista: pode ser que a pessoa venha
+                  // editar uma equipe que já existe.
+                  setEquipeDireto(false);
+                  setModalEquipes(true);
+                }}
                 aria-label="Cadastrar equipes"
                 title="Cadastrar equipes"
               >
@@ -1065,6 +1072,7 @@ export function OsDetalhe({
           <GerenciarEquipes
             condominioId={unidadeDaOs}
             onMudou={() => utils.equipes.list.invalidate()}
+            iniciarNovaEquipe={equipeDireto}
           />
         </DialogContent>
       </Dialog>
@@ -1079,10 +1087,17 @@ export function OsDetalhe({
             condominioId={unidadeDaOs}
             onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
             // Mesma sequência da abertura: cadastrou as pessoas, monta o time.
-            onIrParaEquipe={() => {
-              setModalFuncionarios(false);
-              setModalEquipes(true);
-            }}
+            // Sem o módulo ligado o atalho não existe — levaria a uma tela de
+            // uma função que esta organização não tem.
+            onIrParaEquipe={
+              temModulo("equipes")
+                ? () => {
+                    setModalFuncionarios(false);
+                    setEquipeDireto(true);
+                    setModalEquipes(true);
+                  }
+                : undefined
+            }
           />
         </DialogContent>
       </Dialog>

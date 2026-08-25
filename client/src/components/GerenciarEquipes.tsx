@@ -60,14 +60,32 @@ function UnidadesAtendidas({
 
   if (!aberto) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-md border bg-slate-50 px-3 py-2">
-        <span className="text-xs text-slate-600 min-w-0 truncate">
-          Atende{" "}
-          <strong className="font-medium text-slate-800">
-            {estaoTodas
-              ? `todas as ${todas.length} ${v.unidade.toLowerCase()}s`
-              : `${marcadas.length} de ${todas.length} ${v.unidade.toLowerCase()}s`}
-          </strong>
+      <div
+        className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 ${
+          // Nenhuma marcada é o único estado que impede de salvar, e recolhido
+          // ele passaria por informação comum até o erro aparecer no botão.
+          marcadas.length === 0 ? "border-amber-300 bg-amber-50" : "bg-slate-50"
+        }`}
+      >
+        <span
+          className={`text-xs min-w-0 truncate ${
+            marcadas.length === 0 ? "text-amber-900" : "text-slate-600"
+          }`}
+        >
+          {marcadas.length === 0 ? (
+            <>
+              Marque ao menos uma <strong className="font-medium">{v.unidade.toLowerCase()}</strong>
+            </>
+          ) : (
+            <>
+              Atende{" "}
+              <strong className="font-medium text-slate-800">
+                {estaoTodas
+                  ? `todas as ${todas.length} ${v.unidade.toLowerCase()}s`
+                  : `${marcadas.length} de ${todas.length} ${v.unidade.toLowerCase()}s`}
+              </strong>
+            </>
+          )}
         </span>
         <Button
           type="button"
@@ -157,15 +175,27 @@ type Passo =
 export function GerenciarEquipes({
   condominioId,
   onMudou,
+  iniciarNovaEquipe = false,
 }: {
   condominioId: number;
   /** Chamado a cada alteração, para quem exibe a lista se atualizar. */
   onMudou?: () => void;
+  /**
+   * Abre já no formulário da equipe nova, pulando a lista.
+   *
+   * Para quem chegou de um botão que prometeu montar a equipe: cair na lista
+   * e ter de achar "Nova equipe" é a promessa entregue pela metade. Lido uma
+   * vez só, na montagem — o diálogo desmonta ao fechar, então reabrir pela
+   * lista continua abrindo a lista.
+   */
+  iniciarNovaEquipe?: boolean;
 }) {
   const utils = trpc.useUtils();
   const v = useVocabulario();
 
-  const [passo, setPasso] = useState<Passo>({ tela: "lista" });
+  const [passo, setPasso] = useState<Passo>(
+    iniciarNovaEquipe ? { tela: "interna" } : { tela: "lista" },
+  );
 
   const { data: equipes, isLoading } = trpc.equipes.list.useQuery(
     { condominioId },

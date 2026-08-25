@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,14 @@ export function CadastroRapidoFuncionario({
   const [email, setEmail] = useState("");
   /** Telefone e e-mail não fazem falta para a pessoa entrar numa equipe. */
   const [mostrarContato, setMostrarContato] = useState(false);
+  /**
+   * Para devolver o teclado ao nome depois de gravar.
+   *
+   * Quem cadastra pelo botão perdia o foco para ele: o campo ficava limpo e
+   * aparentemente pronto, mas digitar não escrevia nada — e a impressão é a de
+   * que a tela travou.
+   */
+  const campoNome = useRef<HTMLInputElement>(null);
 
   const recarregar = async () => {
     await Promise.all([
@@ -77,7 +85,10 @@ export function CadastroRapidoFuncionario({
       setTelefone("");
       setEmail("");
       setTipo("auxiliar");
-      setMostrarContato(false);
+      // `mostrarContato` fica como está: quem abriu o contato para uma pessoa
+      // costuma preenchê-lo para as seguintes, e recolher a cada gravação
+      // obrigaria a reabrir dez vezes.
+      campoNome.current?.focus();
       await recarregar();
       // Com o nome dentro: cadastrando cinco pessoas seguidas, "Funcionário
       // cadastrado" cinco vezes não diz qual delas entrou.
@@ -135,6 +146,7 @@ export function CadastroRapidoFuncionario({
           <Label htmlFor="fn-nome">Nome</Label>
           <Input
             id="fn-nome"
+            ref={campoNome}
             placeholder="Nome de quem executa"
             value={nome}
             onChange={(e) => setNome(e.target.value)}

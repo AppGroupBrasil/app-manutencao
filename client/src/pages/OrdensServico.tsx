@@ -441,6 +441,14 @@ export function ConteudoOrdensServico({
   const [modalNova, setModalNova] = useState(false);
   /** Cadastro de equipes aberto por cima da O.S., pela moldura. */
   const [modalEquipes, setModalEquipes] = useState(false);
+  /**
+   * Abrir direto no formulário da equipe nova, e não na lista.
+   *
+   * Vale para quem veio de um botão que prometeu montar a equipe — o da tela
+   * de funcionários e o do passo a passo. Pela moldura, a lista é o certo:
+   * pode ser que a pessoa venha editar uma equipe que já existe.
+   */
+  const [equipeDireto, setEquipeDireto] = useState(false);
   /** Ficha rápida de funcionário, também pela moldura. */
   const [modalFuncionarios, setModalFuncionarios] = useState(false);
   /** O passo a passo de como montar equipe, aberto pelo "Como funciona". */
@@ -454,6 +462,25 @@ export function ConteudoOrdensServico({
    * inteira quebrava com "Cannot access before initialization".
    */
   const equipeEscolhida = (equipesDaUnidade ?? []).find((e) => String(e.id) === form.equipeId);
+
+  /**
+   * O que impede de criar a ordem, dito com todas as letras.
+   *
+   * "Falta o título" com o título preenchido seria o pior recado possível: o
+   * campo exige três letras, e quem digitou "AC" ficava olhando um botão
+   * apagado sem entender o que a tela queria dele.
+   */
+  const faltaNoFormulario = [
+    form.titulo.trim().length === 0
+      ? "Falta o título do serviço."
+      : form.titulo.trim().length < 3
+        ? "O título precisa de ao menos 3 letras."
+        : "",
+    !form.prazoLimite ? "Falta a data máxima de finalização." : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const [responsaveisNova, setResponsaveisNova] = useState<number[]>([]);
   /**
    * Fotos escolhidas na abertura, antes de a O.S. existir.
@@ -1222,7 +1249,10 @@ export function ConteudoOrdensServico({
                       type="button"
                       variant="outline"
                       className="bg-white"
-                      onClick={() => setModalEquipes(true)}
+                      onClick={() => {
+                        setEquipeDireto(false);
+                        setModalEquipes(true);
+                      }}
                     >
                       <Users className="w-4 h-4" /> Cadastrar equipe
                     </Button>
@@ -1232,8 +1262,13 @@ export function ConteudoOrdensServico({
             )}
 
             {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
-                sem precisar reabrir a ordem depois. */}
-            {temModulo("equipes") && (
+                sem precisar reabrir a ordem depois.
+
+                Só para quem responde pela unidade: o servidor recusa a
+                designação feita por funcionário (`exigirEquipeDaUnidade`), e
+                oferecer o campo a ele era deixar montar a ordem inteira para
+                ela morrer no clique final, com tudo o que foi digitado. */}
+            {temModulo("equipes") && ehGestor && (
               <div>
                 <Label>Equipe designada</Label>
                 <Select
@@ -1517,6 +1552,12 @@ export function ConteudoOrdensServico({
             {/* Rodapé colado: o botão sumia no fim de doze campos, e quem abre
                 O.S. pelo celular rolava a tela toda para achar. */}
             <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 pt-3 pb-4 sm:pb-6 bg-white border-t shadow-[0_-10px_16px_-12px_rgba(15,23,42,0.25)]">
+            {/* Botão apagado sem dizer por quê é o que faz a pessoa clicar três
+                vezes e concluir que a tela travou. O título exige três letras:
+                quem digitou "AC" olhava um botão morto sem nenhuma pista. */}
+            {faltaNoFormulario && (
+              <p className="text-xs text-amber-700 mb-2">{faltaNoFormulario}</p>
+            )}
             <Button
               className="w-full"
               disabled={
@@ -1565,6 +1606,9 @@ export function ConteudoOrdensServico({
             onFechar={() => setAjudaEquipes(false)}
             onCadastrarEquipe={() => {
               setAjudaEquipes(false);
+              // O tutorial diz "quero cadastrar agora": é o formulário, e não
+              // a lista de onde ele acabou de sair.
+              setEquipeDireto(true);
               setModalEquipes(true);
             }}
             onCadastrarFuncionario={() => {
@@ -1586,6 +1630,7 @@ export function ConteudoOrdensServico({
           <GerenciarEquipes
             condominioId={unidadeNova}
             onMudou={() => utils.equipes.list.invalidate()}
+            iniciarNovaEquipe={equipeDireto}
           />
         </DialogContent>
       </Dialog>
@@ -1606,6 +1651,7 @@ export function ConteudoOrdensServico({
               temModulo("equipes")
                 ? () => {
                     setModalFuncionarios(false);
+                    setEquipeDireto(true);
                     setModalEquipes(true);
                   }
                 : undefined
