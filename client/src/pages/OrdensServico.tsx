@@ -1590,7 +1590,7 @@ export function ConteudoOrdensServico({
         </DialogContent>
       </Dialog>
 
-      {/* Ficha rápida de funcionário, por cima da abertura da O.S. */}
+      {/* Cadastro de funcionários — a etapa 1, por cima da abertura da O.S. */}
       <Dialog open={modalFuncionarios} onOpenChange={setModalFuncionarios}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
@@ -1599,6 +1599,17 @@ export function ConteudoOrdensServico({
           <CadastroRapidoFuncionario
             condominioId={unidadeNova}
             onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
+            // Uma tela leva à outra: cadastrou as pessoas, o passo seguinte é
+            // montar o time com elas — e não voltar à O.S. para procurar o
+            // outro botão.
+            onIrParaEquipe={
+              temModulo("equipes")
+                ? () => {
+                    setModalFuncionarios(false);
+                    setModalEquipes(true);
+                  }
+                : undefined
+            }
           />
         </DialogContent>
       </Dialog>

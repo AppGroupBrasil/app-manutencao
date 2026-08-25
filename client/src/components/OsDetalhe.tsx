@@ -1078,6 +1078,11 @@ export function OsDetalhe({
           <CadastroRapidoFuncionario
             condominioId={unidadeDaOs}
             onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
+            // Mesma sequência da abertura: cadastrou as pessoas, monta o time.
+            onIrParaEquipe={() => {
+              setModalFuncionarios(false);
+              setModalEquipes(true);
+            }}
           />
         </DialogContent>
       </Dialog>

@@ -34,6 +34,10 @@ const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *
  * A mesma equipe cobre uma unidade ou a rede inteira — "Facilities" atende as
  * quinze. Some quando o cliente só tem uma: não há escolha a fazer.
+ *
+ * Nasce recolhida numa linha de resumo. O cadastro da equipe é nome e quem
+ * participa; quinze caixinhas abertas entre um e outro faziam a tela parecer
+ * um questionário, e a resposta certa já vem marcada de qualquer forma.
  */
 function UnidadesAtendidas({
   marcadas,
@@ -47,11 +51,36 @@ function UnidadesAtendidas({
 }) {
   const v = useVocabulario();
   const { data: organizacoes } = trpc.condominio.list.useQuery();
+  const [aberto, setAberto] = useState(false);
 
   if ((organizacoes?.length ?? 0) < 2) return null;
 
   const todas = (organizacoes ?? []).map((o) => o.id);
   const estaoTodas = marcadas.length === todas.length;
+
+  if (!aberto) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md border bg-slate-50 px-3 py-2">
+        <span className="text-xs text-slate-600 min-w-0 truncate">
+          Atende{" "}
+          <strong className="font-medium text-slate-800">
+            {estaoTodas
+              ? `todas as ${todas.length} ${v.unidade.toLowerCase()}s`
+              : `${marcadas.length} de ${todas.length} ${v.unidade.toLowerCase()}s`}
+          </strong>
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-slate-500 shrink-0"
+          onClick={() => setAberto(true)}
+        >
+          Alterar
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-1.5">
@@ -91,6 +120,16 @@ function UnidadesAtendidas({
           );
         })}
       </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-slate-500"
+        onClick={() => setAberto(false)}
+      >
+        Pronto
+      </Button>
     </div>
   );
 }
@@ -449,7 +488,7 @@ function EquipeInterna({
     removerMembro.isPending;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={onVoltar}>
           <ArrowLeft className="w-4 h-4" />
@@ -457,6 +496,21 @@ function EquipeInterna({
         <span className="font-medium text-slate-800">
           {equipe ? equipe.nome : "Nova equipe"}
         </span>
+      </div>
+
+      {/* O par do cabeçalho da tela de funcionários: são duas etapas, e esta é
+          a segunda. Quem chegou aqui direto entende, pelo número, que existe
+          uma antes — e que é lá que as pessoas nascem. */}
+      <div className="rounded-lg bg-slate-800 text-white px-3 py-2.5 flex items-start gap-3">
+        <span className="w-6 h-6 rounded-full bg-white/15 flex items-center justify-center text-sm font-semibold shrink-0">
+          2
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-medium leading-tight">Monte a equipe</p>
+          <p className="text-xs text-white/70 leading-snug mt-0.5">
+            Dê um nome e marque quem participa. A equipe designada na O.S. recebe o aviso.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-1.5">
@@ -480,10 +534,10 @@ function EquipeInterna({
         />
       )}
 
-      {/* Segundo bloco, separado do primeiro: um cadastra a equipe, o outro
+      {/* Segundo bloco, separado do primeiro: um nomeia a equipe, o outro
           escolhe quem entra nela. Emendados, o botão "Cadastrar funcionário"
           parecia parte do cadastro da equipe. */}
-      <div className="mt-5 pt-4 border-t space-y-1.5">
+      <div className="pt-4 border-t space-y-1.5">
         <Label>Quem participa desta equipe ({escolhidos.length})</Label>
 
         {carregandoTime ? (
@@ -491,9 +545,15 @@ function EquipeInterna({
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando quem já está na equipe…
           </p>
         ) : (pessoas?.length ?? 0) === 0 ? (
-          <p className="text-xs text-slate-500">
-            Nenhum funcionário ainda — cadastre o primeiro abaixo.
-          </p>
+          <div className="rounded-md border border-dashed px-3 py-4 text-center">
+            <UserPlus className="w-7 h-7 text-slate-300 mx-auto" strokeWidth={1.5} />
+            <p className="text-xs text-slate-600 font-medium mt-1.5">
+              Nenhum funcionário cadastrado ainda.
+            </p>
+            <p className="text-xs text-slate-500">
+              Cadastre o primeiro abaixo — ele aparece aqui na hora, para ser marcado.
+            </p>
+          </div>
         ) : (
           <div className="grid gap-1.5 max-h-52 overflow-y-auto">
             {pessoas!.map((p) => {
