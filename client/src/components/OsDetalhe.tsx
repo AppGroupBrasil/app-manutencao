@@ -322,9 +322,13 @@ export function OsDetalhe({
    * Sem eles, a ordem que nasceu sem equipe e sem responsável ficava sem saída:
    * a lista vinha vazia e o único caminho para cadastrar estava na tela de
    * abertura, que não existe mais para uma ordem que já foi criada.
+   *
+   * Num diálogo só, como na abertura: as duas telas se chamam entre si, e
+   * fechar um diálogo enquanto outro abre é o caminho conhecido para o overlay
+   * deixar `pointer-events: none` no `body` — a página inteira para de aceitar
+   * clique. Trocando o conteúdo, nunca há dois overlays em transição.
    */
-  const [modalEquipes, setModalEquipes] = useState(false);
-  const [modalFuncionarios, setModalFuncionarios] = useState(false);
+  const [cadastro, setCadastro] = useState<"funcionarios" | "equipes" | null>(null);
   /** Abre direto no formulário da equipe nova, para quem veio dos funcionários. */
   const [equipeDireto, setEquipeDireto] = useState(false);
   const [faseFoto, setFaseFoto] = useState<(typeof FASES)[number]["valor"]>("antes");
@@ -604,7 +608,7 @@ export function OsDetalhe({
                   // Pela engrenagem, a lista: pode ser que a pessoa venha
                   // editar uma equipe que já existe.
                   setEquipeDireto(false);
-                  setModalEquipes(true);
+                  setCadastro("equipes");
                 }}
                 aria-label="Cadastrar equipes"
                 title="Cadastrar equipes"
@@ -750,7 +754,7 @@ export function OsDetalhe({
               variant="ghost"
               size="sm"
               className="h-8 px-2 ml-auto text-slate-500"
-              onClick={() => setModalFuncionarios(true)}
+              onClick={() => setCadastro("funcionarios")}
               aria-label="Cadastrar funcionários"
               title="Cadastrar funcionários"
             >
@@ -1063,42 +1067,49 @@ export function OsDetalhe({
         )}
       </div>
 
-      {/* Cadastro de equipes, por cima da ordem já aberta. */}
-      <Dialog open={modalEquipes} onOpenChange={setModalEquipes}>
+      {/* Os cadastros da ordem já aberta, num diálogo só — as duas telas se
+          chamam entre si, e trocar o conteúdo evita ter dois overlays em
+          transição ao mesmo tempo. */}
+      <Dialog
+        open={cadastro !== null}
+        onOpenChange={(aberto) => {
+          if (aberto) return;
+          setCadastro(null);
+          // Reabrir pela engrenagem começa pela lista, e não no formulário
+          // para onde alguém foi levado da última vez.
+          setEquipeDireto(false);
+        }}
+      >
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Equipes</DialogTitle>
+            <DialogTitle>{cadastro === "funcionarios" ? "Funcionários" : "Equipes"}</DialogTitle>
           </DialogHeader>
-          <GerenciarEquipes
-            condominioId={unidadeDaOs}
-            onMudou={() => utils.equipes.list.invalidate()}
-            iniciarNovaEquipe={equipeDireto}
-          />
-        </DialogContent>
-      </Dialog>
 
-      {/* Ficha rápida de funcionário, para a ordem que nasceu sem ninguém. */}
-      <Dialog open={modalFuncionarios} onOpenChange={setModalFuncionarios}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Funcionários</DialogTitle>
-          </DialogHeader>
-          <CadastroRapidoFuncionario
-            condominioId={unidadeDaOs}
-            onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
-            // Mesma sequência da abertura: cadastrou as pessoas, monta o time.
-            // Sem o módulo ligado o atalho não existe — levaria a uma tela de
-            // uma função que esta organização não tem.
-            onIrParaEquipe={
-              temModulo("equipes")
-                ? () => {
-                    setModalFuncionarios(false);
-                    setEquipeDireto(true);
-                    setModalEquipes(true);
-                  }
-                : undefined
-            }
-          />
+          {cadastro === "funcionarios" && (
+            <CadastroRapidoFuncionario
+              condominioId={unidadeDaOs}
+              onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
+              // Mesma sequência da abertura: cadastrou as pessoas, monta o
+              // time. Sem o módulo ligado o atalho não existe — levaria a uma
+              // tela de uma função que esta organização não tem.
+              onIrParaEquipe={
+                temModulo("equipes")
+                  ? () => {
+                      setEquipeDireto(true);
+                      setCadastro("equipes");
+                    }
+                  : undefined
+              }
+            />
+          )}
+
+          {cadastro === "equipes" && (
+            <GerenciarEquipes
+              condominioId={unidadeDaOs}
+              onMudou={() => utils.equipes.list.invalidate()}
+              iniciarNovaEquipe={equipeDireto}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

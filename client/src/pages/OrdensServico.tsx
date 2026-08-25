@@ -439,8 +439,20 @@ export function ConteudoOrdensServico({
   const [filtroUnidades, setFiltroUnidades] = useState<number[]>([]);
   const [pagina, setPagina] = useState(1);
   const [modalNova, setModalNova] = useState(false);
-  /** Cadastro de equipes aberto por cima da O.S., pela moldura. */
-  const [modalEquipes, setModalEquipes] = useState(false);
+  /**
+   * Qual cadastro está aberto por cima da O.S. — num diálogo só.
+   *
+   * Eram três diálogos irmãos, e as telas se chamam entre si: a ajuda leva ao
+   * cadastro, o cadastro de funcionários leva ao da equipe. Fechar um e abrir
+   * outro no mesmo instante é o caminho conhecido para o overlay deixar
+   * `pointer-events: none` no `body` — a página fica inteira sem aceitar
+   * clique, e a pessoa só sai recarregando.
+   *
+   * Com um diálogo só, trocar de tela é trocar o conteúdo: não há overlay
+   * fechando enquanto outro abre, e a classe inteira de problema deixa de
+   * existir em vez de ficar dependendo do tempo da animação.
+   */
+  const [cadastro, setCadastro] = useState<"ajuda" | "funcionarios" | "equipes" | null>(null);
   /**
    * Abrir direto no formulário da equipe nova, e não na lista.
    *
@@ -449,10 +461,6 @@ export function ConteudoOrdensServico({
    * pode ser que a pessoa venha editar uma equipe que já existe.
    */
   const [equipeDireto, setEquipeDireto] = useState(false);
-  /** Ficha rápida de funcionário, também pela moldura. */
-  const [modalFuncionarios, setModalFuncionarios] = useState(false);
-  /** O passo a passo de como montar equipe, aberto pelo "Como funciona". */
-  const [ajudaEquipes, setAjudaEquipes] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   /**
    * A equipe marcada no formulário, para mostrar o time ou o contato dela.
@@ -1219,7 +1227,7 @@ export function ConteudoOrdensServico({
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-amber-800 hover:bg-amber-100"
-                      onClick={() => setAjudaEquipes(true)}
+                      onClick={() => setCadastro("ajuda")}
                     >
                       <HelpCircle className="w-4 h-4" /> Como funciona
                     </Button>
@@ -1239,7 +1247,7 @@ export function ConteudoOrdensServico({
                     type="button"
                     variant="outline"
                     className="bg-white"
-                    onClick={() => setModalFuncionarios(true)}
+                    onClick={() => setCadastro("funcionarios")}
                   >
                     <UserPlus className="w-4 h-4" /> Cadastrar funcionário
                   </Button>
@@ -1251,7 +1259,7 @@ export function ConteudoOrdensServico({
                       className="bg-white"
                       onClick={() => {
                         setEquipeDireto(false);
-                        setModalEquipes(true);
+                        setCadastro("equipes");
                       }}
                     >
                       <Users className="w-4 h-4" /> Cadastrar equipe
@@ -1458,8 +1466,14 @@ export function ConteudoOrdensServico({
 
             </Secao>
 
-            {/* Avisos de abertura: configuração da unidade, só o gestor vê. */}
-            {organizacao && (
+            {/* Avisos de abertura: configuração da unidade, só o gestor vê.
+                O comentário sempre disse isso, mas a condição não: o bloco
+                aparecia para o funcionário também, e todo controle dele morre
+                no servidor — `setAutoNotificar` e `setNotificarEmail` são
+                `moduloUserProcedure`, a lixeira é `funcionario.delete`, e o
+                botão de cadastrar chama `funcionario.create`. Quatro erros
+                esperando um clique de quem não pode nenhum deles. */}
+            {ehGestor && organizacao && (
               <div className="border rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">Avisos ao abrir a O.S.</span>
@@ -1468,7 +1482,7 @@ export function ConteudoOrdensServico({
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 text-slate-500"
-                    onClick={() => setModalFuncionarios(true)}
+                    onClick={() => setCadastro("funcionarios")}
                     aria-label="Cadastrar funcionários"
                     title="Cadastrar funcionários"
                   >
@@ -1595,68 +1609,72 @@ export function ConteudoOrdensServico({
         </DialogContent>
       </Dialog>
 
-      {/* O passo a passo de como montar equipe, por cima da ordem: explica sem
-          tirar ninguém do lugar, e cada passo leva ao cadastro de verdade. */}
-      <Dialog open={ajudaEquipes} onOpenChange={setAjudaEquipes}>
+      {/* Os cadastros da moldura, num diálogo só.
+          As três telas se chamam entre si; trocar o conteúdo em vez de fechar
+          um diálogo e abrir outro é o que garante que nunca haja dois overlays
+          em transição — a causa do `pointer-events: none` que trava a página
+          inteira. */}
+      <Dialog
+        open={cadastro !== null}
+        onOpenChange={(aberto) => {
+          if (aberto) return;
+          setCadastro(null);
+          // Reabrir pela moldura começa pela lista de equipes, e não no
+          // formulário para onde alguém foi levado da última vez.
+          setEquipeDireto(false);
+        }}
+      >
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Como funciona</DialogTitle>
+            {/* Sem "desta unidade" no título das equipes: a equipe pode atender
+                várias, e quais são elas é escolha do próprio cadastro. */}
+            <DialogTitle>
+              {cadastro === "ajuda"
+                ? "Como funciona"
+                : cadastro === "funcionarios"
+                  ? "Funcionários"
+                  : "Equipes"}
+            </DialogTitle>
           </DialogHeader>
-          <ComoFuncionaEquipes
-            onFechar={() => setAjudaEquipes(false)}
-            onCadastrarEquipe={() => {
-              setAjudaEquipes(false);
-              // O tutorial diz "quero cadastrar agora": é o formulário, e não
-              // a lista de onde ele acabou de sair.
-              setEquipeDireto(true);
-              setModalEquipes(true);
-            }}
-            onCadastrarFuncionario={() => {
-              setAjudaEquipes(false);
-              setModalFuncionarios(true);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
 
-      {/* Cadastro de equipes, por cima da abertura da O.S. */}
-      <Dialog open={modalEquipes} onOpenChange={setModalEquipes}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            {/* Sem "desta unidade" no título: a equipe pode atender várias, e
-                quais são elas é escolha do próprio cadastro. */}
-            <DialogTitle>Equipes</DialogTitle>
-          </DialogHeader>
-          <GerenciarEquipes
-            condominioId={unidadeNova}
-            onMudou={() => utils.equipes.list.invalidate()}
-            iniciarNovaEquipe={equipeDireto}
-          />
-        </DialogContent>
-      </Dialog>
+          {cadastro === "ajuda" && (
+            <ComoFuncionaEquipes
+              onFechar={() => setCadastro(null)}
+              onCadastrarEquipe={() => {
+                // O tutorial diz "quero cadastrar agora": é o formulário, e
+                // não a lista de onde ele acabou de sair.
+                setEquipeDireto(true);
+                setCadastro("equipes");
+              }}
+              onCadastrarFuncionario={() => setCadastro("funcionarios")}
+            />
+          )}
 
-      {/* Cadastro de funcionários — a etapa 1, por cima da abertura da O.S. */}
-      <Dialog open={modalFuncionarios} onOpenChange={setModalFuncionarios}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Funcionários</DialogTitle>
-          </DialogHeader>
-          <CadastroRapidoFuncionario
-            condominioId={unidadeNova}
-            onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
-            // Uma tela leva à outra: cadastrou as pessoas, o passo seguinte é
-            // montar o time com elas — e não voltar à O.S. para procurar o
-            // outro botão.
-            onIrParaEquipe={
-              temModulo("equipes")
-                ? () => {
-                    setModalFuncionarios(false);
-                    setEquipeDireto(true);
-                    setModalEquipes(true);
-                  }
-                : undefined
-            }
-          />
+          {cadastro === "funcionarios" && (
+            <CadastroRapidoFuncionario
+              condominioId={unidadeNova}
+              onMudou={() => utils.ordensServico.listarCandidatos.invalidate()}
+              // Uma tela leva à outra: cadastrou as pessoas, o passo seguinte
+              // é montar o time com elas — e não voltar à O.S. para procurar o
+              // outro botão.
+              onIrParaEquipe={
+                temModulo("equipes")
+                  ? () => {
+                      setEquipeDireto(true);
+                      setCadastro("equipes");
+                    }
+                  : undefined
+              }
+            />
+          )}
+
+          {cadastro === "equipes" && (
+            <GerenciarEquipes
+              condominioId={unidadeNova}
+              onMudou={() => utils.equipes.list.invalidate()}
+              iniciarNovaEquipe={equipeDireto}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

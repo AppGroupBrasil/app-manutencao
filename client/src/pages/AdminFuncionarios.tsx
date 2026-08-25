@@ -694,6 +694,24 @@ export default function AdminFuncionarios() {
             <div className="py-16 text-center">
               <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
             </div>
+          ) : ajudaEquipes ? (
+            /* O passo a passo ocupa o lugar da lista, e não um diálogo por
+               cima dela. Como diálogo, os botões "quero cadastrar agora"
+               fechavam um overlay e abriam outro no mesmo instante — o caminho
+               conhecido para o Radix deixar `pointer-events: none` no `body` e
+               travar a página inteira. Aqui não há overlay nenhum para
+               atrapalhar: sai o tutorial, entra a ficha. */
+            <ComoFuncionaEquipes
+              onFechar={() => setAjudaEquipes(false)}
+              onCadastrarEquipe={() => {
+                setAjudaEquipes(false);
+                abrirCriacaoEquipe(false);
+              }}
+              onCadastrarFuncionario={() => {
+                setAjudaEquipes(false);
+                abrirCriacao();
+              }}
+            />
           ) : (
           <>
           {/* O mesmo caminho em miniatura que existe no modal da O.S.: quem
@@ -817,26 +835,6 @@ export default function AdminFuncionarios() {
         </>
         )}
       </main>
-
-      {/* O passo a passo de como montar equipe, igual ao do modal da O.S. */}
-      <Dialog open={ajudaEquipes} onOpenChange={setAjudaEquipes}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Como funciona</DialogTitle>
-          </DialogHeader>
-          <ComoFuncionaEquipes
-            onFechar={() => setAjudaEquipes(false)}
-            onCadastrarEquipe={() => {
-              setAjudaEquipes(false);
-              abrirCriacaoEquipe(false);
-            }}
-            onCadastrarFuncionario={() => {
-              setAjudaEquipes(false);
-              abrirCriacao();
-            }}
-          />
-        </DialogContent>
-      </Dialog>
 
       {permissoesDe && (
         <PermissoesFuncionario
