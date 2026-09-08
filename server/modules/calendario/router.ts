@@ -66,6 +66,13 @@ export interface ItemCalendario {
   /** Falso quando o dia mostrado é o prazo, porque ninguém programou ainda. */
   programada?: boolean;
   /**
+   * O dia mostrado é o da abertura: a ordem não tem programação nem prazo.
+   *
+   * Sem isto ela não caía em dia nenhum e sumia do calendário — justamente a
+   * ordem que ninguém datou é a que precisa aparecer para alguém marcar.
+   */
+  semPrazo?: boolean;
+  /**
    * Unidade do registro, preenchida só quando o calendário soma a rede.
    *
    * O gerente precisa saber onde é o serviço antes de reprogramar — e a tela
@@ -219,6 +226,7 @@ export const calendarioRouter = router({
           sufixoChave?: string;
           prazoLimite?: string | null;
           programada?: boolean;
+          semPrazo?: boolean;
           unidadeId?: number | null;
           unidade?: string | null;
         },
@@ -236,6 +244,7 @@ export const calendarioRouter = router({
           rota: rotaDoItem(fonte, dados.id, dados.protocolo),
           prazoLimite: dados.prazoLimite ?? null,
           programada: dados.programada,
+          semPrazo: dados.semPrazo ?? false,
           unidadeId: dados.unidadeId ?? null,
           unidade: dados.unidade ?? null,
         });
@@ -244,6 +253,8 @@ export const calendarioRouter = router({
       // ------------------------------------------------ ordens de serviço
       // Mostra o dia programado; enquanto ninguém programou, mostra o prazo
       // máximo — é assim que a O.S. sem data marcada ainda cobra alguém.
+      // Sem programação e sem prazo, cai no dia em que foi aberta: nenhuma
+      // ordem pode ficar fora do calendário só porque ninguém a datou.
       const unidadesDaOs = await alvoDaFonte("os");
       if (unidadesDaOs.length > 0) {
         // Nome da unidade só quando há mais de uma: é o que identifica onde é o
@@ -258,6 +269,8 @@ export const calendarioRouter = router({
             titulo: ordensServico.titulo,
             programada: ordensServico.dataProgramada,
             prazo: ordensServico.prazoLimite,
+            abertura: ordensServico.dataAbertura,
+            criadaEm: ordensServico.createdAt,
             dataFim: ordensServico.dataFim,
             responsavel: ordensServico.responsavelPrincipalNome,
             endereco: ordensServico.endereco,
@@ -282,12 +295,35 @@ export const calendarioRouter = router({
                   gte(ordensServico.prazoLimite, dias[0]),
                   lte(ordensServico.prazoLimite, ultimoDia),
                 ),
+                // Nem uma nem outra: vale o dia da abertura, e quando nem esse
+                // foi informado, o dia em que a ordem entrou no banco.
+                and(
+                  isNull(ordensServico.dataProgramada),
+                  isNull(ordensServico.prazoLimite),
+                  or(
+                    and(
+                      isNotNull(ordensServico.dataAbertura),
+                      gte(ordensServico.dataAbertura, dias[0]),
+                      lte(ordensServico.dataAbertura, ultimoDia),
+                    ),
+                    and(
+                      isNull(ordensServico.dataAbertura),
+                      gte(ordensServico.createdAt, limiteInicio),
+                      lte(ordensServico.createdAt, limiteFim),
+                    ),
+                  ),
+                ),
               ),
             ),
           );
 
         for (const linha of linhas) {
-          const dia = linha.programada ?? linha.prazo;
+          const semPrazo = !linha.programada && !linha.prazo;
+          const dia =
+            linha.programada ??
+            linha.prazo ??
+            linha.abertura ??
+            (linha.criadaEm ? chaveDoDia(linha.criadaEm) : null);
           if (!dia || !dias.includes(dia)) continue;
           registrar("os", {
             id: linha.id,
@@ -298,6 +334,7 @@ export const calendarioRouter = router({
             detalhe: linha.responsavel || linha.endereco,
             prazoLimite: linha.prazo,
             programada: !!linha.programada,
+            semPrazo,
             unidadeId: linha.condominioId,
             unidade: nomes.get(linha.condominioId) ?? null,
           });

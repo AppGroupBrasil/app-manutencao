@@ -325,6 +325,81 @@ describe("calendario.listar", () => {
     expect(item).toMatchObject({ data: "2026-08-25", programada: false });
   });
 
+  it("sem programação e sem prazo, cai no dia da abertura em vez de sumir", async () => {
+    // É a ordem mais comum do cliente: alguém abre o chamado e ninguém preenche
+    // data nenhuma. Antes ela não caía em dia algum e o calendário do dia vinha
+    // vazio, mesmo com a O.S. aberta na lista.
+    modulosLigados.add("ordens-servico");
+    linhas.set(ordensServico, [
+      {
+        id: 52,
+        protocolo: "OS-260812-0003",
+        titulo: "Vazamento na garagem",
+        programada: null,
+        prazo: null,
+        abertura: "2026-08-12",
+        criadaEm: new Date("2026-08-13T09:00:00"),
+        dataFim: null,
+        responsavel: "Equipe Facilities",
+        endereco: null,
+      },
+    ]);
+
+    const [item] = await chamador().listar({ condominioId: 1, ...JANELA });
+
+    expect(item).toMatchObject({
+      fonte: "os",
+      data: "2026-08-12",
+      programada: false,
+      semPrazo: true,
+      prazoLimite: null,
+    });
+  });
+
+  it("sem nenhuma data informada, usa o dia em que a ordem foi registrada", async () => {
+    modulosLigados.add("ordens-servico");
+    linhas.set(ordensServico, [
+      {
+        id: 53,
+        protocolo: "OS-260812-0004",
+        titulo: "Lâmpada queimada",
+        programada: null,
+        prazo: null,
+        abertura: null,
+        criadaEm: new Date("2026-08-19T16:30:00"),
+        dataFim: null,
+        responsavel: null,
+        endereco: null,
+      },
+    ]);
+
+    const [item] = await chamador().listar({ condominioId: 1, ...JANELA });
+
+    expect(item).toMatchObject({ data: "2026-08-19", semPrazo: true });
+  });
+
+  it("a O.S. com data marcada continua sem a marca de sem prazo", async () => {
+    modulosLigados.add("ordens-servico");
+    linhas.set(ordensServico, [
+      {
+        id: 54,
+        protocolo: "OS-260812-0005",
+        titulo: "Pintura do hall",
+        programada: null,
+        prazo: "2026-08-21",
+        abertura: "2026-08-03",
+        criadaEm: new Date("2026-08-03T10:00:00"),
+        dataFim: null,
+        responsavel: null,
+        endereco: null,
+      },
+    ]);
+
+    const [item] = await chamador().listar({ condominioId: 1, ...JANELA });
+
+    expect(item).toMatchObject({ data: "2026-08-21", semPrazo: false });
+  });
+
   it("soma as O.S. de todas as unidades do gerente e diz de qual é cada uma", async () => {
     // A agenda dele é a da rede: ordem aberta pelo gestor de outra unidade tem
     // de cair no calendário sem ele trocar a unidade da tela.

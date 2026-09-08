@@ -38,6 +38,8 @@ type ItemCalendario = {
   /** Prazo combinado e se o dia do serviço já foi marcado. */
   prazoLimite?: string | null;
   programada?: boolean;
+  /** O dia é o da abertura: a ordem não tem prazo, então não está atrasada. */
+  semPrazo?: boolean;
   /** Preenchidos só quando a agenda soma mais de uma unidade. */
   unidadeId?: number | null;
   unidade?: string | null;
@@ -88,6 +90,9 @@ function diasEntre(de: string, ate: string): number {
 
 function situacaoDe(item: ItemCalendario, hoje: string): Situacao {
   if (item.concluido) return "concluido";
+  // Ordem sem prazo nenhum aparece no dia em que foi aberta: pintá-la de
+  // vermelho seria inventar um atraso que ninguém combinou.
+  if (item.semPrazo) return "em_dia";
   const dias = diasEntre(hoje, item.data);
   if (dias < 0) return "vencido";
   if (dias <= DIAS_AMARELO) return "proximo";
@@ -103,6 +108,7 @@ function situacaoDoDia(lista: ItemCalendario[], hoje: string): Situacao {
 
 function textoDoPrazo(item: ItemCalendario, hoje: string): string {
   if (item.concluido) return "já resolvido";
+  if (item.semPrazo) return "sem prazo definido";
   const dias = diasEntre(hoje, item.data);
   if (dias < 0) return `${Math.abs(dias)} dia(s) em atraso`;
   if (dias === 0) return "vence hoje";
@@ -421,7 +427,9 @@ export function CalendarioGeral({
                           isso evita o gerente achar que já está agendado. */}
                       {item.fonte === "os" && item.programada === false && (
                         <span className="block text-[11px] text-amber-700 mt-0.5">
-                          esta é a data máxima — o serviço ainda não foi programado
+                          {item.semPrazo
+                            ? "esta é a data de abertura — o serviço ainda não foi programado"
+                            : "esta é a data máxima — o serviço ainda não foi programado"}
                         </span>
                       )}
                     </button>
