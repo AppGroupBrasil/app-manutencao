@@ -30,6 +30,8 @@ const { equipes, equipeUnidades, condominios } = await import("../drizzle/schema
 
 /** Unidades que cada consulta pediu, na ordem. */
 let filtros: { tabela: unknown; ids: number[] }[];
+/** O que a gravação de unidades acrescentou e tirou. */
+let gravados: { entrar: number[]; sair: number[] };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function parametrosDe(condicao: any): number[] {
@@ -94,6 +96,9 @@ function fakeDb() {
       if (tabela === equipeUnidades) {
         return encadeavel(vinculos.filter((v) => ids.includes(v.equipeId)));
       }
+      if (tabela === equipes) {
+        return encadeavel(equipesNoBanco.filter((e) => ids.includes(e.id)));
+      }
       if (tabela === condominios) {
         return encadeavel(unidadesNoBanco.filter((u) => ids.includes(u.id)));
       }
@@ -104,6 +109,18 @@ function fakeDb() {
   return {
     select: () => ({ from: consulta }),
     selectDistinct: () => ({ from: consulta }),
+    update: () => ({ set: () => ({ where: async () => undefined }) }),
+    insert: () => ({
+      values: async (linhas: { condominioId: number }[]) => {
+        gravados.entrar.push(...linhas.map((l) => l.condominioId));
+      },
+    }),
+    delete: () => ({
+      // O primeiro parâmetro é o id da equipe; os demais, as unidades que saem.
+      where: async (condicao: unknown) => {
+        gravados.sair.push(...parametrosDe(condicao).slice(1));
+      },
+    }),
   };
 }
 
@@ -129,9 +146,22 @@ function comoGestoraDaRede() {
 /** Unidades que a consulta das equipes varreu. */
 const unidadesConsultadas = () => filtros.find((f) => f.tabela === equipes)?.ids ?? [];
 
+/** Cuida das Torres A e B; a C não é dela. */
+function comoGestoraDeParte() {
+  const user = { id: 2, hierarquia: "responsavel", role: "sindico", name: "Parcial" } as never;
+  return createCallerFactory(equipesRouter)({
+    req: { headers: {} },
+    res: {},
+    user,
+    funcionario: null,
+    tenant: createTenantAccess(user, null, { idsFornecidos: [1, 2] }),
+  } as never);
+}
+
 beforeEach(() => {
   invalidarCacheBloqueio();
   filtros = [];
+  gravados = { entrar: [], sair: [] };
 });
 
 describe("equipes.list", () => {
@@ -165,5 +195,30 @@ describe("equipes.list", () => {
     expect(lista.find((e) => e.nome === "Elétrica")?.unidadeNome).toBe("Torre B");
     // A de rede fica sem nome de unidade: um só mentiria sobre as outras duas.
     expect(lista.find((e) => e.nome === "Facilities")?.unidadeNome).toBeNull();
+  });
+});
+
+/**
+ * A lista de unidades substitui a anterior inteira, e quem edita costuma
+ * alcançar só parte da rede: sem cuidado, o clique em "Atender aqui" pediria
+ * permissão sobre uma unidade que a pessoa não enxerga — ou apagaria o vínculo
+ * com ela sem ninguém pedir.
+ */
+describe("equipes.update, unidades fora do alcance de quem edita", () => {
+  it("reenviar a lista com a unidade que ela não alcança não é recusado", async () => {
+    // É o que a tela manda ao clicar "Atender aqui": tudo o que a equipe já
+    // atendia, mais a unidade aberta.
+    await expect(comoGestoraDeParte().update({ id: 1, unidades: [1, 2, 3] })).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(gravados.sair).toEqual([]);
+  });
+
+  it("tirar uma unidade não leva junto a que ela não enxerga", async () => {
+    await comoGestoraDeParte().update({ id: 1, unidades: [1] });
+
+    // Sai a Torre B, que é dela; a Torre C continua com a equipe.
+    expect(gravados.sair).toEqual([2]);
   });
 });

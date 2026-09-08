@@ -62,13 +62,18 @@ async function unidadesDaEquipe(
   ctx: { tenant: { assert: (id: number) => Promise<void> } },
   donaId: number,
   pedidas: number[] | undefined,
+  /** Unidades que a equipe já atende e quem edita não alcança. */
+  preservadas: number[] = [],
 ): Promise<number[]> {
   // A unidade dona sempre entra: equipe que não atende ninguém não aparece em
   // lugar nenhum e viraria cadastro fantasma.
-  const ids = new Set<number>([donaId]);
+  const ids = new Set<number>([donaId, ...preservadas]);
   for (const id of pedidas ?? []) {
     if (!Number.isInteger(id) || id <= 0) continue;
-    await ctx.tenant.assert(id);
+    // O que já está gravado passa direto: ninguém ganha acesso novo ao
+    // reenviar a lista, e cobrar permissão sobre a unidade que quem edita não
+    // enxerga faria a tela recusar o clique de quem cuida só de parte da rede.
+    if (!ids.has(id)) await ctx.tenant.assert(id);
     ids.add(id);
   }
   return [...ids];
@@ -481,7 +486,23 @@ export const equipesRouter = router({
 
         if (!dona) throw new TRPCError({ code: "NOT_FOUND", message: "Equipe não encontrada." });
 
-        await gravarUnidades(db, id, await unidadesDaEquipe(ctx, dona.condominioId, pedidas));
+        // A unidade fora do alcance de quem edita fica como está: a lista
+        // substitui tudo, e sem isto o gestor de uma parte da rede apagaria,
+        // sem ver, o vínculo com as unidades que não são dele.
+        const atuais = await db
+          .select({ condominioId: equipeUnidades.condominioId })
+          .from(equipeUnidades)
+          .where(eq(equipeUnidades.equipeId, id));
+        const alcance = ctx.tenant.isMaster() ? null : await ctx.tenant.ids();
+        const preservadas = alcance
+          ? atuais.map((u) => u.condominioId).filter((c) => !alcance.includes(c))
+          : [];
+
+        await gravarUnidades(
+          db,
+          id,
+          await unidadesDaEquipe(ctx, dona.condominioId, pedidas, preservadas),
+        );
       }
 
       return { ok: true };
