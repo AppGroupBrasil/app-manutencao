@@ -125,6 +125,7 @@ function AgendaDaOs({
   os,
   condominioId,
   podeEditar,
+  podeProgramar,
   onFeito,
 }: {
   os: {
@@ -135,6 +136,8 @@ function AgendaDaOs({
   };
   condominioId: number;
   podeEditar: boolean;
+  /** Data de execução e quem executa: só o gerente da rede. */
+  podeProgramar: boolean;
   onFeito: () => Promise<void> | void;
 }) {
   const [data, setData] = useState(os.dataProgramada ?? "");
@@ -142,7 +145,7 @@ function AgendaDaOs({
 
   const { data: candidatos } = trpc.ordensServico.listarCandidatos.useQuery(
     { condominioId },
-    { enabled: podeEditar },
+    { enabled: podeEditar && podeProgramar },
   );
 
   const aoTerminar = async (mensagem: string) => {
@@ -209,7 +212,14 @@ function AgendaDaOs({
         )}
       </div>
 
-      {podeEditar && (
+      {podeEditar && !podeProgramar && (
+        <p className="text-xs text-slate-500">
+          A data de execução é definida pelo gerente responsável. Aqui você ajusta a data
+          máxima.
+        </p>
+      )}
+
+      {podeEditar && podeProgramar && (
         <div className="border rounded-md p-2.5 space-y-2 bg-slate-50">
           <p className="text-xs font-medium text-slate-700">
             {os.dataProgramada ? "Reprogramar o serviço" : "Programar o serviço"}
@@ -368,6 +378,10 @@ export function OsDetalhe({
   const urlDaOs = os?.shareToken
     ? `${origem}/os/${os.shareToken}`
     : `${origem}/manutencoes/ordens-servico/${ordemServicoId}`;
+
+  // Designar equipe e marcar a data de execução são do gerente da rede: a tela
+  // esconde de quem a rota recusaria, em vez de deixar descobrir no erro.
+  const { data: podeProgramar = false } = trpc.ordensServico.podeProgramar.useQuery();
 
   const uploadImagem = trpc.ordensServico.uploadImagem.useMutation();
   const uploadAnexo = trpc.ordensServico.uploadAnexo.useMutation();
@@ -598,6 +612,27 @@ export function OsDetalhe({
         {os.prazoLimite && <span>Prazo: {formatarDia(os.prazoLimite)}</span>}
       </div>
 
+      {/* Nome da ordem: quem abre erra a digitação e o protocolo já foi
+          impresso. Sem editar aqui, o jeito era abrir outra O.S. */}
+      <div className="border rounded-lg p-3 space-y-1.5">
+        <span className="text-sm font-medium">Nome da ordem de serviço</span>
+        <Input
+          defaultValue={os.titulo ?? ""}
+          disabled={!ehGestor || atualizarOs.isPending}
+          placeholder="Ex.: Troca da bomba do reservatório"
+          onBlur={(e) => {
+            const valor = e.target.value.trim();
+            // Nome vazio deixaria a ordem sem identificação na lista.
+            if (!valor) {
+              e.target.value = os.titulo ?? "";
+              return;
+            }
+            if (valor === (os.titulo ?? "")) return;
+            atualizarOs.mutate({ id: ordemServicoId, titulo: valor });
+          }}
+        />
+      </div>
+
       {campos.visivel("descricao") && (
         <p className="text-sm text-slate-600">{os.descricao || "Sem descrição inicial."}</p>
       )}
@@ -640,7 +675,7 @@ export function OsDetalhe({
           </div>
           <Select
             value={os.equipeId ? String(os.equipeId) : ""}
-            disabled={!ehGestor || atualizarOs.isPending}
+            disabled={!ehGestor || !podeProgramar || atualizarOs.isPending}
             onValueChange={(valor) =>
               atualizarOs.mutate({
                 id: ordemServicoId,
@@ -695,9 +730,11 @@ export function OsDetalhe({
             />
           ) : (
             <p className="text-xs text-slate-500">
-              {ehGestor
-                ? "Ao designar, a equipe recebe o aviso e entra como responsável pela O.S."
-                : "Quem designa a equipe é quem responde pela unidade."}
+              {!ehGestor
+                ? "Quem designa a equipe é quem responde pela unidade."
+                : podeProgramar
+                  ? "Ao designar, a equipe recebe o aviso e entra como responsável pela O.S."
+                  : "Quem designa a equipe é o gerente responsável pela rede."}
             </p>
           )}
         </div>
@@ -724,6 +761,7 @@ export function OsDetalhe({
         os={os}
         condominioId={condominioId}
         podeEditar={ehGestor}
+        podeProgramar={podeProgramar}
         onFeito={recarregar}
       />
 

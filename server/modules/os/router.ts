@@ -30,6 +30,7 @@ import {
 import { eq, and, desc, like, or, sql, gte, inArray, asc, not, isNull } from "drizzle-orm";
 import { IDS_CAMPOS_OCULTAVEIS_OS } from "../../../shared/camposOcultaveisOs";
 import { camposOcultosDaUnidade } from "../../_core/camposOcultosOs";
+import { ehProgramadorOs, exigirProgramadorOs } from "../../_core/programadorOs";
 
 /**
  * Ficha em uso.
@@ -241,20 +242,21 @@ async function notificarAberturaDeOS(
  * "Atender aqui". Sem gravar o vínculo, a equipe sumiria do próprio seletor da
  * ordem, que lista equipes por unidade.
  */
+/** Quem não é o gerente da rede vê a equipe designada, mas não troca. */
+const SO_O_GERENTE_DESIGNA = "Só o gerente responsável pode designar a equipe.";
+
+type CtxProgramador = { user: { id: number; email?: string | null; hierarquia?: string | null; role?: string | null } | null };
+
 async function garantirEquipeNaUnidade(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   equipeId: number,
   condominioId: number,
-  ctx: { funcionario: { id: number } | null },
+  ctx: CtxProgramador & { funcionario: { id: number } | null },
 ): Promise<void> {
-  // Designar decide quem responde pelo serviço e dispara aviso: é decisão de
-  // quem gerencia. O portal do funcionário mostra a equipe, sem editar.
-  if (ctx.funcionario) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Só quem responde pela unidade designa a equipe.",
-    });
-  }
+  // Designar decide quem responde pelo serviço e dispara aviso: o cliente quis
+  // essa decisão com o gerente da rede, e só com ele. O portal do funcionário e
+  // os gestores de unidade continuam vendo a equipe, sem trocar.
+  await exigirProgramadorOs(ctx, SO_O_GERENTE_DESIGNA);
 
   const [equipe] = await db
     .select({ ativo: equipes.ativo })
@@ -527,6 +529,15 @@ function formatarDia(dia: string): string {
 }
 
 export const osRouter = router({
+    /**
+     * A tela pergunta antes de mostrar o que a rota recusaria.
+     *
+     * Designar equipe e marcar a data de execução são do gerente da rede. Sem
+     * isto, os outros gestores veriam os dois campos e só descobririam o
+     * bloqueio no erro, depois de escolher.
+     */
+    podeProgramar: publicProcedure.query(({ ctx }) => ehProgramadorOs(ctx)),
+
     // ========== CAMPOS OCULTOS ==========
     /**
      * Quais blocos da O.S. este cliente não vê.
@@ -1269,6 +1280,8 @@ export const osRouter = router({
 
         if (input.equipeId) {
           await garantirEquipeNaUnidade(db, input.equipeId, input.condominioId, ctx);
+        } else if (input.equipeExterna?.trim()) {
+          await exigirProgramadorOs(ctx, SO_O_GERENTE_DESIGNA);
         }
 
         // Mesma trava do `update`: quem abre a O.S. escolhe a unidade no
@@ -1443,6 +1456,10 @@ export const osRouter = router({
         
         if (!osAtual) throw new Error("Ordem de serviço não encontrada");
 
+        // `null` também é designação: tira da ordem a equipe que estava lá.
+        if (input.equipeId === null || input.equipeExterna !== undefined) {
+          await exigirProgramadorOs(ctx, SO_O_GERENTE_DESIGNA);
+        }
         if (input.equipeId) {
           await garantirEquipeNaUnidade(db, input.equipeId, osAtual.condominioId, ctx);
         }
@@ -1615,6 +1632,13 @@ export const osRouter = router({
         const autor = autorDaRequisicao(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database not available");
+
+        // Data de execução é do gerente da rede; a data máxima (`definirPrazo`)
+        // continua com quem responde pela unidade.
+        await exigirProgramadorOs(
+          ctx,
+          "Só o gerente responsável pode definir a data de execução. Você pode ajustar a data máxima.",
+        );
 
         const [os] = await db
           .select()

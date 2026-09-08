@@ -351,7 +351,7 @@ describe("quem pode designar", () => {
     // recusa tem de estar aqui — esconder o campo não tranca nada.
     await expect(
       comoFuncionario().update({ id: 50, equipeId: 3 }),
-    ).rejects.toThrow(/responde pela unidade/i);
+    ).rejects.toThrow(/gerente responsável/i);
 
     expect(avisos).toEqual([]);
   });

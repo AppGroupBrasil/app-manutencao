@@ -485,6 +485,10 @@ export function ConteudoOrdensServico({
    * `.find` rodava no mesmo instante e lia `form` antes da declaração — a tela
    * inteira quebrava com "Cannot access before initialization".
    */
+  // Designar equipe é do gerente da rede; sem isto o formulário deixaria
+  // montar a ordem inteira para morrer no clique final.
+  const { data: podeProgramar = false } = trpc.ordensServico.podeProgramar.useQuery();
+
   const equipeEscolhida = (equipesDaUnidade ?? []).find((e) => String(e.id) === form.equipeId);
 
   /**
@@ -1325,11 +1329,11 @@ export function ConteudoOrdensServico({
             {/* Equipe designada: marcar aqui já dispara o aviso ao supervisor,
                 sem precisar reabrir a ordem depois.
 
-                Só para quem responde pela unidade: o servidor recusa a
-                designação feita por funcionário (`exigirEquipeDaUnidade`), e
-                oferecer o campo a ele era deixar montar a ordem inteira para
-                ela morrer no clique final, com tudo o que foi digitado. */}
-            {temModulo("equipes") && ehGestor && (
+                Só para o gerente da rede: o servidor recusa a designação de
+                qualquer outro (`garantirEquipeNaUnidade`), e oferecer o campo
+                era deixar montar a ordem inteira para ela morrer no clique
+                final, com tudo o que foi digitado. */}
+            {temModulo("equipes") && ehGestor && podeProgramar && (
               <BlocoDaOs id="equipe" ctl={campos}>
               <div>
                 <Label>Equipe designada</Label>

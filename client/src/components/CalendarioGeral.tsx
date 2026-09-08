@@ -241,8 +241,12 @@ export function CalendarioGeral({
 
   // Redistribuir é a razão de o gerente abrir o calendário: ele muda a data sem
   // sair da tela, uma O.S. depois da outra.
+  // A data de execução é do gerente da rede: os gestores de unidade abrem o
+  // calendário para acompanhar, e o botão some em vez de recusar no clique.
+  const { data: podeProgramar = false } = trpc.ordensServico.podeProgramar.useQuery();
+
   const podeReprogramar = (item: ItemCalendario) =>
-    !!podeGerenciar && item.fonte === "os" && !item.concluido;
+    !!podeGerenciar && podeProgramar && item.fonte === "os" && !item.concluido;
 
   const programar = trpc.ordensServico.programar.useMutation({
     onSuccess: async () => {
