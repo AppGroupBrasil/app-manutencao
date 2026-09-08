@@ -1767,8 +1767,32 @@ export const osRouter = router({
           tempoDecorridoMinutos = Math.floor((dataFim.getTime() - new Date(os.dataInicio).getTime()) / 60000);
         }
         
+        // Encerrar carimbava só a data: a ordem continuava no status de
+        // abertura e seguia na lista de pendentes de quem mandou executar.
+        // `reabrir` devolve a ordem ao primeiro status não-final; aqui vale o
+        // inverso — quem baixa o serviço fecha a ordem no mesmo gesto.
+        const statusFinais = await db
+          .select({ id: osStatus.id, nome: osStatus.nome })
+          .from(osStatus)
+          .where(
+            and(
+              eq(osStatus.condominioId, os.condominioId),
+              eq(osStatus.ativo, true),
+              eq(osStatus.isFinal, true),
+            ),
+          )
+          .orderBy(asc(osStatus.ordem));
+        // Cancelada também é final, e encerrar um serviço não é cancelá-lo.
+        const statusEncerrado =
+          statusFinais.find((s) => /conclu|finaliz/i.test(s.nome)) ??
+          statusFinais.find((s) => !/cancel/i.test(s.nome));
+
         await db.update(ordensServico)
-          .set({ dataFim, tempoDecorridoMinutos })
+          .set({
+            dataFim,
+            tempoDecorridoMinutos,
+            statusId: statusEncerrado?.id ?? os.statusId,
+          })
           .where(eq(ordensServico.id, input.id));
 
         await db.insert(osTimeline).values({
@@ -1779,6 +1803,16 @@ export const osRouter = router({
           usuarioNome: autor.nome,
         }).returning();
         
+        if (statusEncerrado && statusEncerrado.id !== os.statusId) {
+          await db.insert(osTimeline).values({
+            ordemServicoId: input.id,
+            tipo: "status_alterado",
+            descricao: `Status alterado para: ${statusEncerrado.nome}`,
+            usuarioId: autor.userId,
+            usuarioNome: autor.nome,
+          });
+        }
+
         return { success: true, tempoDecorridoMinutos };
       }),
 

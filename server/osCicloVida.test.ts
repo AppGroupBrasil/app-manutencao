@@ -183,6 +183,28 @@ describe("encerramento", () => {
     expect(timeline.some((t) => t.startsWith("Serviço finalizado"))).toBe(true);
   });
 
+  it("encerra a ordem no status final da unidade", async () => {
+    statusDaUnidade.push(
+      { id: 13, nome: "Finalizada totalmente", isFinal: true, ordem: 4, ativo: true },
+      { id: 14, nome: "Cancelada", isFinal: true, ordem: 5, ativo: true },
+    );
+    osAtual.dataInicio = new Date();
+
+    await comoGestor().finalizarServico({ id: 50 });
+
+    expect(gravado).toMatchObject({ statusId: 13 });
+    expect(timeline).toContain("Status alterado para: Finalizada totalmente");
+  });
+
+  it("não encerra a ordem como cancelada", async () => {
+    statusDaUnidade.push({ id: 14, nome: "Cancelada", isFinal: true, ordem: 5, ativo: true });
+    osAtual.dataInicio = new Date();
+
+    await comoGestor().finalizarServico({ id: 50 });
+
+    expect(gravado).toMatchObject({ statusId: 10 });
+  });
+
   it("reabrir desfaz o fechamento e exige motivo no histórico", async () => {
     osAtual.dataFim = new Date();
     osAtual.tempoDecorridoMinutos = 120;
