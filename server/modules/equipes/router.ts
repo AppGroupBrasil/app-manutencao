@@ -139,6 +139,16 @@ export const equipesRouter = router({
           condominioId: z.number().optional(),
           /** Unidades marcadas na tela: a equipe é da unidade, não da rede. */
           unidades: unidadesSelecionadas,
+          /**
+           * A rede inteira que a pessoa alcança, sem listar id por id.
+           *
+           * A tela de gerenciar equipes pede assim: quem cadastrou o time numa
+           * unidade e abriu outra não o via em lugar nenhum — parecia que o
+           * cadastro se perdeu, e vinha um segundo com o mesmo nome. O campo
+           * "Equipe designada" da O.S. continua sem isto, porque lá a lista
+           * tem de ser mesmo só a de quem atende a unidade da ordem.
+           */
+          todasUnidades: z.boolean().optional(),
         })
         .optional(),
     )

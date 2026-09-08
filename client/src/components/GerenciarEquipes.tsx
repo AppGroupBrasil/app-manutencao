@@ -197,8 +197,15 @@ export function GerenciarEquipes({
     iniciarNovaEquipe ? { tela: "interna" } : { tela: "lista" },
   );
 
+  /**
+   * A rede toda, e não só a unidade da tela.
+   *
+   * Aqui se gerencia o cadastro: esconder a equipe das outras unidades fazia
+   * ela sumir da vista de quem a criou. Quem separa o que atende esta unidade
+   * do que não atende é a própria tela, logo abaixo.
+   */
   const { data: equipes, isLoading } = trpc.equipes.list.useQuery(
-    { condominioId },
+    { condominioId, todasUnidades: true },
     { enabled: condominioId > 0 },
   );
 
@@ -206,6 +213,15 @@ export function GerenciarEquipes({
     await utils.equipes.list.invalidate();
     onMudou?.();
   };
+
+  /** Marca esta unidade entre as que a equipe atende, sem tirar as outras. */
+  const atender = trpc.equipes.update.useMutation({
+    onSuccess: async () => {
+      await recarregar();
+      toast.success("Equipe passou a atender esta " + v.unidade.toLowerCase());
+    },
+    onError: (e) => toast.error(e.message || "Não foi possível alterar"),
+  });
 
   const excluir = trpc.equipes.delete.useMutation({
     onSuccess: async () => {
@@ -250,6 +266,89 @@ export function GerenciarEquipes({
     return <ComoFuncionaEquipes onFechar={voltar} />;
   }
 
+  const lista = equipes ?? [];
+  /**
+   * As duas listas da tela.
+   *
+   * `unidades` é a lista de unidades atendidas que o servidor devolve por
+   * equipe. Sem esta separação, a equipe de outra unidade apareceria como se
+   * pudesse receber a O.S. daqui — e a designação seria recusada.
+   */
+  const daUnidade = lista.filter((e) => (e.unidades ?? []).includes(condominioId));
+  const deOutras = lista.filter((e) => !(e.unidades ?? []).includes(condominioId));
+
+  const linhaDaEquipe = (equipe: (typeof lista)[number], deOutraUnidade: boolean) => (
+    <div key={equipe.id} className="flex items-center gap-2 px-3 py-2">
+      <span
+        className="w-2.5 h-2.5 rounded-full shrink-0"
+        style={{ background: equipe.cor ?? "#3b82f6" }}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-slate-800 truncate">{equipe.nome}</p>
+        <p className="text-[11px] text-slate-500 truncate">
+          {/* Em quantas unidades ela atende é o que separa a equipe da
+              casa da equipe de rede; com uma só, vale dizer qual é. */}
+          {Number(equipe.totalUnidades ?? 1) > 1
+            ? `${Number(equipe.totalUnidades)} ${v.unidade.toLowerCase()}s · `
+            : equipe.unidadeNome
+              ? `${equipe.unidadeNome} · `
+              : ""}
+          {equipe.externa
+            ? `Externa · ${equipe.email ?? "sem e-mail"}`
+            : `${Number(equipe.totalMembros)} funcionário(s)`}
+        </p>
+      </div>
+      {deOutraUnidade ? (
+        // É isto, e não um cadastro repetido com o mesmo nome, que faz a
+        // equipe aparecer no campo "Equipe designada" das ordens daqui.
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={atender.isPending}
+          onClick={() =>
+            atender.mutate({
+              id: equipe.id,
+              unidades: [...(equipe.unidades ?? []), condominioId],
+            })
+          }
+        >
+          <Plus className="w-4 h-4" /> Atender aqui
+        </Button>
+      ) : (
+        <>
+          {equipe.externa ? (
+            <Badge variant="outline" className="text-[10px] text-purple-700 border-purple-200">
+              externa
+            </Badge>
+          ) : (
+            // Acrescentar alguém ao time depois é operação de todo dia, e
+            // sair da O.S. para isso era o caminho antigo.
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPasso({ tela: "interna", equipe })}
+            >
+              <UserPlus className="w-4 h-4" /> Editar
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={() => {
+              if (confirm(`Remover a equipe "${equipe.nome}"?`)) {
+                excluir.mutate({ id: equipe.id });
+              }
+            }}
+            aria-label={`Remover equipe ${equipe.nome}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-3">
       {/* O caminho todo em miniatura, para quem chegou aqui sem saber o que a
@@ -263,7 +362,7 @@ export function GerenciarEquipes({
         <HelpCircle className="w-4 h-4" /> Como funciona
       </Button>
 
-      {(equipes?.length ?? 0) === 0 ? (
+      {lista.length === 0 ? (
         <div className="text-center py-6">
           <Users className="w-10 h-10 text-slate-300 mx-auto" strokeWidth={1.5} />
           <p className="text-sm text-slate-600 font-medium mt-2">Nenhuma equipe ainda.</p>
@@ -272,57 +371,38 @@ export function GerenciarEquipes({
           </p>
         </div>
       ) : (
-        <div className="divide-y border rounded-md">
-          {equipes!.map((equipe) => (
-            <div key={equipe.id} className="flex items-center gap-2 px-3 py-2">
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ background: equipe.cor ?? "#3b82f6" }}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-800 truncate">{equipe.nome}</p>
-                <p className="text-[11px] text-slate-500 truncate">
-                  {/* Em quantas unidades ela atende é o que separa a equipe da
-                      casa da equipe de rede. */}
-                  {Number(equipe.totalUnidades ?? 1) > 1
-                    ? `${Number(equipe.totalUnidades)} ${v.unidade.toLowerCase()}s · `
-                    : ""}
-                  {equipe.externa
-                    ? `Externa · ${equipe.email ?? "sem e-mail"}`
-                    : `${Number(equipe.totalMembros)} funcionário(s)`}
-                </p>
-              </div>
-              {equipe.externa ? (
-                <Badge variant="outline" className="text-[10px] text-purple-700 border-purple-200">
-                  externa
-                </Badge>
-              ) : (
-                // Acrescentar alguém ao time depois é operação de todo dia, e
-                // sair da O.S. para isso era o caminho antigo.
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPasso({ tela: "interna", equipe })}
-                >
-                  <UserPlus className="w-4 h-4" /> Editar
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                onClick={() => {
-                  if (confirm(`Remover a equipe "${equipe.nome}"?`)) {
-                    excluir.mutate({ id: equipe.id });
-                  }
-                }}
-                aria-label={`Remover equipe ${equipe.nome}`}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+        <>
+          {daUnidade.length === 0 ? (
+            <div className="text-center py-6">
+              <Users className="w-10 h-10 text-slate-300 mx-auto" strokeWidth={1.5} />
+              <p className="text-sm text-slate-600 font-medium mt-2">
+                Nenhuma equipe atende esta {v.unidade.toLowerCase()} ainda.
+              </p>
             </div>
-          ))}
-        </div>
+          ) : (
+            <div className="divide-y border rounded-md">
+              {daUnidade.map((equipe) => linhaDaEquipe(equipe, false))}
+            </div>
+          )}
+
+          {/* As que já existem na rede mas não atendem esta unidade. Sem esta
+              parte elas sumiam da tela: quem cadastrou o time em outra unidade
+              procurava, não achava e cadastrava de novo. */}
+          {deOutras.length > 0 && (
+            <div className="space-y-1 pt-1">
+              <p className="text-xs font-medium text-slate-600">
+                Em outras {v.unidade.toLowerCase()}s
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Já cadastradas, mas não atendem esta {v.unidade.toLowerCase()} — por isso
+                não aparecem na O.S. daqui.
+              </p>
+              <div className="divide-y border rounded-md">
+                {deOutras.map((equipe) => linhaDaEquipe(equipe, true))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Os dois caminhos, lado a lado: é a primeira pergunta de quem vai
