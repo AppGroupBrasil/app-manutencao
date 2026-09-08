@@ -36,6 +36,7 @@ import {
   Loader2,
   MapPin,
   Paperclip,
+  Pencil,
   Play,
   RotateCcw,
   Plus,
@@ -340,6 +341,7 @@ export function OsDetalhe({
    * clique. Trocando o conteúdo, nunca há dois overlays em transição.
    */
   const [cadastro, setCadastro] = useState<"funcionarios" | "equipes" | null>(null);
+  const [editandoTitulo, setEditandoTitulo] = useState(false);
   /** Abre direto no formulário da equipe nova, para quem veio dos funcionários. */
   const [equipeDireto, setEquipeDireto] = useState(false);
   /**
@@ -613,24 +615,49 @@ export function OsDetalhe({
       </div>
 
       {/* Nome da ordem: quem abre erra a digitação e o protocolo já foi
-          impresso. Sem editar aqui, o jeito era abrir outra O.S. */}
+          impresso. Sem editar aqui, o jeito era abrir outra O.S. O lápis está
+          à mostra porque campo solto na tela não se anuncia como editável. */}
       <div className="border rounded-lg p-3 space-y-1.5">
         <span className="text-sm font-medium">Nome da ordem de serviço</span>
-        <Input
-          defaultValue={os.titulo ?? ""}
-          disabled={!ehGestor || atualizarOs.isPending}
-          placeholder="Ex.: Troca da bomba do reservatório"
-          onBlur={(e) => {
-            const valor = e.target.value.trim();
-            // Nome vazio deixaria a ordem sem identificação na lista.
-            if (!valor) {
-              e.target.value = os.titulo ?? "";
-              return;
-            }
-            if (valor === (os.titulo ?? "")) return;
-            atualizarOs.mutate({ id: ordemServicoId, titulo: valor });
-          }}
-        />
+        {editandoTitulo ? (
+          <Input
+            autoFocus
+            defaultValue={os.titulo ?? ""}
+            disabled={atualizarOs.isPending}
+            placeholder="Ex.: Troca da bomba do reservatório"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                e.currentTarget.value = os.titulo ?? "";
+                setEditandoTitulo(false);
+              }
+            }}
+            onBlur={(e) => {
+              const valor = e.target.value.trim();
+              setEditandoTitulo(false);
+              // Nome vazio deixaria a ordem sem identificação na lista.
+              if (!valor || valor === (os.titulo ?? "")) return;
+              atualizarOs.mutate({ id: ordemServicoId, titulo: valor });
+            }}
+          />
+        ) : (
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm text-slate-700 break-words">{os.titulo || "Sem nome"}</p>
+            {ehGestor && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-slate-500 shrink-0"
+                onClick={() => setEditandoTitulo(true)}
+                aria-label="Editar o nome da ordem de serviço"
+                title="Editar o nome"
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {campos.visivel("descricao") && (
