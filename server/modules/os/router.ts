@@ -232,15 +232,16 @@ async function notificarAberturaDeOS(
  * time inteiro saber do que ninguém ficar sabendo.
  */
 /**
- * A equipe é da mesma unidade da O.S.?
+ * A equipe designada passa a atender a unidade da O.S.
  *
  * O escopo por registro garante que a equipe pertence a alguma organização de
- * quem chamou — e quem cuida de 15 unidades passa nessa checagem com a equipe
- * de qualquer uma delas. Aqui é a segunda pergunta: é a equipe DESTA unidade.
- * Sem ela, o aviso sairia para o time errado e o nome nem apareceria na lista,
- * que só busca equipes da unidade da ordem.
+ * quem chamou. O seletor mostra todas as equipes, inclusive as de outras
+ * unidades da rede: quem gerencia escolhe quem faz o serviço, e a equipe
+ * escolhida ganha o vínculo com esta unidade — o mesmo efeito do botão
+ * "Atender aqui". Sem gravar o vínculo, a equipe sumiria do próprio seletor da
+ * ordem, que lista equipes por unidade.
  */
-async function exigirEquipeDaUnidade(
+async function garantirEquipeNaUnidade(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   equipeId: number,
   condominioId: number,
@@ -286,10 +287,7 @@ async function exigirEquipeDaUnidade(
     .limit(1);
 
   if (!atende) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Esta equipe não atende a unidade da ordem de serviço.",
-    });
+    await db.insert(equipeUnidades).values({ equipeId, condominioId });
   }
 }
 
@@ -1270,7 +1268,7 @@ export const osRouter = router({
         }
 
         if (input.equipeId) {
-          await exigirEquipeDaUnidade(db, input.equipeId, input.condominioId, ctx);
+          await garantirEquipeNaUnidade(db, input.equipeId, input.condominioId, ctx);
         }
 
         // Mesma trava do `update`: quem abre a O.S. escolhe a unidade no
@@ -1446,7 +1444,7 @@ export const osRouter = router({
         if (!osAtual) throw new Error("Ordem de serviço não encontrada");
 
         if (input.equipeId) {
-          await exigirEquipeDaUnidade(db, input.equipeId, osAtual.condominioId, ctx);
+          await garantirEquipeNaUnidade(db, input.equipeId, osAtual.condominioId, ctx);
         }
 
         if (input.statusId) {

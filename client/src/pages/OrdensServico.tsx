@@ -419,9 +419,11 @@ export function ConteudoOrdensServico({
     { condominioId: unidadeNova },
     { enabled: unidadeNova > 0 },
   );
-  // Equipes da unidade: sem o módulo ligado a lista volta vazia e o campo some.
+  // Todas as equipes, e não só as desta unidade: quem abre a ordem escolhe
+  // quem faz o serviço, e a equipe de outra unidade passa a atender esta assim
+  // que for designada. Sem o módulo ligado a lista volta vazia e o campo some.
   const { data: equipesDaUnidade } = trpc.equipes.list.useQuery(
-    { condominioId: unidadeNova },
+    { condominioId: unidadeNova, todasUnidades: true },
     { enabled: unidadeNova > 0 && !modulosIndefinidos && temModulo("equipes") },
   );
 
@@ -1346,6 +1348,9 @@ export function ConteudoOrdensServico({
                       <SelectItem key={e.id} value={String(e.id)}>
                         {e.nome}
                         {e.externa ? " (externa)" : ""}
+                        {(e.unidades ?? []).includes(unidadeNova)
+                          ? ""
+                          : ` · de outra ${v.unidade.toLowerCase()}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1353,7 +1358,7 @@ export function ConteudoOrdensServico({
 
                 {(equipesDaUnidade?.length ?? 0) === 0 && (
                   <p className="text-xs text-slate-500 mt-1">
-                    Nenhuma equipe atende esta {v.unidade.toLowerCase()} ainda
+                    Nenhuma equipe cadastrada ainda
                     {ehGestor ? " — cadastre em “Cadastrar equipe”, acima" : ""}.
                   </p>
                 )}

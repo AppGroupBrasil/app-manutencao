@@ -75,6 +75,8 @@ let avisos: { titulo: string; userId: unknown; funcionarioId: unknown }[];
 let timeline: string[];
 /** Quem a rota gravou como responsável pela O.S. */
 let responsaveis: { funcionarioId: unknown; nome: unknown }[];
+/** Unidades que a rota passou a vincular à equipe. */
+let vinculadas: unknown[];
 
 function fakeDb() {
   const porTabela = new Map<unknown, unknown[]>([
@@ -145,6 +147,9 @@ function fakeDb() {
             responsaveis.push({ funcionarioId: l.funcionarioId, nome: l.nome });
           }
         }
+        if (tabela === equipeUnidades) {
+          for (const l of linhas) vinculadas.push(l.condominioId);
+        }
         if (tabela === osTimeline) {
           for (const l of linhas) timeline.push(String(l.descricao ?? ""));
         }
@@ -191,6 +196,7 @@ beforeEach(() => {
   avisos = [];
   timeline = [];
   responsaveis = [];
+  vinculadas = [];
   enviados.length = 0;
   equipeExterna = false;
   unidadesDaEquipe = [1];
@@ -242,21 +248,35 @@ describe("equipe designada na abertura", () => {
     expect(registro).toContain("Bruno");
   });
 
-  it("recusa equipe que não atende a unidade da ordem", async () => {
-    // Quem cuida de 15 unidades passa no escopo com a equipe de qualquer uma
-    // delas: sem esta trava, o aviso sairia para o time errado.
+  it("equipe de outra unidade é aceita e passa a atender a desta ordem", async () => {
+    // O seletor mostra todas as equipes cadastradas: quem designa escolhe quem
+    // faz o serviço, e a equipe escolhida ganha o vínculo com a unidade — sem
+    // ele, ela sumiria do próprio seletor da ordem.
     unidadesDaEquipe = [2];
 
-    await expect(
-      comoGerente().create({
-        condominioId: 1,
-        titulo: "Serviço",
-        prazoLimite: "2026-08-20",
-        equipeId: 3,
-      }),
-    ).rejects.toThrow(/não atende a unidade/i);
+    await comoGerente().create({
+      condominioId: 1,
+      titulo: "Serviço",
+      prazoLimite: "2026-08-20",
+      equipeId: 3,
+    });
 
-    expect(avisos).toEqual([]);
+    expect(vinculadas).toEqual([1]);
+    expect(timeline.some((t) => t.startsWith("Equipe designada"))).toBe(true);
+    expect(avisos.length).toBeGreaterThan(0);
+  });
+
+  it("equipe que já atende a unidade não ganha vínculo repetido", async () => {
+    unidadesDaEquipe = [1];
+
+    await comoGerente().create({
+      condominioId: 1,
+      titulo: "Serviço",
+      prazoLimite: "2026-08-20",
+      equipeId: 3,
+    });
+
+    expect(vinculadas).toEqual([]);
   });
 
   it("equipe de rede é aceita na unidade que ela atende", async () => {

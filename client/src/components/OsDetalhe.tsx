@@ -377,8 +377,11 @@ export function OsDetalhe({
     onSuccess: recarregar,
     onError: (e) => toast.error(e.message || "Não foi possível salvar"),
   });
+  // Todas as equipes cadastradas, não só as desta unidade: quem designa
+  // escolhe quem faz o serviço, e a equipe de outra unidade passa a atender
+  // esta assim que for designada.
   const { data: equipesDaUnidade } = trpc.equipes.list.useQuery(
-    { condominioId: unidadeDaOs },
+    { condominioId: unidadeDaOs, todasUnidades: true },
     { enabled: unidadeDaOs > 0 && !modulosIndefinidos && temModulo("equipes") },
   );
   /** A equipe que está com esta O.S.: mostra o time dela ou o contato da empresa. */
@@ -660,6 +663,7 @@ export function OsDetalhe({
                 <SelectItem key={e.id} value={String(e.id)}>
                   {e.nome}
                   {e.externa ? " (externa)" : ""}
+                  {(e.unidades ?? []).includes(unidadeDaOs) ? "" : " · de outra unidade"}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -674,12 +678,12 @@ export function OsDetalhe({
             </p>
           )}
 
-          {/* Sem equipe atendendo a unidade, o seletor vazio parecia defeito:
-              o gestor via o campo, nenhuma opção e nenhuma explicação. */}
+          {/* Seletor vazio parecia defeito: o gestor via o campo, nenhuma
+              opção e nenhuma explicação. */}
           {(equipesDaUnidade?.length ?? 0) === 0 && (
             <p className="text-xs text-slate-500">
-              Nenhuma equipe atende esta unidade ainda — cadastre pela engrenagem, em
-              Funcionários, ou na aba Equipes.
+              Nenhuma equipe cadastrada ainda — cadastre pela engrenagem, em Funcionários, ou na
+              aba Equipes.
             </p>
           )}
 
