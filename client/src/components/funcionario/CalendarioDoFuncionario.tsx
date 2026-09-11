@@ -29,6 +29,8 @@ type ItemDaAgenda = {
   detalhe: string | null;
   rota: string;
   programada?: boolean;
+  /** O dia é o da abertura: a ordem não tem prazo, então não está atrasada. */
+  semPrazo?: boolean;
   unidade?: string | null;
 };
 
@@ -54,6 +56,9 @@ function diasEntre(de: string, ate: string): number {
 
 function situacaoDe(item: ItemDaAgenda, hoje: string): Situacao {
   if (item.concluido) return "concluido";
+  // Ordem sem prazo nenhum aparece no dia em que foi aberta: pintá-la de
+  // vermelho seria inventar um atraso que ninguém combinou com ele.
+  if (item.semPrazo) return "em_dia";
   const dias = diasEntre(hoje, item.data);
   if (dias < 0) return "vencido";
   if (dias <= DIAS_AMARELO) return "proximo";
@@ -69,6 +74,7 @@ function situacaoDoDia(lista: ItemDaAgenda[], hoje: string): Situacao {
 
 function textoDoPrazo(item: ItemDaAgenda, hoje: string): string {
   if (item.concluido) return "já resolvido";
+  if (item.semPrazo) return "sem prazo definido";
   const dias = diasEntre(hoje, item.data);
   if (dias < 0) return `${Math.abs(dias)} dia(s) em atraso`;
   if (dias === 0) return "é hoje";
@@ -275,7 +281,9 @@ export function CalendarioDoFuncionario({ condominioId }: { condominioId: number
                           dizer isso evita tratar o combinado como agendado. */}
                       {item.programada === false && (
                         <span className="block text-[11px] text-amber-700 mt-0.5">
-                          esta é a data máxima — o serviço ainda não foi programado
+                          {item.semPrazo
+                            ? "esta é a data de abertura — o serviço ainda não foi programado"
+                            : "esta é a data máxima — o serviço ainda não foi programado"}
                         </span>
                       )}
                     </button>
