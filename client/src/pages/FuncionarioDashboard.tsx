@@ -5,6 +5,7 @@ import { useBootstrap } from "@/hooks/useBootstrap";
 import { useVocabulario } from "@/hooks/useVocabulario";
 import { FUNCOES_FUNCIONARIO } from "@shared/funcoesFuncionario";
 import { CoreModulesPanel } from "@/components/funcionario/CoreModulesPanel";
+import { CalendarioDoFuncionario } from "@/components/funcionario/CalendarioDoFuncionario";
 import { ConteudoListaTarefas } from "@/pages/ListaTarefas";
 import { ConteudoQuadroAtividades } from "@/pages/QuadroAtividades";
 import { ConteudoQrCodes } from "@/pages/QrCodes";
@@ -481,6 +482,15 @@ export default function FuncionarioDashboard() {
 
         {activeSection ? sectionContent : (
           <>
+
+        {/* A agenda vem antes de qualquer escolha: quem atende várias unidades
+            não devia ter de abrir uma por uma para descobrir se hoje tem
+            serviço para ele. Some para quem não tem Ordens de Serviço — é o
+            que a agenda do portal mostra. */}
+        {activeCondominioId && temModulo("calendario") && temModulo("ordens-servico") &&
+          funcoesHabilitadas.includes("ordens") && (
+          <CalendarioDoFuncionario condominioId={activeCondominioId} />
+        )}
 
         {/* Seleção de Condomínios */}
         {viewMode === "condominios" && funcionario.condominiosVinculados && funcionario.condominiosVinculados.length > 0 && (

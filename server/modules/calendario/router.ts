@@ -1,14 +1,16 @@
 import { z } from "zod";
-import { and, asc, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
-import { moduloUserProcedure, router } from "../../_core/trpc";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { moduloProcedure, router } from "../../_core/trpc";
 import { isModuloHabilitado } from "../../_core/modules";
 import { unidadesDaConsulta, unidadesSelecionadas } from "../../_core/unidadesConsulta";
 import { getDb } from "../../db";
 import {
   checklists,
   condominios,
+  equipeFuncionarios,
   manutencoes,
   ordensServico,
+  osResponsaveis,
   quadroAtividades,
   tarefasAgendadas,
   tarefasExecucoes,
@@ -103,7 +105,15 @@ function doDia(chave: string): Date {
  * As telas de lista leem `?busca=` no endereço, então o registro aparece
  * sozinho no topo em vez de deixar a pessoa procurando numa lista de 200.
  */
-function rotaDoItem(fonte: FonteCalendario, id: number, protocolo: string | null): string {
+function rotaDoItem(
+  fonte: FonteCalendario,
+  id: number,
+  protocolo: string | null,
+  noPortal = false,
+): string {
+  // Portal do funcionário: `/manutencoes/...` é tela de gestor e devolve
+  // "sessão expirada" para quem entra por ali. A aba dele abre a mesma ordem.
+  if (noPortal) return `/dashboard/ordens?os=${id}`;
   const base = FONTES[fonte].rota;
   // A O.S. tem rota própria por id, que já abre a ordem na tela de edição.
   if (fonte === "os") return `${base}/${id}`;
@@ -124,8 +134,13 @@ function diasDoIntervalo(de: string, ate: string): string[] {
 /**
  * O calendário é um módulo como os outros: cliente que só quer O.S. na tela
  * desliga em `/admin/modulos` e a rota some junto com o cartão.
+ *
+ * Funcionário também entra: o portal dele mostra a agenda das ordens que o
+ * procuram. Para ele vale a permissão individual de Ordens de Serviço, porque
+ * é só isso que a agenda do portal contém — esconder o cartão no portal não
+ * impediria ninguém de chamar a rota direto.
  */
-const calendarioProcedure = moduloUserProcedure("calendario");
+const calendarioProcedure = moduloProcedure("calendario", undefined, "ordens");
 
 export const calendarioRouter = router({
   /**
@@ -178,6 +193,17 @@ export const calendarioRouter = router({
       const tenant = ctx.condominioId;
       const ligado = async (fonte: FonteCalendario) =>
         ctx.tenant.isMaster() || (await isModuloHabilitado(tenant, FONTES[fonte].modulo));
+
+      /**
+       * Quem executa vê a agenda dele, não a da unidade.
+       *
+       * O calendário do gestor soma vencimento, checklist, vistoria e tarefa —
+       * a agenda de quem administra o cliente. Para o funcionário isso seria
+       * abrir o administrativo inteiro no portal: aqui entram só as ordens de
+       * serviço que o procuram, e elas vêm de todas as unidades em que ele
+       * trabalha, sem ele ter de escolher uma antes.
+       */
+      const executor = ctx.funcionario;
 
       /**
        * Unidades que entram em cada fonte.
@@ -241,7 +267,7 @@ export const calendarioRouter = router({
           data: dados.data,
           concluido: dados.concluido,
           detalhe: dados.detalhe ?? null,
-          rota: rotaDoItem(fonte, dados.id, dados.protocolo),
+          rota: rotaDoItem(fonte, dados.id, dados.protocolo, !!executor),
           prazoLimite: dados.prazoLimite ?? null,
           programada: dados.programada,
           semPrazo: dados.semPrazo ?? false,
@@ -260,6 +286,38 @@ export const calendarioRouter = router({
         // Nome da unidade só quando há mais de uma: é o que identifica onde é o
         // serviço na agenda do gerente.
         if (unidadesDaOs.length > 1) await nomearUnidades(unidadesDaOs);
+
+        /**
+         * "Destinada a ele": a ordem da equipe dele ou aquela em que ele está
+         * como responsável.
+         *
+         * Sem nenhum dos dois a agenda fica vazia — e não com a unidade
+         * inteira, que é o oposto do que o portal promete ao dizer "as suas
+         * ordens".
+         */
+        let recorteDoExecutor: SQL | undefined;
+        if (executor) {
+          const [equipesDele, ordensDele] = await Promise.all([
+            db
+              .select({ id: equipeFuncionarios.equipeId })
+              .from(equipeFuncionarios)
+              .where(eq(equipeFuncionarios.funcionarioId, executor.id)),
+            db
+              .select({ id: osResponsaveis.ordemServicoId })
+              .from(osResponsaveis)
+              .where(eq(osResponsaveis.funcionarioId, executor.id)),
+          ]);
+
+          const caminhos: SQL[] = [];
+          if (equipesDele.length > 0) {
+            caminhos.push(inArray(ordensServico.equipeId, equipesDele.map((e) => e.id)));
+          }
+          if (ordensDele.length > 0) {
+            caminhos.push(inArray(ordensServico.id, ordensDele.map((o) => o.id)));
+          }
+          recorteDoExecutor =
+            caminhos.length === 0 ? sql`false` : caminhos.length === 1 ? caminhos[0] : or(...caminhos)!;
+        }
 
         const linhas = await db
           .select({
@@ -314,6 +372,7 @@ export const calendarioRouter = router({
                   ),
                 ),
               ),
+              recorteDoExecutor,
             ),
           );
 
@@ -340,6 +399,18 @@ export const calendarioRouter = router({
           });
         }
       }
+
+      // Dia crescente e, no mesmo dia, o que está em aberto antes do resolvido.
+      const ordenado = () =>
+        itens.sort((a, b) => {
+          if (a.data !== b.data) return a.data < b.data ? -1 : 1;
+          if (a.concluido !== b.concluido) return a.concluido ? 1 : -1;
+          return a.titulo.localeCompare(b.titulo, "pt-BR");
+        });
+
+      // A agenda de quem executa termina nas ordens dele: o que vem abaixo é a
+      // agenda administrativa da unidade, e o portal não é o lugar dela.
+      if (executor) return ordenado();
 
       // ---------------------------------------------------- vencimentos
       const unidadesDosVencimentos = await alvoDaFonte("vencimento");
@@ -556,12 +627,7 @@ export const calendarioRouter = router({
         }
       }
 
-      // Dia crescente e, no mesmo dia, o que está em aberto antes do resolvido.
-      return itens.sort((a, b) => {
-        if (a.data !== b.data) return a.data < b.data ? -1 : 1;
-        if (a.concluido !== b.concluido) return a.concluido ? 1 : -1;
-        return a.titulo.localeCompare(b.titulo, "pt-BR");
-      });
+      return ordenado();
     }),
 
 });
