@@ -39,6 +39,41 @@ async function assertOrganizacao(ctx: CtxTenant, condominioId: number) {
   await ctx.tenant.assert(condominioId);
 }
 
+/**
+ * Unidades que o portal oferece: a da ficha mais as que o gestor vinculou.
+ *
+ * `funcionario_condominios` guarda só as unidades adicionais — a de origem vive
+ * em `funcionarios.condominioId`. Lendo apenas a tabela de vínculo, quem foi
+ * cadastrado antes de a marcação de unidades existir abria o portal sem cartão
+ * nenhum, e quem tem três unidades via só duas: faltava sempre a própria.
+ *
+ * Em ordem de nome, que é como a pessoa procura a unidade dela na lista.
+ */
+async function unidadesDoPortal(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  funcionarioId: number,
+  condominioDaFicha: number,
+): Promise<{ id: number; nome: string | null; logoUrl: string | null }[]> {
+  const vinculos = await db
+    .select({ condominioId: funcionarioCondominios.condominioId })
+    .from(funcionarioCondominios)
+    .where(
+      and(
+        eq(funcionarioCondominios.funcionarioId, funcionarioId),
+        eq(funcionarioCondominios.ativo, true),
+      ),
+    );
+
+  const ids = [...new Set([condominioDaFicha, ...vinculos.map((v) => v.condominioId)])];
+  if (ids.length === 0) return [];
+
+  return db
+    .select({ id: condominios.id, nome: condominios.nome, logoUrl: condominios.logoUrl })
+    .from(condominios)
+    .where(inArray(condominios.id, ids))
+    .orderBy(condominios.nome);
+}
+
 /** Resolve a organização pelo próprio registro quando o input só traz o id. */
 async function assertFuncionario(ctx: CtxTenant, funcionarioId: number) {
   const db = await getDb();
@@ -700,19 +735,10 @@ export const funcionarioRouter = router({
           ultimoLogin: new Date(),
         }).where(eq(funcionarios.id, funcionario.id));
         
-        // Buscar condomínios vinculados (para supervisores)
+        // Unidades do portal: a da ficha mais as vinculadas pelo gestor.
         let condominiosVinculados: { id: number; nome: string | null; logoUrl: string | null }[] = [];
         try {
-          condominiosVinculados = await db.select({
-            id: condominios.id,
-            nome: condominios.nome,
-            logoUrl: condominios.logoUrl,
-          }).from(funcionarioCondominios)
-            .innerJoin(condominios, eq(funcionarioCondominios.condominioId, condominios.id))
-            .where(and(
-              eq(funcionarioCondominios.funcionarioId, funcionario.id),
-              eq(funcionarioCondominios.ativo, true)
-            ));
+          condominiosVinculados = await unidadesDoPortal(db, funcionario.id, funcionario.condominioId);
         } catch (e) {
           // Silenciar erro de tipo (UUID vs integer) em ambientes com DB compartilhado
         }
@@ -788,16 +814,7 @@ export const funcionarioRouter = router({
           let condominioPrincipal: { id: number; nome: string | null; logoUrl: string | null } | undefined;
           
           try {
-            condominiosVinculados = await db.select({
-              id: condominios.id,
-              nome: condominios.nome,
-              logoUrl: condominios.logoUrl,
-            }).from(funcionarioCondominios)
-              .innerJoin(condominios, eq(funcionarioCondominios.condominioId, condominios.id))
-              .where(and(
-                eq(funcionarioCondominios.funcionarioId, funcionario.id),
-                eq(funcionarioCondominios.ativo, true)
-              ));
+            condominiosVinculados = await unidadesDoPortal(db, funcionario.id, funcionario.condominioId);
           } catch (e) { /* tipo mismatch UUID/int */ }
           
           try {
