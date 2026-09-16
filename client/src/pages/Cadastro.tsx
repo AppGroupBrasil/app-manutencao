@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
+import { useSeo } from "@/lib/seo";
 
 /**
  * Cadastro de quem chega sozinho: sete dias de teste, sem cartão.
@@ -33,6 +34,11 @@ const SEGMENTOS = [
 ] as const;
 
 export default function Cadastro() {
+  useSeo(
+    "Criar conta",
+    "Crie a sua conta no App Manutenção e teste sete dias de graça, sem cartão: ordens de serviço, vistorias, checklists e agenda de vencimentos.",
+    "/cadastrar",
+  );
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
 

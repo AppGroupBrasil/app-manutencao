@@ -11,8 +11,14 @@ import { BotaoSuporte } from "@/components/BotaoSuporte";
 import { BotaoManual } from "@/components/BotaoManual";
 import { useCredenciaisLembradas } from "@/hooks/useCredenciaisLembradas";
 import { Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
+import { useSeo } from "@/lib/seo";
 
 export default function FuncionarioLogin() {
+  useSeo(
+    "Entrar",
+    "Entre no App Manutenção com e-mail e senha para acompanhar ordens de serviço, vistorias e vencimentos da sua operação.",
+    "/login",
+  );
   const [, setLocation] = useLocation();
   const { salvas, lembrar, alternarLembrar, persistir } = useCredenciaisLembradas("app_login_lembrado");
   const [identificador, setIdentificador] = useState(salvas.identificador);

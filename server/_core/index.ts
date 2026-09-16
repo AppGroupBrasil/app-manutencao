@@ -90,6 +90,29 @@ async function startServer() {
     next();
   });
 
+  /**
+   * Fora do índice do Google: o sistema em si e os links com token.
+   *
+   * Como é uma página única, toda rota devolve o mesmo HTML — o robô só
+   * descobre o que é pelo endereço. Link de O.S., QR Code, formulário público
+   * e compartilhamento circulam por WhatsApp; virar resultado de busca
+   * exporia dado de cliente. O robots.txt evita o rastreamento; este
+   * cabeçalho tira do índice o que já tenha sido achado por um link.
+   */
+  const SEM_INDICE = [
+    "/admin", "/dashboard", "/manutencoes", "/ocorrencias", "/morador", "/equipe",
+    "/funcionario", "/perfil", "/definir-senha", "/recuperar-senha", "/redefinir-senha",
+    "/os/", "/qr/", "/registro/", "/cadastro/", "/compartilhado/", "/timeline/",
+    "/publico/", "/manutencao/", "/notificacao/", "/assembleia/",
+  ];
+  app.use((req, res, next) => {
+    const caminho = req.path.toLowerCase();
+    if (SEM_INDICE.some((p) => caminho === p || caminho.startsWith(p))) {
+      res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    }
+    next();
+  });
+
   // Compressão gzip/deflate para reduzir tamanho dos assets (~6.3MB → ~1.5MB)
   app.use(compression({
     level: 6,

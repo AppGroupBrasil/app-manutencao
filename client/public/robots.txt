@@ -1,17 +1,35 @@
-# Robots.txt para App Manutenção
-# https://appmanutencao.com.br
+# App Manutenção — https://appmanutencao.com.br
+#
+# Liberado: a vitrine (início, preços, cadastro, apresentação) e os documentos.
+# Bloqueado: o sistema em si e os links com token (ordem de serviço, QR Code,
+# formulário público, compartilhamento). Esses links circulam por WhatsApp e
+# não podem virar resultado de busca. O cabeçalho X-Robots-Tag no servidor
+# cobre o que o Google já tenha achado por um link.
 
 User-agent: *
 Allow: /
 
-# Sitemap
-Sitemap: https://appmanutencao.com.br/sitemap.xml
-
-# Bloquear páginas de autenticação internas
 Disallow: /api/
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /manutencoes
+Disallow: /ocorrencias
+Disallow: /morador
+Disallow: /equipe
+Disallow: /funcionario
+Disallow: /perfil
+Disallow: /definir-senha
+Disallow: /recuperar-senha
 Disallow: /redefinir-senha
+Disallow: /os/
+Disallow: /qr/
+Disallow: /registro/
+Disallow: /cadastro/
+Disallow: /compartilhado/
+Disallow: /timeline/
+Disallow: /publico/
+Disallow: /manutencao/
+Disallow: /notificacao/
+Disallow: /assembleia/
 
-# Permitir indexação de páginas públicas
-Allow: /login
-Allow: /registar
-Allow: /recuperar-senha
+Sitemap: https://appmanutencao.com.br/sitemap.xml

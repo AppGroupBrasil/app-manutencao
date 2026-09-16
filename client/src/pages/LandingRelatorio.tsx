@@ -18,6 +18,7 @@ import {
   ImageIcon
 } from "lucide-react";
 import { Link } from "wouter";
+import { useSeo } from "@/lib/seo";
 
 const features = [
   {
@@ -71,6 +72,11 @@ const benefits = [
 ];
 
 export default function LandingRelatorio() {
+  useSeo(
+    "Relatórios de manutenção em PDF",
+    "Relatórios do App Manutenção em PDF: fotos antes e depois, tabelas de serviços e histórico por local, prontos para imprimir e enviar ao cliente.",
+    "/relatorio",
+  );
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white">
       {/* Header */}

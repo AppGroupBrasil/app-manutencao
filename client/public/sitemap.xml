@@ -1,255 +1,69 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Só as páginas públicas que existem hoje. O sitemap anterior listava
+  /registar (rota que nunca existiu) e ~30 telas /dashboard/* do sistema
+  antigo: eram 404 ou tela de login, o que gasta rastreamento à toa e derruba
+  a confiança do arquivo.
+-->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  
-  <!-- Página Inicial -->
   <url>
     <loc>https://appmanutencao.com.br/</loc>
-    <lastmod>2024-12-30</lastmod>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
-  
-  <!-- Páginas de Autenticação -->
   <url>
-    <loc>https://appmanutencao.com.br/login</loc>
-    <lastmod>2024-12-30</lastmod>
+    <loc>https://appmanutencao.com.br/precos</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/registar</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/recuperar-senha</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  
-  <!-- Dashboard Principal -->
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
-  
-  <!-- Seções do Dashboard -->
   <url>
-    <loc>https://appmanutencao.com.br/dashboard/visao-geral</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
+    <loc>https://appmanutencao.com.br/cadastrar</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
-  
   <url>
-    <loc>https://appmanutencao.com.br/dashboard/condominio</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/moradores</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/funcionarios</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
+    <loc>https://appmanutencao.com.br/apresentacao</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
-  
   <url>
-    <loc>https://appmanutencao.com.br/dashboard/avisos</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/comunicados</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/eventos</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/votacoes</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/classificados</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/caronas</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/achados-perdidos</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/realizacoes</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/melhorias</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/aquisicoes</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/antes-depois</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/galeria</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/publicidade</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/dicas-seguranca</loc>
-    <lastmod>2024-12-30</lastmod>
+    <loc>https://appmanutencao.com.br/relatorio</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
-  
   <url>
-    <loc>https://appmanutencao.com.br/dashboard/regras-normas</loc>
-    <lastmod>2024-12-30</lastmod>
+    <loc>https://appmanutencao.com.br/manual-app-manutencao.html</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
-  
   <url>
-    <loc>https://appmanutencao.com.br/dashboard/vistorias</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/manutencoes</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/ocorrencias</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/checklists</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/agenda-vencimentos</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/assembleia-online</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/relatorios</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/equipe</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://appmanutencao.com.br/dashboard/configuracoes</loc>
-    <lastmod>2024-12-30</lastmod>
+    <loc>https://appmanutencao.com.br/resumo-funcoes-app-manutencao.html</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
-  
-  <!-- Perfil do Usuário -->
   <url>
-    <loc>https://appmanutencao.com.br/perfil</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <loc>https://appmanutencao.com.br/contrato</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
   </url>
-  
-  <!-- Portal do Morador -->
   <url>
-    <loc>https://appmanutencao.com.br/portal-morador</loc>
-    <lastmod>2024-12-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
+    <loc>https://appmanutencao.com.br/termos</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
-  
+  <url>
+    <loc>https://appmanutencao.com.br/privacidade</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
 </urlset>

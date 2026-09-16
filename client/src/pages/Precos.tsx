@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { SecaoPlanos } from "@/components/SecaoPlanos";
 import { BotaoSuporte } from "@/components/BotaoSuporte";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useSeo } from "@/lib/seo";
 
 /**
  * Preços e planos, alcançável de dentro da tela de entrada.
@@ -13,6 +14,11 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
  * não existir escrito em dois lugares.
  */
 export default function Precos() {
+  useSeo(
+    "Preços e planos",
+    "Planos do App Manutenção: R$ 199 para uma unidade e equipe enxuta, R$ 350 para várias unidades ou muitos funcionários. O sistema é o mesmo nos dois.",
+    "/precos",
+  );
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <header className="bg-slate-950 text-white">

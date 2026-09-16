@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Download, Share2, Printer, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSeo } from "@/lib/seo";
 
 interface Slide {
   id: number;
@@ -13,6 +14,11 @@ interface Slide {
 }
 
 export default function Apresentacao() {
+  useSeo(
+    "Apresentação do sistema",
+    "Conheça o App Manutenção: como funcionam as ordens de serviço, as vistorias, os checklists, o QR Code por local e o portal do funcionário.",
+    "/apresentacao",
+  );
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlay, setIsAutoPlay] = useState(false);
   const presentationRef = useRef<HTMLDivElement>(null);
