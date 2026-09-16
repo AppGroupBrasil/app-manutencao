@@ -4,9 +4,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # Permite publicar na hora marcada (.github/workflows/deploy-agendado.yml),
-  # sem duplicar nenhum passo daqui.
-  workflow_call:
 
 env:
   APP_PATH: /opt/app-manutencao
