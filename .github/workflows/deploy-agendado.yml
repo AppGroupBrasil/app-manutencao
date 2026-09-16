@@ -1,0 +1,41 @@
+# Publicação marcada para fora do horário de trabalho das unidades.
+#
+# O reinício deixa o sistema fora do ar por cerca de meio minuto, então a
+# publicação espera o fim do expediente em São Paulo. O horário aqui é UTC:
+# 21:00 UTC = 18:00 em São Paulo (UTC-3).
+#
+# Roda a publicação de verdade (chama o deploy.yml), e só no dia marcado — nos
+# outros dias o disparo diário termina em segundos sem fazer nada. Depois que
+# publicar, este arquivo pode ser apagado.
+name: Deploy agendado
+
+on:
+  schedule:
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+env:
+  DIA_MARCADO: "2026-09-16"
+
+jobs:
+  conferir-dia:
+    runs-on: ubuntu-latest
+    outputs:
+      publicar: ${{ steps.dia.outputs.publicar }}
+    steps:
+      - id: dia
+        run: |
+          hoje=$(date -u +%F)
+          if [ "$hoje" = "${{ env.DIA_MARCADO }}" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "publicar=sim" >> "$GITHUB_OUTPUT"
+            echo "Hoje ($hoje) é o dia marcado: publicando."
+          else
+            echo "publicar=nao" >> "$GITHUB_OUTPUT"
+            echo "Hoje ($hoje) não é o dia marcado (${{ env.DIA_MARCADO }}): nada a fazer."
+          fi
+
+  publicar:
+    needs: conferir-dia
+    if: needs.conferir-dia.outputs.publicar == 'sim'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
